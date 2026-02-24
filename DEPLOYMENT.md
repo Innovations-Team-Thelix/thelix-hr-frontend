@@ -13,7 +13,7 @@ This guide outlines how to deploy the Thelix HRIS Frontend for production.
 Create a `.env.production` or set these variables in your deployment platform:
 
 ```bash
-NEXT_PUBLIC_API_URL=https://api.your-production-url.com/api/v1
+NEXT_PUBLIC_API_URL=https://thelix-hr-backend-z8r7g.ondigitalocean.app/api/v1
 ```
 
 > **Note:** `NEXT_PUBLIC_API_URL` is baked into the build for client-side usage. If you change it, you must rebuild the application.
@@ -37,7 +37,7 @@ You must provide the `NEXT_PUBLIC_API_URL` as a build argument because it gets i
 
 ```bash
 docker build \
-  --build-arg NEXT_PUBLIC_API_URL=https://api.your-production-url.com/api/v1 \
+  --build-arg NEXT_PUBLIC_API_URL=https://thelix-hr-backend-z8r7g.ondigitalocean.app/api/v1 \
   -t hris-frontend .
 ```
 
@@ -58,7 +58,7 @@ The application will be available at `http://localhost:3000`.
 
 2.  **Build:**
     ```bash
-    export NEXT_PUBLIC_API_URL=https://api.your-production-url.com/api/v1
+    export NEXT_PUBLIC_API_URL=https://thelix-hr-backend-z8r7g.ondigitalocean.app/api/v1
     npm run build
     ```
 
