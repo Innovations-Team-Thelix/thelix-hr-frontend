@@ -1,0 +1,250 @@
+'use client';
+
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  type UseQueryOptions,
+} from '@tanstack/react-query';
+import api from '@/lib/api';
+import type {
+  LeaveRequest,
+  LeaveBalance,
+  LeaveRequestFilters,
+  LeaveStatus,
+  PaginatedResponse,
+  LeaveCalendarEntry,
+} from '@/types';
+import toast from 'react-hot-toast';
+
+// ─── Query keys ────────────────────────────────────────────
+
+export const leaveKeys = {
+  all: ['leave'] as const,
+  requests: () => [...leaveKeys.all, 'requests'] as const,
+  requestList: (filters: LeaveRequestFilters) =>
+    [...leaveKeys.requests(), filters] as const,
+  requestDetail: (id: string) =>
+    [...leaveKeys.requests(), 'detail', id] as const,
+  balances: () => [...leaveKeys.all, 'balances'] as const,
+  myBalances: (year?: number) =>
+    [...leaveKeys.balances(), 'me', year] as const,
+  calendar: (sbuId?: string, start?: string, end?: string) =>
+    [...leaveKeys.all, 'calendar', { sbuId, start, end }] as const,
+};
+
+// ─── List leave requests ───────────────────────────────────
+
+export function useLeaveRequests(
+  filters: LeaveRequestFilters = {},
+  options?: Omit<
+    UseQueryOptions<PaginatedResponse<LeaveRequest>>,
+    'queryKey' | 'queryFn'
+  >,
+) {
+  return useQuery<PaginatedResponse<LeaveRequest>>({
+    queryKey: leaveKeys.requestList(filters),
+    queryFn: async () => {
+      const params = new URLSearchParams();
+
+      if (filters.page) params.set('page', String(filters.page));
+      if (filters.limit) params.set('limit', String(filters.limit));
+      if (filters.employeeId) params.set('employeeId', filters.employeeId);
+      if (filters.status) params.set('status', filters.status);
+      if (filters.startDate) params.set('startDate', filters.startDate);
+      if (filters.endDate) params.set('endDate', filters.endDate);
+
+      const response = await api.get<LeaveRequest[]>('/leave-requests', {
+        params,
+      });
+
+      return {
+        data: response.data,
+        pagination: response.pagination!,
+        message: response.message,
+      };
+    },
+    ...options,
+  });
+}
+
+// ─── My leave balances ─────────────────────────────────────
+
+export function useMyLeaveBalances(
+  year?: number,
+  options?: Omit<UseQueryOptions<LeaveBalance[]>, 'queryKey' | 'queryFn'>,
+) {
+  return useQuery<LeaveBalance[]>({
+    queryKey: leaveKeys.myBalances(year),
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (year) params.set('year', String(year));
+
+      const response = await api.get<LeaveBalance[]>('/leave-balances/me', {
+        params,
+      });
+
+      return response.data;
+    },
+    staleTime: 2 * 60 * 1000, // 2 minutes
+    ...options,
+  });
+}
+
+// ─── Create leave request ──────────────────────────────────
+
+export function useCreateLeaveRequest() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (data: {
+      leaveTypeId: string;
+      startDate: string;
+      endDate: string;
+      reason?: string;
+    }) => {
+      const response = await api.post<LeaveRequest>('/leave-requests', data);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: leaveKeys.requests() });
+      queryClient.invalidateQueries({ queryKey: leaveKeys.balances() });
+      toast.success('Leave request submitted successfully.');
+    },
+    onError: (error: any) => {
+      const message =
+        error?.response?.data?.message || 'Failed to submit leave request.';
+      toast.error(message);
+    },
+  });
+}
+
+// ─── Supervisor action (Approve / Reject) ──────────────────
+
+export function useSupervisorAction() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+      action,
+    }: {
+      id: string;
+      action: 'Approved' | 'Rejected';
+    }) => {
+      const response = await api.post<LeaveRequest>(
+        `/leave-requests/${id}/supervisor-action`,
+        { action },
+      );
+      return response.data;
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: leaveKeys.requests() });
+      queryClient.invalidateQueries({
+        queryKey: leaveKeys.requestDetail(variables.id),
+      });
+      const actionLabel =
+        variables.action === 'Approved' ? 'approved' : 'rejected';
+      toast.success(`Leave request ${actionLabel} by supervisor.`);
+    },
+    onError: (error: any) => {
+      const message =
+        error?.response?.data?.message || 'Failed to process supervisor action.';
+      toast.error(message);
+    },
+  });
+}
+
+// ─── HR action (Approve / Reject) ──────────────────────────
+
+export function useHrAction() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+      action,
+    }: {
+      id: string;
+      action: 'Approved' | 'Rejected';
+    }) => {
+      const response = await api.post<LeaveRequest>(
+        `/leave-requests/${id}/hr-action`,
+        { action },
+      );
+      return response.data;
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: leaveKeys.requests() });
+      queryClient.invalidateQueries({
+        queryKey: leaveKeys.requestDetail(variables.id),
+      });
+      queryClient.invalidateQueries({ queryKey: leaveKeys.balances() });
+      const actionLabel =
+        variables.action === 'Approved' ? 'approved' : 'rejected';
+      toast.success(`Leave request ${actionLabel} by HR.`);
+    },
+    onError: (error: any) => {
+      const message =
+        error?.response?.data?.message || 'Failed to process HR action.';
+      toast.error(message);
+    },
+  });
+}
+
+// ─── Cancel leave request ──────────────────────────────────
+
+export function useCancelLeave() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const response = await api.delete<LeaveRequest>(
+        `/leave-requests/${id}`,
+      );
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: leaveKeys.requests() });
+      queryClient.invalidateQueries({ queryKey: leaveKeys.balances() });
+      toast.success('Leave request cancelled.');
+    },
+    onError: (error: any) => {
+      const message =
+        error?.response?.data?.message || 'Failed to cancel leave request.';
+      toast.error(message);
+    },
+  });
+}
+
+// ─── Leave calendar ────────────────────────────────────────
+
+export function useLeaveCalendar(
+  sbuId?: string,
+  startDate?: string,
+  endDate?: string,
+  options?: Omit<
+    UseQueryOptions<LeaveCalendarEntry[]>,
+    'queryKey' | 'queryFn'
+  >,
+) {
+  return useQuery<LeaveCalendarEntry[]>({
+    queryKey: leaveKeys.calendar(sbuId, startDate, endDate),
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (sbuId) params.set('sbuId', sbuId);
+      if (startDate) params.set('startDate', startDate);
+      if (endDate) params.set('endDate', endDate);
+
+      const response = await api.get<LeaveCalendarEntry[]>(
+        '/leave-calendar',
+        { params },
+      );
+
+      return response.data;
+    },
+    enabled: !!startDate && !!endDate,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    ...options,
+  });
+}

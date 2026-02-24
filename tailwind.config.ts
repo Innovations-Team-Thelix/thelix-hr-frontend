@@ -1,0 +1,131 @@
+import type { Config } from 'tailwindcss';
+
+const config: Config = {
+  content: [
+    './src/**/*.{js,ts,jsx,tsx,mdx}',
+    './components/**/*.{js,ts,jsx,tsx,mdx}',
+  ],
+  theme: {
+    extend: {
+      colors: {
+        primary: {
+          DEFAULT: '#1e3a5f',
+          50: '#e8edf4',
+          100: '#c5d1e3',
+          200: '#9eb3d0',
+          300: '#7795bd',
+          400: '#597eaf',
+          500: '#3b67a1',
+          600: '#355f99',
+          700: '#2d548f',
+          800: '#264a85',
+          900: '#1e3a5f',
+          950: '#0f1d30',
+        },
+        secondary: {
+          DEFAULT: '#0d9488',
+          50: '#e6f7f6',
+          100: '#c0ebe8',
+          200: '#96ded9',
+          300: '#6cd1ca',
+          400: '#4dc7be',
+          500: '#2dbdb3',
+          600: '#28b7ac',
+          700: '#22aea3',
+          800: '#1ca69a',
+          900: '#0d9488',
+          950: '#074a44',
+        },
+        accent: {
+          50: '#fff8e1',
+          100: '#ffecb3',
+          200: '#ffe082',
+          300: '#ffd54f',
+          400: '#ffca28',
+          500: '#f59e0b',
+          600: '#f59e0b',
+          700: '#f59e0b',
+          800: '#e68a00',
+          900: '#cc7a00',
+          950: '#664d00',
+        },
+        success: {
+          50: '#ecfdf5',
+          100: '#d1fae5',
+          200: '#a7f3d0',
+          300: '#6ee7b7',
+          400: '#34d399',
+          500: '#10b981',
+          600: '#059669',
+          700: '#047857',
+          800: '#065f46',
+          900: '#064e3b',
+        },
+        warning: {
+          50: '#fffbeb',
+          100: '#fef3c7',
+          200: '#fde68a',
+          300: '#fcd34d',
+          400: '#fbbf24',
+          500: '#f59e0b',
+          600: '#d97706',
+          700: '#b45309',
+          800: '#92400e',
+          900: '#78350f',
+        },
+        danger: {
+          DEFAULT: '#ef4444',
+          50: '#fef2f2',
+          100: '#fee2e2',
+          200: '#fecaca',
+          300: '#fca5a5',
+          400: '#f87171',
+          500: '#ef4444',
+          600: '#dc2626',
+          700: '#b91c1c',
+          800: '#991b1b',
+          900: '#7f1d1d',
+        },
+      },
+      fontFamily: {
+        sans: [
+          'Inter',
+          'ui-sans-serif',
+          'system-ui',
+          '-apple-system',
+          'BlinkMacSystemFont',
+          'Segoe UI',
+          'Roboto',
+          'Helvetica Neue',
+          'Arial',
+          'sans-serif',
+        ],
+      },
+      boxShadow: {
+        card: '0 1px 3px 0 rgb(0 0 0 / 0.08), 0 1px 2px -1px rgb(0 0 0 / 0.08)',
+        'card-hover':
+          '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
+      },
+      borderRadius: {
+        '4xl': '2rem',
+      },
+      keyframes: {
+        'slide-in': {
+          '0%': { transform: 'translateX(100%)', opacity: '0' },
+          '100%': { transform: 'translateX(0)', opacity: '1' },
+        },
+        'fade-in': {
+          '0%': { opacity: '0' },
+          '100%': { opacity: '1' },
+        },
+      },
+      animation: {
+        'slide-in': 'slide-in 0.3s ease-out',
+        'fade-in': 'fade-in 0.2s ease-out',
+      },
+    },
+  },
+  plugins: [],
+};
+
+export default config;
