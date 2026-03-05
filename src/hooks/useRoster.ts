@@ -13,6 +13,7 @@ import type {
   GenerateRosterInput,
   OverrideRosterInput,
   RosterGenerationResult,
+  RosterDayType,
 } from '@/types';
 import toast from 'react-hot-toast';
 
@@ -40,8 +41,37 @@ export function useRoster(
       params.set('startDate', query.startDate);
       params.set('endDate', query.endDate);
 
-      const response = await api.get<RosterEntry[]>('/roster', { params });
-      return response.data;
+      // Backend returns GroupedRosterEntry[] — flatten into RosterEntry[]
+      const response = await api.get<{
+        employeeId: string;
+        employeeName: string;
+        departmentName: string;
+        entries: { date: string; dayType: RosterDayType; isOverride: boolean }[];
+      }[]>('/roster', { params });
+
+      const flat: RosterEntry[] = [];
+      for (const group of response.data) {
+        for (const entry of group.entries) {
+          flat.push({
+            id: `${group.employeeId}-${entry.date}`,
+            employeeId: group.employeeId,
+            date: entry.date,
+            dayType: entry.dayType,
+            isOverride: entry.isOverride,
+            createdById: '',
+            createdAt: '',
+            employee: {
+              id: group.employeeId,
+              employeeId: group.employeeId,
+              fullName: group.employeeName,
+              jobTitle: '',
+              departmentId: '',
+              sbuId: '',
+            },
+          });
+        }
+      }
+      return flat;
     },
     enabled: !!query.startDate && !!query.endDate,
     staleTime: 5 * 60 * 1000, // 5 minutes
