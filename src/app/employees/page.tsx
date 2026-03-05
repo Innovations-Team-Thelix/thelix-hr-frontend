@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useRef } from "react";
+import React, { Suspense, useState, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Plus, Users, Upload, Download, X, FileSpreadsheet, AlertCircle, CheckCircle2, Trash2 } from "lucide-react";
 import { AppLayout } from "@/components/layout/app-layout";
@@ -28,6 +28,14 @@ import toast from "react-hot-toast";
 import type { EmployeeFilters } from "@/types";
 
 export default function EmployeesPage() {
+  return (
+    <Suspense>
+      <EmployeesPageContent />
+    </Suspense>
+  );
+}
+
+function EmployeesPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const joinedParam = searchParams.get("joined") as "this_month" | "last_month" | "this_year" | null;
