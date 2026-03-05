@@ -189,7 +189,7 @@ export default function RosterPage() {
       rosterEntries.forEach((entry) => {
         const empId = entry.employeeId;
         if (!map.has(empId)) {
-          const empFromList = employeesData?.data?.find(e => e.id === empId);
+          const empFromList = employeesData?.data?.find(e => e.id === empId || e.employeeId === empId);
           map.set(empId, {
             id: empId,
             name: entry.employee?.fullName || empFromList?.fullName || "Unknown",
@@ -208,7 +208,7 @@ export default function RosterPage() {
       attendanceEntries.forEach((entry) => {
         const empId = entry.employeeId;
         if (!map.has(empId)) {
-          const empFromList = employeesData?.data?.find(e => e.id === empId);
+          const empFromList = employeesData?.data?.find(e => e.id === empId || e.employeeId === empId);
           map.set(empId, {
             id: empId,
             name: entry.employee?.fullName || empFromList?.fullName || "Unknown",
