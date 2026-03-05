@@ -1,10 +1,11 @@
-"use client";
+'use client';
 
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import toast from "react-hot-toast";
+import dayjs from "dayjs";
 import {
   Plus,
   CalendarDays,
@@ -12,6 +13,8 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
+  RotateCcw,
+  Paperclip,
 } from "lucide-react";
 import { AppLayout } from "@/components/layout/app-layout";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -35,18 +38,23 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import {
+  useLeaveTypes,
+  useAuthStore,
+  useMyProfile,
+} from "@/hooks";
+import {
   useLeaveRequests,
   useMyLeaveBalances,
   useCreateLeaveRequest,
-  useCancelLeaveRequest,
+  useLeaveCalendar,
+  useCancelLeave as useCancelLeaveRequest,
   useSupervisorAction,
   useHrAction,
-  useLeaveTypes,
-  useLeaveCalendar,
-  useAuthStore,
-} from "@/hooks";
+} from "@/hooks/useLeave";
+import { useEmployees } from "@/hooks/useEmployees";
 import { formatDate, cn } from "@/lib/utils";
-import type { LeaveRequestFilters } from "@/types";
+import type { LeaveRequestFilters, LeaveRequest } from "@/types";
+import { ReturnToWorkModal } from "@/components/leave/return-to-work-modal";
 
 const createLeaveSchema = z
   .object({
@@ -54,6 +62,8 @@ const createLeaveSchema = z
     startDate: z.string().min(1, "Start date is required"),
     endDate: z.string().min(1, "End date is required"),
     reason: z.string().optional(),
+    relieveOfficerId: z.string().min(1, "Relieve officer is required"),
+    attachments: z.any().optional(),
   })
   .refine((data) => new Date(data.endDate) >= new Date(data.startDate), {
     message: "End date must be on or after start date",
@@ -73,20 +83,31 @@ const LEAVE_TYPE_COLORS: Record<string, string> = {
 
 export default function LeavePage() {
   const { user } = useAuthStore();
+  const { data: profile } = useMyProfile();
   const isAdmin = user?.role === "Admin";
   const isSBUHead = user?.role === "SBUHead";
-  const canApprove = isAdmin || isSBUHead;
+  const isSupervisor = (profile?.subordinates?.length ?? 0) > 0;
+  const canApprove = isAdmin || isSBUHead || isSupervisor;
+  const isEmployee = user?.role === "Employee";
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
 
   const [activeTab, setActiveTab] = useState("my-requests");
   const [applyModalOpen, setApplyModalOpen] = useState(false);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [rtwModalOpen, setRtwModalOpen] = useState(false);
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
+  const [selectedRequest, setSelectedRequest] = useState<LeaveRequest | null>(null);
   const [myPage, setMyPage] = useState(1);
   const [approvalPage, setApprovalPage] = useState(1);
-  const [calendarMonth, setCalendarMonth] = useState(() => {
+  const [calendarMonth, setCalendarMonth] = useState<{
+    year: number;
+    month: number;
+  } | null>(null);
+
+  useEffect(() => {
     const now = new Date();
-    return { year: now.getFullYear(), month: now.getMonth() };
-  });
+    setCalendarMonth({ year: now.getFullYear(), month: now.getMonth() });
+  }, []);
 
   const { data: leaveTypes } = useLeaveTypes();
   const { data: myBalances, isLoading: balancesLoading } = useMyLeaveBalances();
@@ -103,12 +124,34 @@ export default function LeavePage() {
   });
 
   // Calendar data
-  const calStartDate = new Date(calendarMonth.year, calendarMonth.month, 1);
-  const calEndDate = new Date(calendarMonth.year, calendarMonth.month + 1, 0);
+  let calStartDate: Date;
+  let calEndDate: Date;
+
+  if (isEmployee) {
+    calStartDate = selectedDate;
+    calEndDate = selectedDate;
+  } else {
+    calStartDate = calendarMonth
+      ? new Date(calendarMonth.year, calendarMonth.month, 1)
+      : new Date();
+    calEndDate = calendarMonth
+      ? new Date(calendarMonth.year, calendarMonth.month + 1, 0)
+      : new Date();
+  }
   const { data: calendarData } = useLeaveCalendar({
-    startDate: calStartDate.toISOString().split("T")[0],
-    endDate: calEndDate.toISOString().split("T")[0],
+    startDate: calendarMonth ? calStartDate.toISOString().split("T")[0] : undefined,
+    endDate: calendarMonth ? calEndDate.toISOString().split("T")[0] : undefined,
   });
+
+  // Fetch potential relieve officers (same SBU)
+  const { data: colleaguesData } = useEmployees(
+    { 
+      sbuId: profile?.sbuId,
+      limit: 1000, // Fetch enough employees
+      status: 'Active'
+    },
+    { enabled: !!profile?.sbuId }
+  );
 
   const createLeave = useCreateLeaveRequest();
   const cancelLeave = useCancelLeaveRequest();
@@ -124,6 +167,16 @@ export default function LeavePage() {
     value: lt.id,
   }));
 
+  const relieveOfficerOptions = (colleaguesData?.data || [])
+    .filter(emp => emp.id !== profile?.id) // Exclude self
+    .map(emp => ({
+      label: emp.fullName,
+      value: emp.id,
+    }));
+
+  const selectedLeaveTypeId = form.watch("leaveTypeId");
+  const selectedLeaveType = leaveTypes?.find(lt => lt.id === selectedLeaveTypeId);
+
   const tabs = [
     { id: "my-requests", label: "My Requests" },
     ...(canApprove
@@ -134,11 +187,17 @@ export default function LeavePage() {
 
   const handleCreateLeave = async (data: CreateLeaveFormData) => {
     try {
+      const attachments = data.attachments && data.attachments.length > 0
+        ? Array.from(data.attachments as FileList)
+        : undefined;
+
       await createLeave.mutateAsync({
         leaveTypeId: data.leaveTypeId,
         startDate: data.startDate,
         endDate: data.endDate,
         reason: data.reason || undefined,
+        relieveOfficerId: data.relieveOfficerId,
+        attachments,
       });
       toast.success("Leave request submitted successfully");
       setApplyModalOpen(false);
@@ -178,15 +237,15 @@ export default function LeavePage() {
   };
 
   // Calendar helpers
-  const daysInMonth = new Date(
-    calendarMonth.year,
-    calendarMonth.month + 1,
-    0
-  ).getDate();
-  const firstDayOfWeek =
-    new Date(calendarMonth.year, calendarMonth.month, 1).getDay() || 7; // Mon=1
+  const daysInMonth = calendarMonth
+    ? new Date(calendarMonth.year, calendarMonth.month + 1, 0).getDate()
+    : 0;
+  const firstDayOfWeek = calendarMonth
+    ? new Date(calendarMonth.year, calendarMonth.month, 1).getDay() || 7
+    : 0; // Mon=1
 
   const calendarDays = useMemo(() => {
+    if (!calendarMonth) return [];
     const days: { date: number; isCurrentMonth: boolean }[] = [];
     // Previous month padding
     for (let i = 1; i < firstDayOfWeek; i++) {
@@ -197,10 +256,10 @@ export default function LeavePage() {
       days.push({ date: i, isCurrentMonth: true });
     }
     return days;
-  }, [daysInMonth, firstDayOfWeek]);
+  }, [daysInMonth, firstDayOfWeek, calendarMonth]);
 
   const getLeaveEntriesForDay = (day: number) => {
-    if (!calendarData || day === 0) return [];
+    if (!calendarData || !calendarMonth || day === 0) return [];
     const dateStr = `${calendarMonth.year}-${String(calendarMonth.month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     return calendarData.filter((entry) => {
       const start = entry.startDate.split("T")[0];
@@ -209,13 +268,16 @@ export default function LeavePage() {
     });
   };
 
-  const monthName = new Date(
-    calendarMonth.year,
-    calendarMonth.month
-  ).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  const monthName = calendarMonth
+    ? new Date(calendarMonth.year, calendarMonth.month).toLocaleDateString(
+        "en-US",
+        { month: "long", year: "numeric" }
+      )
+    : "";
 
   const goToPrevMonth = () => {
     setCalendarMonth((prev) => {
+      if (!prev) return null;
       if (prev.month === 0) return { year: prev.year - 1, month: 11 };
       return { ...prev, month: prev.month - 1 };
     });
@@ -223,6 +285,7 @@ export default function LeavePage() {
 
   const goToNextMonth = () => {
     setCalendarMonth((prev) => {
+      if (!prev) return null;
       if (prev.month === 11) return { year: prev.year + 1, month: 0 };
       return { ...prev, month: prev.month + 1 };
     });
@@ -289,22 +352,37 @@ export default function LeavePage() {
                         myRequestsData.data.map((req) => (
                           <TableRow key={req.id}>
                             <TableCell>
-                              <span
-                                className={cn(
-                                  "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
-                                  LEAVE_TYPE_COLORS[
-                                    req.leaveType?.name || ""
-                                  ] || "bg-gray-100 text-gray-700"
+                              <div className="flex flex-col gap-1">
+                                <span
+                                  className={cn(
+                                    "inline-flex w-fit items-center rounded-full px-2 py-0.5 text-xs font-medium",
+                                    LEAVE_TYPE_COLORS[
+                                      req.leaveType?.name || ""
+                                    ] || "bg-gray-100 text-gray-700"
+                                  )}
+                                >
+                                  {req.leaveType?.name || "Leave"}
+                                </span>
+                                {req.attachments && req.attachments.length > 0 && (
+                                  <div className="flex items-center gap-1 text-[10px] text-gray-400">
+                                    <Paperclip className="h-3 w-3" />
+                                    {req.attachments.length} attachment(s)
+                                  </div>
                                 )}
-                              >
-                                {req.leaveType?.name || "Leave"}
-                              </span>
+                              </div>
                             </TableCell>
                             <TableCell>{formatDate(req.startDate)}</TableCell>
                             <TableCell>{formatDate(req.endDate)}</TableCell>
                             <TableCell>{req.daysCount}</TableCell>
                             <TableCell>
-                              <StatusBadge status={req.status} />
+                              <div className="flex flex-col gap-1">
+                                <StatusBadge status={req.status} />
+                                {req.returnedAt && (
+                                  <span className="text-[10px] text-success font-medium">
+                                    Returned: {formatDate(req.returnedAt)}
+                                  </span>
+                                )}
+                              </div>
                             </TableCell>
                             <TableCell>
                               <span className="max-w-[200px] truncate text-sm text-gray-500">
@@ -312,19 +390,36 @@ export default function LeavePage() {
                               </span>
                             </TableCell>
                             <TableCell>
-                              {req.status === "Pending" && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => {
-                                    setSelectedRequestId(req.id);
-                                    setCancelDialogOpen(true);
-                                  }}
-                                >
-                                  <X className="h-3.5 w-3.5 text-red-500" />
-                                  Cancel
-                                </Button>
-                              )}
+                              <div className="flex items-center gap-2">
+                                {req.status === "Pending" && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                    onClick={() => {
+                                      setSelectedRequestId(req.id);
+                                      setCancelDialogOpen(true);
+                                    }}
+                                  >
+                                    <X className="h-3.5 w-3.5 mr-1" />
+                                    Cancel
+                                  </Button>
+                                )}
+                                {req.status === "Approved" && !req.returnedAt && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 px-2 text-primary hover:text-primary/80 hover:bg-primary/5"
+                                    onClick={() => {
+                                      setSelectedRequest(req);
+                                      setRtwModalOpen(true);
+                                    }}
+                                  >
+                                    <RotateCcw className="h-3.5 w-3.5 mr-1" />
+                                    Return
+                                  </Button>
+                                )}
+                              </div>
                             </TableCell>
                           </TableRow>
                         ))
@@ -385,62 +480,64 @@ export default function LeavePage() {
                         pendingData.data.map((req) => (
                           <TableRow key={req.id}>
                             <TableCell>
-                              <div>
-                                <p className="font-medium text-gray-900">
-                                  {req.employee?.fullName || "Unknown"}
-                                </p>
-                                <p className="text-xs text-gray-500">
-                                  {req.employee?.sbu?.name}
-                                </p>
+                              <div className="flex flex-col">
+                                <span className="font-medium text-gray-900">
+                                  {req.employee?.fullName}
+                                </span>
+                                <span className="text-xs text-gray-500">
+                                  {req.employee?.jobTitle}
+                                </span>
                               </div>
                             </TableCell>
                             <TableCell>
-                              <span
-                                className={cn(
-                                  "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
-                                  LEAVE_TYPE_COLORS[
-                                    req.leaveType?.name || ""
-                                  ] || "bg-gray-100 text-gray-700"
+                              <div className="flex flex-col gap-1">
+                                <span
+                                  className={cn(
+                                    "inline-flex w-fit items-center rounded-full px-2 py-0.5 text-xs font-medium",
+                                    LEAVE_TYPE_COLORS[
+                                      req.leaveType?.name || ""
+                                    ] || "bg-gray-100 text-gray-700"
+                                  )}
+                                >
+                                  {req.leaveType?.name || "Leave"}
+                                </span>
+                                {req.attachments && req.attachments.length > 0 && (
+                                  <div className="flex items-center gap-1 text-[10px] text-gray-400">
+                                    <Paperclip className="h-3 w-3" />
+                                    {req.attachments.length} attachment(s)
+                                  </div>
                                 )}
-                              >
-                                {req.leaveType?.name || "Leave"}
-                              </span>
+                              </div>
                             </TableCell>
                             <TableCell>{formatDate(req.startDate)}</TableCell>
                             <TableCell>{formatDate(req.endDate)}</TableCell>
                             <TableCell>{req.daysCount}</TableCell>
                             <TableCell>
-                              <span className="max-w-[150px] truncate text-sm text-gray-500">
+                              <span className="max-w-[200px] truncate text-sm text-gray-500">
                                 {req.reason || "-"}
                               </span>
                             </TableCell>
                             <TableCell>
-                              <div className="flex items-center gap-1">
+                              <div className="flex items-center gap-2">
                                 <Button
                                   variant="ghost"
                                   size="sm"
+                                  className="h-8 w-8 p-0 text-success hover:bg-success/10"
                                   onClick={() =>
                                     handleApproveReject(req.id, "Approved")
                                   }
-                                  loading={
-                                    supervisorAction.isPending ||
-                                    hrAction.isPending
-                                  }
                                 >
-                                  <Check className="h-4 w-4 text-green-600" />
+                                  <Check className="h-4 w-4" />
                                 </Button>
                                 <Button
                                   variant="ghost"
                                   size="sm"
+                                  className="h-8 w-8 p-0 text-danger hover:bg-danger/10"
                                   onClick={() =>
                                     handleApproveReject(req.id, "Rejected")
                                   }
-                                  loading={
-                                    supervisorAction.isPending ||
-                                    hrAction.isPending
-                                  }
                                 >
-                                  <X className="h-4 w-4 text-red-600" />
+                                  <X className="h-4 w-4" />
                                 </Button>
                               </div>
                             </TableCell>
@@ -466,19 +563,103 @@ export default function LeavePage() {
             {/* Calendar Tab */}
             {activeTab === "calendar" && (
               <Card className="mt-4">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
+                {isEmployee ? (
+                  <>
+<CardHeader className="flex flex-row items-center justify-between pb-2">
+                    <CardTitle className="text-lg font-medium">
+                      {dayjs(selectedDate).format("MMMM D, YYYY")}
+                    </CardTitle>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const prev = new Date(selectedDate);
+                          prev.setDate(prev.getDate() - 1);
+                          setSelectedDate(prev);
+                        }}
+                      >
+                        <ChevronLeft className="h-4 w-4 mr-1" />
+                        Prev
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSelectedDate(new Date())}
+                      >
+                        Today
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const next = new Date(selectedDate);
+                          next.setDate(next.getDate() + 1);
+                          setSelectedDate(next);
+                        }}
+                      >
+                        Next
+                        <ChevronRight className="h-4 w-4 ml-1" />
+                      </Button>
+                    </div>
+                  </CardHeader>
+
+                    <CardContent>
+                      {(!calendarData || calendarData.length === 0) ? (
+                        <div className="flex flex-col items-center justify-center py-12 text-center text-gray-500">
+                          <CalendarDays className="h-12 w-12 text-gray-300 mb-3" />
+                          <p className="text-lg font-medium">No leaves found</p>
+                          <p className="text-sm">No one is on leave for this date.</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          {calendarData.map((entry) => (
+                            <div
+                              key={entry.id}
+                              className="flex items-center justify-between p-4 border rounded-lg bg-gray-50"
+                            >
+                              <div className="flex items-center gap-4">
+                                <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold">
+                                  {entry.employee.fullName.charAt(0)}
+                                </div>
+                                <div>
+                                  <p className="font-medium">{entry.employee.fullName}</p>
+                                  <p className="text-sm text-gray-500">
+                                    {entry.employee.jobTitle} • {entry.employee.department?.name || "N/A"}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <Badge variant="neutral" className="mb-1">
+                                  {entry.leaveType.name}
+                                </Badge>
+                                <p className="text-sm text-gray-600">
+                                  Returns: <span className="font-medium">{dayjs(entry.endDate).format("MMM D, YYYY")}</span>
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  </>
+                ) : (
+                  <>
+<CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <CardTitle className="text-lg font-medium">
+                    {monthName}
+                  </CardTitle>
+                  <div className="flex items-center gap-1">
                     <Button variant="ghost" size="sm" onClick={goToPrevMonth}>
                       <ChevronLeft className="h-4 w-4" />
                     </Button>
-                    <CardTitle>{monthName}</CardTitle>
                     <Button variant="ghost" size="sm" onClick={goToNextMonth}>
                       <ChevronRight className="h-4 w-4" />
                     </Button>
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-7 gap-px bg-gray-200 rounded-lg overflow-hidden">
+                  <div className="grid grid-cols-7 gap-px bg-gray-200 rounded-lg overflow-hidden border border-gray-200">
                     {/* Day headers */}
                     {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(
                       (day) => (
@@ -512,12 +693,13 @@ export default function LeavePage() {
                                     key={i}
                                     className={cn(
                                       "truncate rounded px-1 py-0.5 text-[10px] font-medium",
-                                      LEAVE_TYPE_COLORS[entry.leaveTypeName] ||
-                                        "bg-gray-100 text-gray-700"
+                                      LEAVE_TYPE_COLORS[
+                                        entry.leaveType.name
+                                      ] || "bg-gray-100 text-gray-700"
                                     )}
-                                    title={`${entry.fullName} - ${entry.leaveTypeName}`}
+                                    title={`${entry.employee.fullName} - ${entry.leaveType.name}`}
                                   >
-                                    {entry.fullName.split(" ")[0]}
+                                    {entry.employee.fullName.split(" ")[0]}
                                   </div>
                                 ))}
                                 {entries.length > 3 && (
@@ -534,19 +716,28 @@ export default function LeavePage() {
                   </div>
                   {/* Legend */}
                   <div className="mt-4 flex flex-wrap gap-3">
-                    {Object.entries(LEAVE_TYPE_COLORS).map(([type, color]) => (
-                      <div key={type} className="flex items-center gap-1.5">
+                    {Object.entries(LEAVE_TYPE_COLORS).map(
+                      ([type, color]) => (
                         <div
-                          className={cn(
-                            "h-3 w-3 rounded",
-                            color.split(" ")[0]
-                          )}
-                        />
-                        <span className="text-xs text-gray-600">{type}</span>
-                      </div>
-                    ))}
+                          key={type}
+                          className="flex items-center gap-1.5"
+                        >
+                          <div
+                            className={cn(
+                              "h-3 w-3 rounded",
+                              color.split(" ")[0]
+                            )}
+                          />
+                          <span className="text-xs text-gray-600">
+                            {type}
+                          </span>
+                        </div>
+                      )
+                    )}
                   </div>
                 </CardContent>
+                  </>
+                )}
               </Card>
             )}
           </div>
@@ -596,7 +787,7 @@ export default function LeavePage() {
                                   : pct > 50
                                     ? "bg-amber-500"
                                     : "bg-emerald-500"
-                              )}
+                                )}
                               style={{
                                 width: `${Math.min(pct, 100)}%`,
                               }}
@@ -635,7 +826,6 @@ export default function LeavePage() {
                 Cancel
               </Button>
               <Button
-                variant="outline"
                 onClick={form.handleSubmit(handleCreateLeave)}
                 loading={createLeave.isPending}
               >
@@ -673,8 +863,49 @@ export default function LeavePage() {
               placeholder="Please provide a reason for your leave..."
               {...form.register("reason")}
             />
+
+            <Select
+              label="Relieve Officer"
+              required
+              options={relieveOfficerOptions}
+              placeholder="Select a relieve officer"
+              error={form.formState.errors.relieveOfficerId?.message}
+              {...form.register("relieveOfficerId")}
+            />
+            
+            <div className="w-full">
+              <label
+                className="mb-1.5 block text-sm font-medium text-gray-700"
+              >
+                Attachments {selectedLeaveType?.requiresDoc && <span className="text-red-500">*</span>}
+              </label>
+              <input
+                type="file"
+                multiple
+                className="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 transition-colors duration-150 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 file:mr-4 file:rounded-full file:border-0 file:bg-primary/10 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-primary hover:file:bg-primary/20"
+                {...form.register("attachments")}
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                {selectedLeaveType?.requiresDoc 
+                  ? "This leave type requires supporting documents." 
+                  : "Upload any supporting documents (optional)."}
+              </p>
+            </div>
           </div>
         </Modal>
+
+        {/* Return to Work Modal */}
+        {selectedRequest && (
+          <ReturnToWorkModal
+            isOpen={rtwModalOpen}
+            onClose={() => {
+              setRtwModalOpen(false);
+              setSelectedRequest(null);
+            }}
+            leaveRequestId={selectedRequest.id}
+            expectedReturnDate={selectedRequest.endDate}
+          />
+        )}
 
         {/* Cancel Confirmation */}
         <ConfirmDialog
@@ -694,3 +925,4 @@ export default function LeavePage() {
     </AppLayout>
   );
 }
+

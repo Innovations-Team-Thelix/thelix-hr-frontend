@@ -18,6 +18,19 @@ NEXT_PUBLIC_API_URL=https://thelix-hr-backend-z8r7g.ondigitalocean.app/api/v1
 
 > **Note:** `NEXT_PUBLIC_API_URL` is baked into the build for client-side usage. If you change it, you must rebuild the application.
 
+## Backend Configuration
+
+For the frontend to successfully communicate with the backend, you must configure the **CORS (Cross-Origin Resource Sharing)** settings on the backend.
+
+1.  **Environment Variable:**
+    Set the `CORS_ORIGIN` environment variable in your backend deployment (e.g., DigitalOcean App Platform) to the URL of your deployed frontend.
+
+    ```bash
+    CORS_ORIGIN=https://thelix-hr-frontend-94du5.ondigitalocean.app
+    ```
+
+    *Note: If this variable is not set, the backend defaults to allowing only `http://localhost:3000`, which will cause CORS errors in production.*
+
 ## Option 1: Vercel (Recommended)
 
 The easiest way to deploy Next.js apps.

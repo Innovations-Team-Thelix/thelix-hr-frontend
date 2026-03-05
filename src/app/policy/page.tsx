@@ -2,7 +2,7 @@
 
 import React, { useState, useRef } from "react";
 import toast from "react-hot-toast";
-import { BookOpen, Upload, Download, Trash2, FileText } from "lucide-react";
+import { BookOpen, Upload, Download, Trash2, FileText, Eye } from "lucide-react";
 import { AppLayout } from "@/components/layout/app-layout";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { Skeleton } from "@/components/ui/loading";
 import { Badge } from "@/components/ui/badge";
-import { usePolicies, useUploadPolicy, useDeletePolicy, useAuthStore } from "@/hooks";
+import { useAuthStore } from "@/hooks";
+import { usePolicies, useUploadPolicy, useDeletePolicy, useDownloadPolicy } from "@/hooks/usePolicies";
 import { formatDate } from "@/lib/utils";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1";
@@ -20,6 +21,7 @@ export default function PolicyPage() {
   const isAdmin = user?.role === "Admin";
 
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const [previewPolicy, setPreviewPolicy] = useState<any | null>(null);
   const [title, setTitle] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -27,23 +29,28 @@ export default function PolicyPage() {
   const { data: policies, isLoading } = usePolicies();
   const uploadPolicy = useUploadPolicy();
   const deletePolicy = useDeletePolicy();
+  const downloadPolicy = useDownloadPolicy();
+
+    const closeModal = () => {
+    setUploadModalOpen(false);
+    setTitle("");
+    setSelectedFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
 
   const handleUpload = async () => {
+
     if (!selectedFile || !title) {
       toast.error("Please provide a title and select a PDF file");
       return;
     }
 
-    const formData = new FormData();
-    formData.append("file", selectedFile);
-    formData.append("title", title);
-
     try {
-      await uploadPolicy.mutateAsync(formData);
+      await uploadPolicy.mutateAsync({ title, file: selectedFile });
       toast.success("Policy uploaded successfully");
-      setUploadModalOpen(false);
-      setTitle("");
-      setSelectedFile(null);
+      closeModal();
     } catch {
       toast.error("Failed to upload policy");
     }
@@ -60,23 +67,41 @@ export default function PolicyPage() {
     }
   };
 
-  const handleDownload = (id: string) => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
-    const url = `${API_URL}/policies/${id}/download`;
-    const a = document.createElement("a");
-    // Use fetch with auth header to download
-    fetch(url, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((res) => res.blob())
-      .then((blob) => {
-        const blobUrl = URL.createObjectURL(blob);
-        a.href = blobUrl;
-        a.download = "";
-        a.click();
-        URL.revokeObjectURL(blobUrl);
-      })
-      .catch(() => toast.error("Failed to download policy"));
+  const handleDownload = async (policy: any) => {
+    let url = policy.signedUrl;
+    if (!url) {
+      try {
+        url = await downloadPolicy.mutateAsync(policy.id);
+      } catch {
+        toast.error("Failed to get download URL");
+        return;
+      }
+    }
+    
+    if (url) {
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = policy.fileName || 'document.pdf';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
+  const handlePreview = async (policy: any) => {
+    let url = policy.signedUrl;
+    if (!url) {
+      try {
+        url = await downloadPolicy.mutateAsync(policy.id);
+      } catch {
+        toast.error("Failed to load document for preview");
+        return;
+      }
+    }
+    
+    if (url) {
+      setPreviewPolicy({ ...policy, signedUrl: url });
+    }
   };
 
   return (
@@ -142,12 +167,20 @@ export default function PolicyPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDownload(policy.id)}
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => handlePreview(policy)}
                       >
-                        <Download className="h-4 w-4" />
+                        <Eye className="h-4 w-4 mr-2" />
+                        Preview
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => handleDownload(policy)}
+                      >
+                        <Download className="h-4 w-4 mr-2" />
                         Download
                       </Button>
                       {isAdmin && (
@@ -173,9 +206,7 @@ export default function PolicyPage() {
         <Modal
           isOpen={uploadModalOpen}
           onClose={() => {
-            setUploadModalOpen(false);
-            setTitle("");
-            setSelectedFile(null);
+            closeModal();
           }}
           title="Upload Company Policy"
           size="md"
@@ -184,9 +215,7 @@ export default function PolicyPage() {
               <Button
                 variant="outline"
                 onClick={() => {
-                  setUploadModalOpen(false);
-                  setTitle("");
-                  setSelectedFile(null);
+                  closeModal();
                 }}
               >
                 Cancel
@@ -236,6 +265,25 @@ export default function PolicyPage() {
                 )}
               </div>
             </div>
+          </div>
+        </Modal>
+
+        {/* Preview Modal */}
+        <Modal
+          isOpen={!!previewPolicy}
+          onClose={() => setPreviewPolicy(null)}
+          title={previewPolicy?.title}
+          size="lg"
+          className="max-w-5xl h-[85vh] flex flex-col"
+        >
+          <div className="flex-1 h-full min-h-[500px] w-full bg-gray-100 rounded-md overflow-hidden">
+            {previewPolicy?.signedUrl && (
+              <iframe
+                src={previewPolicy.signedUrl}
+                className="w-full h-full border-0"
+                title="PDF Preview"
+              />
+            )}
           </div>
         </Modal>
       </div>

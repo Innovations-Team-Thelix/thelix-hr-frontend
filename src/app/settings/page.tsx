@@ -232,6 +232,7 @@ function UserManagement() {
   const [jobTitle, setJobTitle] = useState("");
   const [phone, setPhone] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
 
   const { data: departments } = useDepartments(sbuId || undefined);
   const sbuOptions = sbus?.map((s: any) => ({ label: s.name, value: s.id })) || [];
@@ -239,6 +240,7 @@ function UserManagement() {
 
   const closeForm = () => {
     setShowForm(false);
+    setSelectedEmployeeId(null);
     setFullName("");
     setWorkEmail("");
     setPassword("");
@@ -249,49 +251,66 @@ function UserManagement() {
     setPhone("");
   };
 
+  const openCreateForEmployee = (emp: any) => {
+    setSelectedEmployeeId(emp.id);
+    setFullName(emp.fullName);
+    setWorkEmail(emp.workEmail);
+    setJobTitle(emp.jobTitle || "");
+    setPhone(emp.phone || "");
+    setSbuId(emp.sbuId || emp.sbu?.id || "");
+    setDeptId(emp.departmentId || emp.department?.id || "");
+    setRole("Employee"); // Default to Employee for existing users
+    setShowForm(true);
+  };
+
   const handleCreate = async () => {
     if (!fullName.trim() || !workEmail.trim() || !password.trim()) {
       toast.error("Name, email, and password are required");
       return;
     }
-    if (!sbuId || !deptId) {
+    if ((!sbuId || !deptId) && !selectedEmployeeId) {
       toast.error("SBU and department are required");
       return;
     }
     setSubmitting(true);
     try {
-      const empRes = await api.post<any>("/employees", {
-        fullName,
-        workEmail,
-        sbuId,
-        departmentId: deptId,
-        jobTitle: jobTitle || "Administrator",
-        phone: phone || "+0000000000",
-        dateOfBirth: "1990-01-01",
-        nationality: "Nigerian",
-        personalEmail: workEmail,
-        address: "Lagos, Nigeria",
-        dateOfHire: new Date().toISOString().split("T")[0],
-        employmentType: "FullTime",
-        workArrangement: "Hybrid",
-        employmentStatus: "Active",
-        monthlySalary: 0,
-        currency: "NGN",
-        salaryEffectiveDate: new Date().toISOString().split("T")[0],
-        bankName: "—",
-        accountName: fullName,
-        accountNumber: "0000000000",
-      });
+      let empId = selectedEmployeeId;
+
+      if (!empId) {
+        const empRes = await api.post<any>("/employees", {
+          fullName,
+          workEmail,
+          sbuId,
+          departmentId: deptId,
+          jobTitle: jobTitle || "Administrator",
+          phone: phone || "+0000000000",
+          dateOfBirth: "1990-01-01",
+          nationality: "Nigerian",
+          personalEmail: workEmail,
+          address: "Lagos, Nigeria",
+          dateOfHire: new Date().toISOString().split("T")[0],
+          employmentType: "FullTime",
+          workArrangement: "Hybrid",
+          employmentStatus: "Active",
+          monthlySalary: 0,
+          currency: "NGN",
+          salaryEffectiveDate: new Date().toISOString().split("T")[0],
+          bankName: "—",
+          accountName: fullName,
+          accountNumber: "0000000000",
+        });
+        empId = empRes.data.id;
+      }
 
       await api.post("/auth/register", {
-        employeeId: empRes.data.id,
+        employeeId: empId,
         email: workEmail,
         password,
         role,
         ...(role === "SBUHead" && sbuId ? { sbuScopeId: sbuId } : {}),
       });
 
-      toast.success(`${role} user created successfully`);
+      toast.success(`${role} user ${selectedEmployeeId ? "assigned" : "created"} successfully`);
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
       queryClient.invalidateQueries({ queryKey: ["employees"] });
       closeForm();
@@ -318,23 +337,66 @@ function UserManagement() {
       {showForm && (
         <Card className="border-emerald-200 bg-emerald-50/50">
           <CardContent className="p-4">
-            <h4 className="mb-3 font-semibold text-gray-800">Create New User</h4>
+            <h4 className="mb-3 font-semibold text-gray-800">
+              {selectedEmployeeId ? `Create Account for ${fullName}` : "Create New User"}
+            </h4>
             <div className="space-y-3">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Input label="Full Name" placeholder="Jane Doe" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
-                <Input label="Work Email" placeholder="jane@thelixholdings.com" type="email" value={workEmail} onChange={(e) => setWorkEmail(e.target.value)} required />
+                <Input 
+                  label="Full Name" 
+                  placeholder="Jane Doe" 
+                  value={fullName} 
+                  onChange={(e) => setFullName(e.target.value)} 
+                  required 
+                  disabled={!!selectedEmployeeId}
+                />
+                <Input 
+                  label="Work Email" 
+                  placeholder="jane@thelixholdings.com" 
+                  type="email" 
+                  value={workEmail} 
+                  onChange={(e) => setWorkEmail(e.target.value)} 
+                  required 
+                  disabled={!!selectedEmployeeId}
+                />
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Input label="Password" type="password" placeholder="Min 8 characters" value={password} onChange={(e) => setPassword(e.target.value)} required />
                 <Select label="Role" options={ROLE_OPTIONS} value={role} onChange={(e) => setRole(e.target.value)} />
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Select label="SBU" options={sbuOptions} value={sbuId} onChange={(e) => { setSbuId(e.target.value); setDeptId(""); }} placeholder="Select SBU" />
-                <Select label="Department" options={deptOptions} value={deptId} onChange={(e) => setDeptId(e.target.value)} placeholder={sbuId ? "Select Department" : "Select SBU first"} />
+                <Select 
+                  label="SBU" 
+                  options={sbuOptions} 
+                  value={sbuId} 
+                  onChange={(e) => { setSbuId(e.target.value); setDeptId(""); }} 
+                  placeholder="Select SBU" 
+                  disabled={!!selectedEmployeeId}
+                />
+                <Select 
+                  label="Department" 
+                  options={deptOptions} 
+                  value={deptId} 
+                  onChange={(e) => setDeptId(e.target.value)} 
+                  placeholder={sbuId ? "Select Department" : "Select SBU first"} 
+                  disabled={!!selectedEmployeeId}
+                />
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Input label="Job Title" placeholder="e.g. HR Manager" value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} />
-                <Input label="Phone" placeholder="+234..." value={phone} onChange={(e) => setPhone(e.target.value)} />
+                <Input 
+                  label="Job Title" 
+                  placeholder="e.g. HR Manager" 
+                  value={jobTitle} 
+                  onChange={(e) => setJobTitle(e.target.value)} 
+                  disabled={!!selectedEmployeeId}
+                />
+                <Input 
+                  label="Phone" 
+                  placeholder="+234..." 
+                  value={phone} 
+                  onChange={(e) => setPhone(e.target.value)} 
+                  disabled={!!selectedEmployeeId}
+                />
               </div>
 
               {role === "Admin" && (
@@ -353,7 +415,7 @@ function UserManagement() {
               <div className="flex gap-2 pt-1">
                 <Button variant="outline" onClick={handleCreate} disabled={submitting}>
                   {submitting ? <Spinner size="sm" /> : <Save className="h-4 w-4" />}
-                  Create User
+                  {selectedEmployeeId ? "Register User" : "Create User"}
                 </Button>
                 <Button variant="outline" onClick={closeForm}>
                   <X className="h-4 w-4" />
@@ -383,7 +445,11 @@ function UserManagement() {
               <TableBody>
                 {users && users.length > 0 ? (
                   users.map((u: any) => (
-                    <TableRow key={u.id}>
+                    <TableRow 
+                      key={u.id}
+                      className="cursor-pointer hover:bg-gray-50 transition-colors"
+                      onClick={() => openCreateForEmployee(u)}
+                    >
                       <TableCell className="font-mono text-xs">{u.employeeId}</TableCell>
                       <TableCell className="font-medium">{u.fullName}</TableCell>
                       <TableCell className="text-sm text-gray-600">{u.workEmail}</TableCell>

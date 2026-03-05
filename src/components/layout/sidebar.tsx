@@ -23,6 +23,9 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
+  Clock,
+  ClipboardCheck,
+  BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -47,7 +50,7 @@ const navItems: NavItem[] = [
     label: "Employees",
     href: "/employees",
     icon: Users,
-    roles: ["Admin", "SBUHead"],
+    roles: ["Admin", "SBUHead", "Employee"],
   },
   {
     label: "SBU",
@@ -74,6 +77,18 @@ const navItems: NavItem[] = [
     roles: ["Admin", "SBUHead", "Finance", "Employee"],
   },
   {
+    label: "My Attendance",
+    href: "/attendance",
+    icon: Clock,
+    roles: ["Admin", "SBUHead", "Finance", "Employee"],
+  },
+  {
+    label: "Attendance Approvals",
+    href: "/attendance/approvals",
+    icon: ClipboardCheck,
+    roles: ["Admin", "SBUHead"],
+  },
+  {
     label: "Celebrations",
     href: "/celebrations",
     icon: PartyPopper,
@@ -83,6 +98,12 @@ const navItems: NavItem[] = [
     label: "Reports",
     href: "/reports",
     icon: FileSpreadsheet,
+    roles: ["Admin", "Finance", "SBUHead"],
+  },
+  {
+    label: "Attendance Reports",
+    href: "/reports/attendance",
+    icon: BarChart3,
     roles: ["Admin", "Finance", "SBUHead"],
   },
   {
@@ -155,8 +176,9 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
   );
 
   const isActive = (href: string): boolean => {
-    if (href === "/dashboard") {
-      return pathname === "/dashboard";
+    // Exact-match these paths so /attendance doesn't activate on /attendance/approvals
+    if (href === "/dashboard" || href === "/attendance") {
+      return pathname === href;
     }
     return pathname === href || pathname.startsWith(href + "/");
   };

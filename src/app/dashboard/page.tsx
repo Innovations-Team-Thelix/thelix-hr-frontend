@@ -6,6 +6,7 @@ import {
   UserCheck,
   CalendarOff,
   UserPlus,
+  Banknote,
   Download,
   Cake,
   Award,
@@ -27,6 +28,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import Link from "next/link";
 import { AppLayout } from "@/components/layout/app-layout";
 import { StatCard } from "@/components/ui/stat-card";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -51,6 +53,7 @@ import { formatDate } from "@/lib/utils";
 import api from "@/lib/api";
 import toast from "react-hot-toast";
 import { useQueryClient } from "@tanstack/react-query";
+
 
 const GENDER_COLORS = ["#3b82f6", "#ec4899", "#8b5cf6", "#6b7280"];
 const EMPLOYMENT_TYPE_COLORS = ["#10b981", "#f59e0b", "#6366f1"];
@@ -328,6 +331,8 @@ export default function DashboardPage() {
           </Button>
         </div>
 
+
+
         {/* Stat cards */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {workforceLoading ? (
@@ -339,26 +344,46 @@ export default function DashboardPage() {
             ))
           ) : (
             <>
-              <StatCard
-                title="Total Headcount"
-                value={workforce?.totalHeadcount ?? 0}
-                icon={Users}
-              />
-              <StatCard
-                title="Active Employees"
-                value={workforce?.activeCount ?? 0}
-                icon={UserCheck}
-              />
-              <StatCard
-                title="On Leave Today"
-                value={leaveStats?.currentlyOnLeave ?? 0}
-                icon={CalendarOff}
-              />
-              <StatCard
-                title="New Hires This Month"
-                value={workforce?.newHiresThisMonth ?? 0}
-                icon={UserPlus}
-              />
+              <Link href="/employees">
+                <StatCard
+                  title="Total Headcount"
+                  value={workforce?.totalHeadcount ?? 0}
+                  icon={Users}
+                  className="cursor-pointer hover:shadow-md transition-shadow"
+                />
+              </Link>
+              <Link href="/employees?status=Active">
+                <StatCard
+                  title="Active Employees"
+                  value={workforce?.activeCount ?? 0}
+                  icon={UserCheck}
+                  className="cursor-pointer hover:shadow-md transition-shadow"
+                />
+              </Link>
+              <Link href="/leave">
+                <StatCard
+                  title="On Leave Today"
+                  value={leaveStats?.currentlyOnLeave ?? 0}
+                  icon={CalendarOff}
+                  className="cursor-pointer hover:shadow-md transition-shadow"
+                />
+              </Link>
+              <Link href="/employees?joined=this_month">
+                <StatCard
+                  title="New Hires This Month"
+                  value={workforce?.newHiresThisMonth ?? 0}
+                  icon={UserPlus}
+                  className="cursor-pointer hover:shadow-md transition-shadow"
+                />
+              </Link>
+              <Link href="/payroll">
+                <StatCard
+                  title="Next Pay Day"
+                  value={workforce?.nextPayDay ? formatDate(workforce.nextPayDay) : "N/A"}
+                  icon={Banknote}
+                  className="cursor-pointer hover:shadow-md transition-shadow"
+                />
+              </Link>
             </>
           )}
         </div>

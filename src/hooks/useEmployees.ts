@@ -11,6 +11,7 @@ import type {
   Employee,
   EmployeeFilters,
   PaginatedResponse,
+  SalaryRecord,
 } from '@/types';
 import toast from 'react-hot-toast';
 
@@ -114,6 +115,44 @@ export function useCreateEmployee() {
     onError: (error: any) => {
       const message =
         error?.response?.data?.message || 'Failed to create employee.';
+      toast.error(message);
+    },
+  });
+}
+
+// ─── Manage Probation ────────────────────────────────────────
+
+export interface ManageProbationPayload {
+  action: 'Confirm' | 'Extend' | 'Convert';
+  newEndDate?: string;
+  notes?: string;
+}
+
+export function useManageProbation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+      data,
+    }: {
+      id: string;
+      data: ManageProbationPayload;
+    }) => {
+      const response = await api.put<Employee>(`/employees/${id}/probation`, data);
+      return response.data;
+    },
+    onSuccess: (updatedEmployee) => {
+      queryClient.invalidateQueries({ queryKey: employeeKeys.lists() });
+      queryClient.setQueryData(
+        employeeKeys.detail(updatedEmployee.id),
+        updatedEmployee,
+      );
+      toast.success('Probation status updated successfully.');
+    },
+    onError: (error: any) => {
+      const message =
+        error?.response?.data?.message || 'Failed to update probation status.';
       toast.error(message);
     },
   });
@@ -228,5 +267,43 @@ export function useUpdateMyProfile() {
         error?.response?.data?.message || 'Failed to update profile.';
       toast.error(message);
     },
+  });
+}
+
+export interface ProfileCompletionResult {
+  employeeId: string;
+  fullName: string;
+  completionPercentage: number;
+  missingFields: string[];
+  message?: string;
+}
+
+export function useMyProfileCompletion(
+  options?: Omit<UseQueryOptions<ProfileCompletionResult>, 'queryKey' | 'queryFn'>,
+) {
+  return useQuery<ProfileCompletionResult>({
+    queryKey: [...employeeKeys.me(), 'completion'] as const,
+    queryFn: async () => {
+      const response = await api.get<ProfileCompletionResult>('/employees/me/completion');
+      return response.data;
+    },
+    ...options,
+  });
+}
+
+// ─── Salary History ──────────────────────────────────────────
+
+export function useSalaryHistory(
+  id: string,
+  options?: Omit<UseQueryOptions<SalaryRecord[]>, 'queryKey' | 'queryFn'>,
+) {
+  return useQuery<SalaryRecord[]>({
+    queryKey: [...employeeKeys.detail(id), 'salary-history'] as const,
+    queryFn: async () => {
+      const response = await api.get<SalaryRecord[]>(`/employees/${id}/salary-history`);
+      return response.data;
+    },
+    enabled: !!id,
+    ...options,
   });
 }

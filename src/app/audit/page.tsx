@@ -2,25 +2,29 @@
 
 import React, { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Shield, ChevronDown, ChevronRight, Search } from "lucide-react";
+import { Shield, ChevronDown, ChevronRight, Search, Download } from "lucide-react";
 import { AppLayout } from "@/components/layout/app-layout";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/loading";
-import { Pagination } from "@/components/ui/pagination";
 import {
   Table,
-  TableHeader,
   TableBody,
-  TableRow,
-  TableHead,
   TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "@/components/ui/table";
-import { useAuditLogs, useAuthStore } from "@/hooks";
-import { formatDate, cn } from "@/lib/utils";
+import { Pagination } from "@/components/ui/pagination";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useAuthStore } from "@/store/auth";
+import { useAuditLogs, useSbus, useDepartments } from "@/hooks";
+import { formatTimestamp, jsonToCsv, downloadFile, cn } from "@/lib/utils";
+import type { AuditLog } from "@/types/audit";
+import api from "@/lib/api";
+import toast from "react-hot-toast";
 
 const ENTITY_TYPES = [
   { label: "All Types", value: "" },
@@ -31,6 +35,13 @@ const ENTITY_TYPES = [
   { label: "User Account", value: "UserAccount" },
   { label: "Department", value: "Department" },
   { label: "SBU", value: "Sbu" },
+];
+
+const EMPLOYMENT_STATUS_OPTIONS = [
+  { label: "Active", value: "Active" },
+  { label: "Suspended", value: "Suspended" },
+  { label: "Terminated", value: "Terminated" },
+  { label: "Resigned", value: "Resigned" },
 ];
 
 const ACTION_TYPES = [
@@ -58,11 +69,18 @@ export default function AuditPage() {
 
   const [entityType, setEntityType] = useState("");
   const [action, setAction] = useState("");
+  const [sbuId, setSbuId] = useState("");
+  const [departmentId, setDepartmentId] = useState("");
+  const [employmentStatus, setEmploymentStatus] = useState("");
   const [actorSearch, setActorSearch] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [page, setPage] = useState(1);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+
+  const { data: sbus = [] } = useSbus();
+  const { data: departments = [] } = useDepartments(sbuId || undefined);
 
   // Redirect non-admin users
   useEffect(() => {
@@ -74,8 +92,11 @@ export default function AuditPage() {
   const { data: auditData, isLoading } = useAuditLogs({
     entityType: entityType || undefined,
     action: action || undefined,
-    dateFrom: dateFrom || undefined,
-    dateTo: dateTo || undefined,
+    sbuId: sbuId || undefined,
+    departmentId: departmentId || undefined,
+    employmentStatus: employmentStatus || undefined,
+    startDate: startDate || undefined,
+    endDate: endDate || undefined,
     page,
     limit: 20,
   });
@@ -91,10 +112,58 @@ export default function AuditPage() {
   const handleClearFilters = () => {
     setEntityType("");
     setAction("");
+    setSbuId("");
+    setDepartmentId("");
+    setEmploymentStatus("");
+    setStartDate("");
+    setEndDate("");
     setActorSearch("");
-    setDateFrom("");
-    setDateTo("");
     setPage(1);
+  };
+
+  const handleExport = async () => {
+    try {
+      setIsExporting(true);
+      const params = new URLSearchParams();
+      if (entityType) params.set("entityType", entityType);
+      if (action) params.set("action", action);
+      if (sbuId) params.set("sbuId", sbuId);
+      if (departmentId) params.set("departmentId", departmentId);
+      if (employmentStatus) params.set("employmentStatus", employmentStatus);
+      if (startDate) params.set("startDate", startDate);
+      if (endDate) params.set("endDate", endDate);
+      
+      // Fetch all matching logs for export (no pagination or high limit)
+      params.set("limit", "1000"); // Reasonable limit for now
+
+      const response = await api.get<AuditLog[]>("/audit-logs", { params });
+      const data = response.data;
+
+      if (!data || data.length === 0) {
+        toast.error("No data to export");
+        return;
+      }
+
+      // Flatten data for CSV
+      const csvData = data.map(log => ({
+        Date: formatTimestamp(log.createdAt),
+        Actor: log.actor?.fullName || "System",
+        Action: log.action,
+        Entity: log.entityType,
+        "Entity ID": log.entityId,
+        Details: log.changes ? JSON.stringify(log.changes) : "",
+      }));
+
+      const csvString = jsonToCsv(csvData);
+      const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
+      downloadFile(blob, `audit-logs-${new Date().toISOString().split("T")[0]}.csv`);
+      toast.success("Export successful");
+    } catch (error) {
+      console.error("Export failed:", error);
+      toast.error("Failed to export logs");
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const toggleRow = (id: string) => {
@@ -108,19 +177,6 @@ export default function AuditPage() {
     } catch {
       return "Unable to parse changes";
     }
-  };
-
-  const formatTimestamp = (dateStr: string) => {
-    const date = new Date(dateStr);
-    if (isNaN(date.getTime())) return "-";
-    return date.toLocaleString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    });
   };
 
   // Filter logs by actor search (client-side since API might not support it)
@@ -178,6 +234,50 @@ export default function AuditPage() {
                   }}
                 />
               </div>
+              <div className="min-w-[180px]">
+                <Select
+                  label="SBU"
+                  options={[
+                    { label: "All SBUs", value: "" },
+                    ...sbus.map((s) => ({ label: s.name, value: s.id })),
+                  ]}
+                  value={sbuId}
+                  onChange={(e) => {
+                    setSbuId(e.target.value);
+                    setDepartmentId("");
+                    setPage(1);
+                  }}
+                />
+              </div>
+              <div className="min-w-[180px]">
+                <Select
+                  label="Department"
+                  options={[
+                    { label: "All Departments", value: "" },
+                    ...departments.map((d) => ({ label: d.name, value: d.id })),
+                  ]}
+                  value={departmentId}
+                  onChange={(e) => {
+                    setDepartmentId(e.target.value);
+                    setPage(1);
+                  }}
+                  disabled={!sbuId}
+                />
+              </div>
+              <div className="min-w-[180px]">
+                <Select
+                  label="Employment Status"
+                  options={[
+                    { label: "All Statuses", value: "" },
+                    ...EMPLOYMENT_STATUS_OPTIONS,
+                  ]}
+                  value={employmentStatus}
+                  onChange={(e) => {
+                    setEmploymentStatus(e.target.value);
+                    setPage(1);
+                  }}
+                />
+              </div>
               <div className="min-w-[200px] flex-1">
                 <label className="mb-1.5 block text-xs font-medium text-gray-500">
                   Search Actor
@@ -201,9 +301,9 @@ export default function AuditPage() {
                 <Input
                   label="From Date"
                   type="date"
-                  value={dateFrom}
+                  value={startDate}
                   onChange={(e) => {
-                    setDateFrom(e.target.value);
+                    setStartDate(e.target.value);
                     setPage(1);
                   }}
                 />
@@ -212,13 +312,23 @@ export default function AuditPage() {
                 <Input
                   label="To Date"
                   type="date"
-                  value={dateTo}
+                  value={endDate}
                   onChange={(e) => {
-                    setDateTo(e.target.value);
+                    setEndDate(e.target.value);
                     setPage(1);
                   }}
                 />
               </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExport}
+                disabled={isExporting}
+                loading={isExporting}
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Export CSV
+              </Button>
               <Button
                 variant="ghost"
                 size="sm"

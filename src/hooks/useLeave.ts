@@ -102,8 +102,26 @@ export function useCreateLeaveRequest() {
       startDate: string;
       endDate: string;
       reason?: string;
+      relieveOfficerId: string;
+      attachments?: File[];
     }) => {
-      const response = await api.post<LeaveRequest>('/leave-requests', data);
+      const formData = new FormData();
+      formData.append('leaveTypeId', data.leaveTypeId);
+      formData.append('startDate', data.startDate);
+      formData.append('endDate', data.endDate);
+      formData.append('relieveOfficerId', data.relieveOfficerId);
+      if (data.reason) formData.append('reason', data.reason);
+      if (data.attachments) {
+        data.attachments.forEach((file) => {
+          formData.append('attachments', file);
+        });
+      }
+
+      const response = await api.post<LeaveRequest>('/leave-requests', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
       return response.data;
     },
     onSuccess: () => {
@@ -217,28 +235,84 @@ export function useCancelLeave() {
   });
 }
 
+// ─── Submit Return to Work ─────────────────────────────────
+
+export function useSubmitReturnToWork() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+      actualReturnDate,
+      returnNote,
+      attachments,
+    }: {
+      id: string;
+      actualReturnDate: string;
+      returnNote?: string;
+      attachments?: File[];
+    }) => {
+      const formData = new FormData();
+      formData.append('actualReturnDate', actualReturnDate);
+      if (returnNote) formData.append('returnNote', returnNote);
+      if (attachments) {
+        attachments.forEach((file) => {
+          formData.append('attachments', file);
+        });
+      }
+
+      const response = await api.post<LeaveRequest>(
+        `/leave-requests/${id}/return-to-work`,
+        formData,
+        {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        }
+      );
+      return response.data;
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: leaveKeys.requests() });
+      queryClient.invalidateQueries({
+        queryKey: leaveKeys.requestDetail(variables.id),
+      });
+      toast.success('Return to work submitted successfully.');
+    },
+    onError: (error: any) => {
+      const message =
+        error?.response?.data?.message || 'Failed to submit return to work.';
+      toast.error(message);
+    },
+  });
+}
+
 // ─── Leave calendar ────────────────────────────────────────
 
 export function useLeaveCalendar(
-  sbuId?: string,
-  startDate?: string,
-  endDate?: string,
+  params: {
+    sbuId?: string;
+    startDate?: string;
+    endDate?: string;
+  } = {},
   options?: Omit<
     UseQueryOptions<LeaveCalendarEntry[]>,
     'queryKey' | 'queryFn'
   >,
 ) {
+  const { sbuId, startDate, endDate } = params;
+
   return useQuery<LeaveCalendarEntry[]>({
     queryKey: leaveKeys.calendar(sbuId, startDate, endDate),
     queryFn: async () => {
-      const params = new URLSearchParams();
-      if (sbuId) params.set('sbuId', sbuId);
-      if (startDate) params.set('startDate', startDate);
-      if (endDate) params.set('endDate', endDate);
+      const searchParams = new URLSearchParams();
+      if (sbuId) searchParams.set('sbuId', sbuId);
+      if (startDate) searchParams.set('startDate', startDate);
+      if (endDate) searchParams.set('endDate', endDate);
 
       const response = await api.get<LeaveCalendarEntry[]>(
         '/leave-calendar',
-        { params },
+        { params: searchParams },
       );
 
       return response.data;

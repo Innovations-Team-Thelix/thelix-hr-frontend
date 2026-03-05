@@ -1,11 +1,12 @@
 "use client";
 
 import React, { useState, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Plus, Users, Upload, Download, X, FileSpreadsheet, AlertCircle, CheckCircle2, Trash2 } from "lucide-react";
 import { AppLayout } from "@/components/layout/app-layout";
 import { FilterBar, type FilterValues } from "@/components/shared/filter-bar";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { EmployeeTags } from "@/components/employees/employee-tags";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 import { Pagination } from "@/components/ui/pagination";
@@ -28,12 +29,17 @@ import type { EmployeeFilters } from "@/types";
 
 export default function EmployeesPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const joinedParam = searchParams.get("joined") as "this_month" | "last_month" | "this_year" | null;
+  const statusParam = searchParams.get("status") as EmployeeFilters["status"] | null;
   const { user } = useAuth();
   const isAdmin = user?.role === "Admin";
 
   const [filters, setFilters] = useState<EmployeeFilters>({
     page: 1,
     limit: 20,
+    joined: joinedParam || undefined,
+    status: statusParam || undefined,
   });
 
   // Bulk upload state
@@ -208,6 +214,14 @@ export default function EmployeesPage() {
     { label: "Resigned", value: "Resigned" },
   ];
 
+  
+  const filterValues = {
+    search: filters.search || "",
+    sbuId: filters.sbuId || "",
+    departmentId: filters.departmentId || "",
+    status: filters.status || "",
+  };
+
   return (
     <AppLayout pageTitle="Employees">
       <div className="space-y-6">
@@ -238,10 +252,12 @@ export default function EmployeesPage() {
                 Bulk Upload
               </Button>
             )}
-            <Button variant="outline" onClick={() => router.push("/employees/new")}>
-              <Plus className="h-4 w-4" />
-              Add Employee
-            </Button>
+            {isAdmin && (
+              <Button variant="outline" onClick={() => router.push("/employees/new")}>
+                <Plus className="h-4 w-4" />
+                Add Employee
+              </Button>
+            )}
           </div>
         </div>
 
@@ -363,6 +379,7 @@ export default function EmployeesPage() {
 
         {/* Filters */}
         <FilterBar
+          values={filterValues}
           filters={[
             {
               key: "search",
@@ -514,7 +531,10 @@ export default function EmployeesPage() {
                         <TableCell>{emp.department?.name || "-"}</TableCell>
                         <TableCell>{emp.jobTitle}</TableCell>
                         <TableCell>
-                          <StatusBadge status={emp.employmentStatus} />
+                          <div className="flex flex-col gap-1 items-start">
+                            <StatusBadge status={emp.employmentStatus} />
+                            <EmployeeTags tags={emp.tags} />
+                          </div>
                         </TableCell>
                         <TableCell>
                           <StatusBadge status={emp.employmentType} />

@@ -80,6 +80,28 @@ export function formatDate(
 }
 
 /**
+ * Format a birth date based on visibility.
+ *
+ * @param date - The date of birth
+ * @param showYear - Whether to show the year (e.g. for HR/Admin)
+ * @returns Formatted date string (e.g. "January 22nd" or "January 22, 1990")
+ */
+export function formatBirthDate(
+  date: string | Date | null | undefined,
+  showYear: boolean = false,
+): string {
+  if (!date) return '-';
+
+  const parsed = dayjs(date);
+  if (!parsed.isValid()) return '-';
+
+  if (showYear) {
+    return parsed.format('MMMM D, YYYY');
+  }
+  return parsed.format('MMMM Do');
+}
+
+/**
  * Format a date range as a concise string.
  * If start and end are in the same month/year, the month and year are not repeated.
  *
@@ -161,4 +183,54 @@ export function downloadFile(blob: Blob, filename: string): void {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   }, 100);
+}
+
+/**
+ * Convert an array of flat objects to a CSV string.
+ *
+ * @param data Array of objects to convert
+ * @returns CSV string
+ */
+export function jsonToCsv(data: Record<string, any>[]): string {
+  if (!data || !data.length) {
+    return '';
+  }
+
+  const headers = Object.keys(data[0]);
+  const csvRows = [headers.join(',')];
+
+  for (const row of data) {
+    const values = headers.map((header) => {
+      const val = row[header];
+      // Handle null/undefined
+      if (val === null || val === undefined) {
+        return '""';
+      }
+      // Escape quotes and wrap in quotes
+      const escaped = String(val).replace(/"/g, '""');
+      return `"${escaped}"`;
+    });
+    csvRows.push(values.join(','));
+  }
+
+  return csvRows.join('\n');
+}
+
+/**
+ * Format a timestamp string.
+ *
+ * @param dateStr Date string
+ * @returns Formatted timestamp string
+ */
+export function formatTimestamp(dateStr: string): string {
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return "-";
+  return date.toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
 }

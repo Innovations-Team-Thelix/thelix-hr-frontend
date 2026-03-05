@@ -27,11 +27,12 @@ import {
   useCreatePayslip,
   useApprovePayroll,
   useSendPayroll,
-  useSearchEmployees,
+  useAllEmployees,
   useAuthStore,
 } from "@/hooks";
 import { formatDate } from "@/lib/utils";
-import type { PayrollStatus } from "@/types";
+import type { PayrollStatus, Payslip } from "@/types";
+import { generatePayslipPdf } from "@/lib/pdf-utils";
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -66,9 +67,16 @@ export default function PayrollDetailPage() {
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [employeeSearch, setEmployeeSearch] = useState("");
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   const { data: run, isLoading } = usePayrollRun(payrollRunId);
-  const { data: searchResults } = useSearchEmployees(employeeSearch);
+  const { data: allEmployees } = useAllEmployees();
+  
+  const filteredEmployees = allEmployees?.filter((emp) =>
+    emp.fullName.toLowerCase().includes(employeeSearch.toLowerCase()) ||
+    emp.employeeId.toLowerCase().includes(employeeSearch.toLowerCase())
+  );
+
   const uploadPayslips = useUploadPayslips();
   const createPayslip = useCreatePayslip();
   const approvePayroll = useApprovePayroll();
@@ -127,21 +135,34 @@ export default function PayrollDetailPage() {
     }
   };
 
-  const handleDownloadPdf = (payslipId: string) => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
-    fetch(`${API_URL}/payslips/${payslipId}/pdf`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((res) => res.blob())
-      .then((blob) => {
-        const url = URL.createObjectURL(blob);
+  const handleDownloadPdf = async (payslip: Payslip) => {
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
+      const res = await fetch(`${API_URL}/payslips/${payslip.id}/pdf`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json();
+      if (json.data?.signedUrl) {
         const a = document.createElement("a");
-        a.href = url;
-        a.download = "";
+        a.href = json.data.signedUrl;
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
         a.click();
-        URL.revokeObjectURL(url);
-      })
-      .catch(() => toast.error("Failed to download PDF"));
+      } else {
+        throw new Error("Failed to get download link");
+      }
+    } catch (err) {
+      console.warn("Backend PDF generation failed, falling back to client-side", err);
+      if (run) {
+        try {
+          generatePayslipPdf(payslip, run.month, run.year);
+          toast.success("PDF generated successfully");
+        } catch (clientErr) {
+          console.error("Client-side PDF generation failed", clientErr);
+          toast.error("Failed to download PDF");
+        }
+      }
+    }
   };
 
   const formatCurrency = (amount: number) =>
@@ -290,7 +311,7 @@ export default function PayrollDetailPage() {
                             size="sm"
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleDownloadPdf(payslip.id);
+                              handleDownloadPdf(payslip);
                             }}
                           >
                             <Download className="h-3 w-3" />
@@ -357,25 +378,31 @@ export default function PayrollDetailPage() {
           }
         >
           <div className="space-y-4">
-            <div>
+            <div className="relative">
               <label className="mb-1.5 block text-sm font-medium text-gray-700">
                 Employee *
               </label>
               <Input
-                placeholder="Search employee by name..."
+                placeholder="Search employee..."
                 value={employeeSearch}
-                onChange={(e) => setEmployeeSearch(e.target.value)}
+                onChange={(e) => {
+                  setEmployeeSearch(e.target.value);
+                  setIsDropdownOpen(true);
+                }}
+                onFocus={() => setIsDropdownOpen(true)}
+                onBlur={() => setTimeout(() => setIsDropdownOpen(false), 200)}
               />
-              {searchResults && searchResults.length > 0 && employeeSearch.length >= 2 && (
-                <div className="mt-1 max-h-40 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-sm">
-                  {searchResults.map((emp) => (
+              {isDropdownOpen && filteredEmployees && filteredEmployees.length > 0 && (
+                <div className="absolute z-10 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+                  {filteredEmployees.map((emp) => (
                     <button
                       key={emp.id}
                       type="button"
                       className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50"
-                      onClick={() => {
+                      onMouseDown={() => {
                         form.setValue("employeeId", emp.id);
                         setEmployeeSearch(emp.fullName);
+                        setIsDropdownOpen(false);
                       }}
                     >
                       <span className="font-medium">{emp.fullName}</span>
