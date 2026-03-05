@@ -11,9 +11,6 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "Thelix HRIS",
   description: "Thelix Holdings Internal Human Resource Information System",
-  icons: {
-    icon: "/favicon.ico",
-  },
 };
 
 export default function RootLayout({
