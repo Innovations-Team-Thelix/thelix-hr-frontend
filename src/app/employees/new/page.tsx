@@ -32,6 +32,7 @@ const createEmployeeSchema = z.object({
   governmentId: z.string().optional(),
   tin: z.string().optional(),
   pensionNumber: z.string().optional(),
+  hmoId: z.string().optional(),
 
   dateOfHire: z.string().min(1, "Date of hire is required"),
   employmentType: z.string().default("FullTime"),
@@ -185,6 +186,7 @@ export default function CreateEmployeePage() {
         governmentId: data.governmentId || null,
         tin: data.tin || null,
         pensionNumber: data.pensionNumber || null,
+        hmoId: data.hmoId || null,
         
         // Employment
         supervisorId: data.supervisorId || null,
@@ -380,6 +382,11 @@ export default function CreateEmployeePage() {
                     label="Pension Number"
                     error={errors.pensionNumber?.message}
                     {...register("pensionNumber")}
+                  />
+                  <Input
+                    label="HMO ID"
+                    error={errors.hmoId?.message}
+                    {...register("hmoId")}
                   />
                 </div>
               </CardContent>

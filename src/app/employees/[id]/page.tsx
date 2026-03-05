@@ -97,6 +97,7 @@ const editEmployeeSchema = z.object({
   governmentId: z.string().optional(),
   tin: z.string().optional(),
   pensionNumber: z.string().optional(),
+  hmoId: z.string().optional(),
 
   dateOfHire: z.string().optional(),
   employmentType: z.string().optional(),
@@ -236,6 +237,7 @@ export default function EmployeeProfilePage() {
         governmentId: employee.governmentId || undefined,
         tin: employee.tin || undefined,
         pensionNumber: employee.pensionNumber || undefined,
+        hmoId: employee.hmoId || undefined,
 
         dateOfHire: employee.dateOfHire ? new Date(employee.dateOfHire).toISOString().split('T')[0] : undefined,
         employmentType: employee.employmentType || undefined,
@@ -1364,6 +1366,11 @@ export default function EmployeeProfilePage() {
                   label="Pension Number"
                   error={editForm.formState.errors.pensionNumber?.message}
                   {...editForm.register("pensionNumber")}
+                />
+                <Input
+                  label="HMO ID"
+                  error={editForm.formState.errors.hmoId?.message}
+                  {...editForm.register("hmoId")}
                 />
               </div>
             )}
