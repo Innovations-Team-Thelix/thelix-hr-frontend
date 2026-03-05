@@ -33,21 +33,25 @@ function formatCurrency(amount: number) {
 export default function PayslipsPage() {
   const { data, isLoading } = useMyPayslips();
 
-  const handleDownloadPdf = (payslipId: string) => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
-    fetch(`${API_URL}/payslips/${payslipId}/pdf`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((res) => res.blob())
-      .then((blob) => {
-        const url = URL.createObjectURL(blob);
+  const handleDownloadPdf = async (payslipId: string) => {
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
+      const res = await fetch(`${API_URL}/payslips/${payslipId}/pdf`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json();
+      if (json.data?.signedUrl) {
         const a = document.createElement("a");
-        a.href = url;
-        a.download = "";
+        a.href = json.data.signedUrl;
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
         a.click();
-        URL.revokeObjectURL(url);
-      })
-      .catch(() => toast.error("Failed to download PDF"));
+      } else {
+        toast.error("Failed to get download link");
+      }
+    } catch (err) {
+      toast.error("Failed to download PDF");
+    }
   };
 
   return (

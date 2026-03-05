@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -16,7 +16,9 @@ import {
   Clock,
   Download,
   FileText,
+  Upload,
 } from "lucide-react";
+import { ClockInWidget } from "@/components/attendance/clock-in-widget";
 import { AppLayout } from "@/components/layout/app-layout";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,9 +28,16 @@ import { Modal } from "@/components/ui/modal";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/loading";
+import { Tabs, Tab } from "@/components/ui/tabs";
 import { StatusBadge } from "@/components/shared/status-badge";
-import { useMyProfile, useUpdateMyProfile, useMyLeaveBalances, useRoster } from "@/hooks";
-import { formatDate, formatCurrency, cn } from "@/lib/utils";
+import { DocumentList } from "@/components/documents/document-list";
+import { UploadDocumentModal } from "@/components/documents/upload-document-modal";
+import { useMyProfile, useUpdateMyProfile, useMyLeaveBalances, useSalaryHistory,
+  useAuthStore
+} from "@/hooks";
+import { AttendanceHistoryTab } from "@/components/employees/attendance-history-tab";
+import { useRoster } from "@/hooks/useRoster";
+import { formatDate, formatCurrency, cn, formatBirthDate } from "@/lib/utils";
 
 const updateSelfSchema = z.object({
   phone: z.string().optional(),
@@ -42,6 +51,23 @@ const updateSelfSchema = z.object({
 });
 
 type UpdateSelfFormData = z.infer<typeof updateSelfSchema>;
+
+function InfoField({
+  label,
+  value,
+}: {
+  label: string;
+  value: React.ReactNode;
+}) {
+  return (
+    <div>
+      <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+        {label}
+      </dt>
+      <dd className="mt-1 text-sm text-gray-900">{value || "-"}</dd>
+    </div>
+  );
+}
 
 function InfoRow({
   icon: Icon,
@@ -67,23 +93,43 @@ function InfoRow({
 
 export default function ProfilePage() {
   const [editModalOpen, setEditModalOpen] = useState(false);
+  const { user } = useAuthStore();
+  const isAdmin = user?.role === "Admin";
   const { data: profile, isLoading } = useMyProfile();
   const { data: leaveBalances, isLoading: balancesLoading } = useMyLeaveBalances();
+  const { data: salaryHistory } = useSalaryHistory(profile?.id || "", { enabled: !!profile });
   const updateProfile = useUpdateMyProfile();
 
+  const [activeTab, setActiveTab] = useState("overview");
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+
+  const tabs: Tab[] = [
+    { id: "overview", label: "Overview" },
+    { id: "compensation", label: "Compensation" },
+    { id: "salary-history", label: "Salary History" },
+    { id: "attendance", label: "Attendance" },
+    { id: "documents", label: "Documents" },
+    ...(profile?.subordinates?.length ? [{ id: "team", label: "Team" }] : []),
+  ];
+
   // Get this week's roster
-  const now = new Date();
-  const monday = new Date(now);
-  const day = monday.getDay();
-  const diff = monday.getDate() - day + (day === 0 ? -6 : 1);
-  monday.setDate(diff);
-  const friday = new Date(monday);
-  friday.setDate(friday.getDate() + 4);
+  const [weekDates, setWeekDates] = useState<{ monday: Date; friday: Date } | null>(null);
+
+  useEffect(() => {
+    const now = new Date();
+    const monday = new Date(now);
+    const day = monday.getDay();
+    const diff = monday.getDate() - day + (day === 0 ? -6 : 1);
+    monday.setDate(diff);
+    const friday = new Date(monday);
+    friday.setDate(friday.getDate() + 4);
+    setWeekDates({ monday, friday });
+  }, []);
 
   const { data: rosterEntries } = useRoster({
-    startDate: monday.toISOString().split("T")[0],
-    endDate: friday.toISOString().split("T")[0],
-  });
+    startDate: weekDates ? weekDates.monday.toISOString().split("T")[0] : "",
+    endDate: weekDates ? weekDates.friday.toISOString().split("T")[0] : "",
+  }, { enabled: !!weekDates });
 
   const form = useForm<UpdateSelfFormData>({
     resolver: zodResolver(updateSelfSchema),
@@ -188,10 +234,13 @@ export default function ProfilePage() {
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          {/* Personal Info */}
-          <div className="lg:col-span-2 space-y-6">
-            <Card>
+        <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+
+        {activeTab === "overview" && (
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            {/* Personal Info */}
+            <div className="lg:col-span-2 space-y-6">
+              <Card>
               <CardHeader>
                 <CardTitle>Personal Information</CardTitle>
               </CardHeader>
@@ -200,8 +249,8 @@ export default function ProfilePage() {
                   <InfoRow icon={User} label="Full Name" value={profile.fullName} />
                   <InfoRow
                     icon={Calendar}
-                    label="Date of Birth"
-                    value={formatDate(profile.dateOfBirth)}
+                    label="Birth Day Date"
+                    value={formatBirthDate(profile.dateOfBirth, isAdmin)}
                   />
                   <InfoRow label="Gender" value={profile.gender} />
                   <InfoRow label="Nationality" value={profile.nationality} />
@@ -276,6 +325,9 @@ export default function ProfilePage() {
 
           {/* Sidebar: Leave Balances + Roster */}
           <div className="space-y-6">
+            {/* Clock In Widget */}
+            <ClockInWidget />
+
             {/* Leave Balances */}
             <Card>
               <CardHeader>
@@ -392,11 +444,12 @@ export default function ProfilePage() {
                 {rosterEntries && rosterEntries.length > 0 ? (
                   <div className="space-y-2">
                     {dayNames.map((dayName, index) => {
-                      const date = new Date(monday);
+                      if (!weekDates) return null;
+                      const date = new Date(weekDates.monday);
                       date.setDate(date.getDate() + index);
                       const dateStr = date.toISOString().split("T")[0];
                       const entry = rosterEntries.find(
-                        (e) => e.date.split("T")[0] === dateStr
+                        (e) => e.date?.split("T")[0] === dateStr
                       );
                       const dayType = entry?.dayType || "Unscheduled";
                       return (
@@ -424,9 +477,265 @@ export default function ProfilePage() {
               </CardContent>
             </Card>
           </div>
-        </div>
+          </div>
+        )}
 
-        {/* Edit Profile Modal */}
+        {/* Compensation Tab */}
+        {activeTab === "compensation" && (
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Compensation Summary</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {profile.salaryBreakdown ? (
+                  <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+                    <div className="rounded-lg bg-blue-50 p-4">
+                      <p className="text-sm font-medium text-blue-600">Base Salary</p>
+                      <p className="mt-2 text-2xl font-bold text-blue-900">
+                        {formatCurrency(profile.salaryBreakdown.baseSalary, profile.currency || "NGN")}
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-green-50 p-4">
+                      <p className="text-sm font-medium text-green-600">Gross Pay</p>
+                      <p className="mt-2 text-2xl font-bold text-green-900">
+                        {formatCurrency(profile.salaryBreakdown.grossPay, profile.currency || "NGN")}
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-purple-50 p-4">
+                      <p className="text-sm font-medium text-purple-600">Net Pay</p>
+                      <p className="mt-2 text-2xl font-bold text-purple-900">
+                        {formatCurrency(profile.salaryBreakdown.netPay, profile.currency || "NGN")}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <dl className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                    <InfoField
+                      label="Gross Pay"
+                      value={formatCurrency(
+                        profile.monthlySalary,
+                        profile.currency || "NGN"
+                      )}
+                    />
+                    <InfoField label="Salary Band" value={profile.salaryBand} />
+                    <InfoField label="Currency" value={profile.currency} />
+                    <InfoField
+                      label="Salary Effective Date"
+                      value={formatDate(profile.salaryEffectiveDate)}
+                    />
+                    <InfoField
+                      label="Last Salary Review"
+                      value={formatDate(profile.lastSalaryReview)}
+                    />
+                  </dl>
+                )}
+              </CardContent>
+            </Card>
+
+            {profile.salaryBreakdown && (
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                {/* Earnings */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Earnings</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div className="flex justify-between border-b pb-2">
+                        <span className="font-medium">Base Salary</span>
+                        <span>{formatCurrency(profile.salaryBreakdown.baseSalary, profile.currency || "NGN")}</span>
+                      </div>
+                      {profile.salaryBreakdown.allowances.map((allowance, index) => (
+                        <div key={index} className="flex justify-between border-b pb-2">
+                          <span className="font-medium">{allowance.name}</span>
+                          <span>{formatCurrency(allowance.amount, profile.currency || "NGN")}</span>
+                        </div>
+                      ))}
+                      <div className="flex justify-between pt-2 font-bold">
+                        <span>Total Earnings</span>
+                        <span>{formatCurrency(profile.salaryBreakdown.grossPay, profile.currency || "NGN")}</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Deductions */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Deductions</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div className="flex justify-between border-b pb-2">
+                        <span className="font-medium">Tax</span>
+                        <span className="text-red-600">-{formatCurrency(profile.salaryBreakdown.tax, profile.currency || "NGN")}</span>
+                      </div>
+                      <div className="flex justify-between border-b pb-2">
+                        <span className="font-medium">Pension</span>
+                        <span className="text-red-600">-{formatCurrency(profile.salaryBreakdown.pension, profile.currency || "NGN")}</span>
+                      </div>
+                      {profile.salaryBreakdown.deductions.map((deduction, index) => (
+                        <div key={index} className="flex justify-between border-b pb-2">
+                          <span className="font-medium">{deduction.name}</span>
+                          <span className="text-red-600">-{formatCurrency(deduction.amount, profile.currency || "NGN")}</span>
+                        </div>
+                      ))}
+                      <div className="flex justify-between pt-2 font-bold">
+                        <span>Total Deductions</span>
+                        <span className="text-red-600">
+                          -{formatCurrency(
+                            (profile.salaryBreakdown.grossPay - profile.salaryBreakdown.netPay),
+                            profile.currency || "NGN"
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Bank Details</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <dl className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                  <InfoField label="Account Name" value={profile.accountName} />
+                  <InfoField
+                    label="Account Number"
+                    value={profile.accountNumber}
+                  />
+                  <InfoField label="Bank Name" value={profile.bankName} />
+                </dl>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Salary History Tab */}
+        {activeTab === "salary-history" && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Salary History</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {!salaryHistory || salaryHistory.length === 0 ? (
+                <div className="py-12 text-center text-sm text-gray-500">
+                  No salary history recorded
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left">
+                    <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+                      <tr>
+                        <th className="px-4 py-3 font-medium">Effective Date</th>
+                        <th className="px-4 py-3 font-medium">Base Salary</th>
+                        <th className="px-4 py-3 font-medium">Gross Pay</th>
+                        <th className="px-4 py-3 font-medium">Net Pay</th>
+                        <th className="px-4 py-3 font-medium">Created By</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {salaryHistory.map((record) => (
+                        <tr key={record.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 text-gray-900">
+                            {formatDate(record.effectiveDate)}
+                          </td>
+                          <td className="px-4 py-3 text-gray-600">
+                            {formatCurrency(record.baseSalary, profile.currency || "NGN")}
+                          </td>
+                          <td className="px-4 py-3 text-gray-600">
+                            {formatCurrency(record.grossPay, profile.currency || "NGN")}
+                          </td>
+                          <td className="px-4 py-3 text-gray-600">
+                            {formatCurrency(record.netPay, profile.currency || "NGN")}
+                          </td>
+                          <td className="px-4 py-3 text-gray-500">
+                            {record.createdById}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {activeTab === "documents" && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-medium text-gray-900">My Documents</h3>
+              <Button onClick={() => setIsUploadModalOpen(true)}>
+                <Upload className="mr-2 h-4 w-4" />
+                Upload Document
+              </Button>
+            </div>
+            <DocumentList />
+            <UploadDocumentModal
+              isOpen={isUploadModalOpen}
+              onClose={() => setIsUploadModalOpen(false)}
+            />
+          </div>
+        )}
+
+        {/* Attendance Tab */}
+        {activeTab === "attendance" && (
+          <div className="space-y-6">
+            <AttendanceHistoryTab employeeId={profile.id} />
+          </div>
+        )}
+
+        {/* Team Tab */}
+        {activeTab === "team" && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Direct Reports ({profile.subordinates?.length || 0})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {!profile.subordinates?.length ? (
+                <div className="py-12 text-center text-sm text-gray-500">
+                  No direct reports found.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left">
+                    <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+                      <tr>
+                        <th className="px-4 py-3 font-medium">Name</th>
+                        <th className="px-4 py-3 font-medium">Job Title</th>
+                        <th className="px-4 py-3 font-medium">Department</th>
+                        <th className="px-4 py-3 font-medium">Email</th>
+                        <th className="px-4 py-3 font-medium">Phone</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {profile.subordinates.map((sub) => (
+                        <tr key={sub.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 font-medium text-gray-900">
+                            {sub.fullName}
+                            <div className="text-xs text-gray-500">{sub.employeeId}</div>
+                          </td>
+                          <td className="px-4 py-3 text-gray-600">{sub.jobTitle}</td>
+                          <td className="px-4 py-3 text-gray-600">
+                            {sub.department?.name || "-"}
+                          </td>
+                          <td className="px-4 py-3 text-gray-600">{sub.workEmail}</td>
+                          <td className="px-4 py-3 text-gray-600">{sub.phone || "-"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Edit Profile Modal (Self) */}
         <Modal
           isOpen={editModalOpen}
           onClose={() => setEditModalOpen(false)}

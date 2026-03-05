@@ -30,6 +30,7 @@ function Tabs({ tabs, activeTab, onChange, className }: TabsProps) {
           return (
             <button
               key={tab.id}
+              type="button"
               role="tab"
               aria-selected={isActive}
               aria-controls={`tabpanel-${tab.id}`}

@@ -12,7 +12,6 @@ import type {
   RosterQuery,
   GenerateRosterInput,
   OverrideRosterInput,
-  AuditLog,
   WorkforceStats,
   LeaveStats,
   SalaryStats,
@@ -32,6 +31,7 @@ import type {
 } from "@/types";
 
 export { useAuth, useAuth as useAuthStore } from "./useAuth";
+export { useSalaryHistory } from "./useEmployees";
 
 // ─── Helpers ─────────────────────────────────────────
 
@@ -277,6 +277,19 @@ export function useSearchEmployees(search: string) {
       return res.data;
     },
     enabled: search.length >= 2,
+  });
+}
+
+export function useAllEmployees() {
+  return useQuery<Employee[]>({
+    queryKey: ["all-employees-list"],
+    queryFn: async () => {
+      const res = await api.get<Employee[]>("/employees", {
+        params: { limit: "1000" },
+      });
+      return res.data;
+    },
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -578,31 +591,7 @@ export function useCreateLifecycleEvent() {
 
 // ─── Audit hooks ─────────────────────────────────────
 
-export function useAuditLogs(filters: {
-  entityType?: string;
-  actorId?: string;
-  action?: string;
-  dateFrom?: string;
-  dateTo?: string;
-  page?: number;
-  limit?: number;
-}) {
-  return useQuery<{
-    data: AuditLog[];
-    pagination: PaginationMeta;
-  }>({
-    queryKey: ["audit-logs", filters],
-    queryFn: async () => {
-      const res = await api.get<AuditLog[]>("/audit-logs", {
-        params: buildParams(filters as Record<string, unknown>),
-      });
-      return {
-        data: res.data,
-        pagination: res.pagination!,
-      };
-    },
-  });
-}
+export { useAuditLogs } from './useAudit';
 
 // ─── Discipline hooks ────────────────────────────────
 
@@ -654,75 +643,10 @@ export function useCreateDisciplinaryAction() {
   });
 }
 
-// ─── Policy hooks ────────────────────────────────────
+export * from "./usePolicies";
 
-export function usePolicies() {
-  return useQuery<CompanyPolicy[]>({
-    queryKey: ["policies"],
-    queryFn: async () => {
-      const res = await api.get<CompanyPolicy[]>("/policies");
-      return res.data;
-    },
-  });
-}
-
-export function useUploadPolicy() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (data: FormData) => {
-      const res = await api.post<CompanyPolicy>("/policies/upload", data, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      return res.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["policies"] });
-    },
-  });
-}
-
-export function useDeletePolicy() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (id: string) => {
-      await api.delete(`/policies/${id}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["policies"] });
-    },
-  });
-}
-
-// ─── Offer Letter hooks ─────────────────────────────
-
-export function useUploadOfferLetter() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ employeeId, data }: { employeeId: string; data: FormData }) => {
-      const res = await api.post(`/employees/${employeeId}/offer-letter`, data, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      return res.data;
-    },
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["employee", variables.employeeId] });
-      queryClient.invalidateQueries({ queryKey: ["my-profile"] });
-    },
-  });
-}
-
-export function useDeleteOfferLetter() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (employeeId: string) => {
-      await api.delete(`/employees/${employeeId}/offer-letter`);
-    },
-    onSuccess: (_data, employeeId) => {
-      queryClient.invalidateQueries({ queryKey: ["employee", employeeId] });
-      queryClient.invalidateQueries({ queryKey: ["my-profile"] });
-    },
-  });
-}
+export * from "./useOfferLetters";
+export * from "./useDocuments";
 
 // ─── Payroll hooks ───────────────────────────────────
 

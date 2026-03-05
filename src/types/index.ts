@@ -31,6 +31,26 @@ export interface Department {
   sbu?: Sbu;
 }
 
+export interface SalaryComponent {
+  name: string;
+  amount: number;
+}
+
+export interface SalaryRecord {
+  id: string;
+  baseSalary: number;
+  grossPay: number;
+  netPay: number;
+  pension: number;
+  tax: number;
+  allowances: SalaryComponent[];
+  deductions: SalaryComponent[];
+  effectiveDate: string;
+  isActive: boolean;
+  createdById: string;
+  createdAt: string;
+}
+
 export interface Employee {
   id: string;
   employeeId: string;
@@ -62,11 +82,14 @@ export interface Employee {
   jobTitle: string;
   supervisorId: string | null;
   workArrangement: WorkArrangement;
+  probationPeriod: number | null; // In months
   probationEndDate: string | null;
   employmentStatus: EmploymentStatus;
+  tags?: string[];
 
   // Compensation (restricted — only visible to Admin/Finance)
   monthlySalary: number | null;
+  netPay?: number | null;
   salaryBand: string | null;
   accountName: string | null;
   accountNumber: string | null;
@@ -74,6 +97,7 @@ export interface Employee {
   currency: string | null;
   salaryEffectiveDate: string | null;
   lastSalaryReview: string | null;
+  salaryBreakdown?: SalaryRecord;
 
   // Offer Letter
   offerLetterFileName: string | null;
@@ -87,7 +111,9 @@ export interface Employee {
   sbu?: Sbu;
   department?: Department;
   supervisor?: Pick<Employee, 'id' | 'employeeId' | 'fullName' | 'jobTitle'>;
-  subordinates?: Pick<Employee, 'id' | 'employeeId' | 'fullName' | 'jobTitle'>[];
+  subordinates?: (Pick<Employee, 'id' | 'employeeId' | 'fullName' | 'jobTitle' | 'workEmail' | 'phone'> & {
+    department?: { name: string }
+  })[];
   userAccount?: UserAccount;
 }
 
@@ -127,12 +153,34 @@ export interface LifecycleAttachment {
   fileSize: number | null;
   mimeType: string | null;
   uploadedAt: string;
+  signedUrl?: string;
 }
 
 export interface LeaveType {
   id: string;
   name: string;
   defaultDays: number;
+  noticePeriod: number;
+  requiresDoc: boolean;
+}
+
+export interface LeaveAttachment {
+  id: string;
+  leaveRequestId: string;
+  fileName: string;
+  fileKey: string;
+  fileSize: number | null;
+  mimeType: string | null;
+  uploadedAt: string;
+  signedUrl?: string;
+}
+
+export interface LeaveBlackoutDate {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  reason: string | null;
 }
 
 export interface LeaveBalance {
@@ -158,6 +206,11 @@ export interface LeaveRequest {
   reason: string | null;
   status: LeaveStatus;
 
+  // Return to work
+  actualReturnDate: string | null;
+  returnNote: string | null;
+  returnedAt: string | null;
+
   // Supervisor action
   supervisorAction: LeaveStatus | null;
   supervisorActionById: string | null;
@@ -177,6 +230,13 @@ export interface LeaveRequest {
   leaveType?: LeaveType;
   supervisorActionBy?: Pick<Employee, 'id' | 'fullName'> | null;
   hrActionBy?: Pick<Employee, 'id' | 'fullName'> | null;
+  attachments?: LeaveAttachment[];
+}
+
+export interface ReturnToWorkData {
+  actualReturnDate: string;
+  returnNote?: string;
+  attachments?: File[];
 }
 
 export interface RosterEntry {
@@ -235,6 +295,7 @@ export interface WorkforceStats {
   genderDistribution: Array<{ gender: string; count: number }>;
   employmentTypeDistribution: Array<{ type: string; count: number }>;
   workArrangementDistribution: Array<{ arrangement: string; count: number }>;
+  nextPayDay: string;
 }
 
 export interface LeaveStats {
@@ -324,6 +385,7 @@ export interface EmployeeFilters {
   departmentId?: string;
   status?: EmploymentStatus;
   search?: string;
+  joined?: 'this_month' | 'last_month' | 'this_year';
   sortBy?: 'fullName' | 'employeeId' | 'dateOfHire' | 'jobTitle' | 'employmentStatus' | 'createdAt';
   sortOrder?: 'asc' | 'desc';
 }
@@ -346,6 +408,7 @@ export interface RosterQuery {
 
 export interface GenerateRosterInput {
   departmentId: string;
+  sbuId?: string;
   startDate: string;
   endDate: string;
 }
@@ -363,12 +426,20 @@ export interface RosterGenerationResult {
 
 export interface LeaveCalendarEntry {
   id: string;
-  employeeId: string;
-  fullName: string;
   startDate: string;
   endDate: string;
-  leaveTypeName: string;
   status: LeaveStatus;
+  employee: {
+    id: string;
+    fullName: string;
+    jobTitle: string;
+    department?: {
+      name: string;
+    };
+  };
+  leaveType: {
+    name: string;
+  };
 }
 
 // ─── Discipline types ────────────────────────────────────────
@@ -409,6 +480,7 @@ export interface CompanyPolicy {
   createdAt: string;
   updatedAt: string;
 
+  signedUrl?: string;
   uploadedBy?: Pick<Employee, 'id' | 'fullName'>;
 }
 
@@ -460,4 +532,32 @@ export interface PayrollRunFilters {
   limit?: number;
   year?: number;
   status?: PayrollStatus;
+}
+
+// ─── Document types ───────────────────────────────────────────
+
+export type DocumentType =
+  | 'Resume'
+  | 'OfferLetter'
+  | 'EmploymentContract'
+  | 'PromotionLetter'
+  | 'WarningLetter'
+  | 'NDA'
+  | 'ConfidentialityAgreement'
+  | 'TaxForm'
+  | 'Identification'
+  | 'PolicyAcknowledgment'
+  | 'Certification'
+  | 'Other';
+
+export interface EmployeeDocument {
+  id: string;
+  employeeId: string;
+  type: DocumentType;
+  fileName: string;
+  fileKey: string;
+  mimeType: string;
+  fileSize: number;
+  uploadedAt: string;
+  signedUrl?: string;
 }

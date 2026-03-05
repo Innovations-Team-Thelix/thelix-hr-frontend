@@ -11,6 +11,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { SearchableSelect, type SearchableSelectOption } from "@/components/ui/searchable-select";
 import { Textarea } from "@/components/ui/textarea";
 import { Modal } from "@/components/ui/modal";
 import { Badge } from "@/components/ui/badge";
@@ -19,7 +20,7 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import {
   useDisciplinaryActions,
   useCreateDisciplinaryAction,
-  useSearchEmployees,
+  useEmployees,
   useAuthStore,
 } from "@/hooks";
 import { formatDate } from "@/lib/utils";
@@ -74,9 +75,14 @@ export default function DisciplinePage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [filters, setFilters] = useState<DisciplinaryActionFilters>({ page: 1 });
   const [employeeSearch, setEmployeeSearch] = useState("");
+  const [selectedEmployee, setSelectedEmployee] = useState<SearchableSelectOption | null>(null);
 
   const { data: result, isLoading } = useDisciplinaryActions(filters);
-  const { data: searchResults } = useSearchEmployees(employeeSearch);
+  const { data: employeesData, isLoading: isSearching } = useEmployees({ 
+    search: employeeSearch,
+    limit: 20
+  });
+  const searchResults = employeesData?.data || [];
   const createAction = useCreateDisciplinaryAction();
 
   const form = useForm<CreateFormData>({
@@ -260,6 +266,7 @@ export default function DisciplinePage() {
             setModalOpen(false);
             form.reset();
             setEmployeeSearch("");
+            setSelectedEmployee(null);
           }}
           title="Issue Disciplinary Action"
           size="lg"
@@ -271,6 +278,7 @@ export default function DisciplinePage() {
                   setModalOpen(false);
                   form.reset();
                   setEmployeeSearch("");
+                  setSelectedEmployee(null);
                 }}
               >
                 Cancel
@@ -285,41 +293,37 @@ export default function DisciplinePage() {
           }
         >
           <div className="space-y-4">
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                Employee *
-              </label>
-              <Input
-                placeholder="Search employee by name..."
-                value={employeeSearch}
-                onChange={(e) => setEmployeeSearch(e.target.value)}
-              />
-              {searchResults && searchResults.length > 0 && employeeSearch.length >= 2 && (
-                <div className="mt-1 max-h-40 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-sm">
-                  {searchResults.map((emp) => (
-                    <button
-                      key={emp.id}
-                      type="button"
-                      className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50"
-                      onClick={() => {
-                        form.setValue("employeeId", emp.id);
-                        setEmployeeSearch(emp.fullName);
-                      }}
-                    >
-                      <span className="font-medium">{emp.fullName}</span>
-                      <span className="ml-2 text-gray-500">
-                        {emp.employeeId}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
-              {form.formState.errors.employeeId && (
-                <p className="mt-1 text-sm text-red-600">
-                  {form.formState.errors.employeeId.message}
-                </p>
-              )}
-            </div>
+            <SearchableSelect
+              label="Employee"
+              required
+              placeholder="Search employee by name..."
+              options={searchResults?.map(emp => ({
+                label: emp.fullName,
+                value: emp.id,
+                subLabel: emp.employeeId
+              })) || []}
+              value={form.watch("employeeId")}
+              onChange={(val) => {
+                form.setValue("employeeId", val, { shouldValidate: true });
+                const emp = searchResults?.find(e => e.id === val);
+                if (emp) {
+                  setSelectedEmployee({
+                    label: emp.fullName,
+                    value: emp.id,
+                    subLabel: emp.employeeId
+                  });
+                }
+              }}
+              onSearch={(query) => setEmployeeSearch(query)}
+              onClear={() => {
+                form.setValue("employeeId", "", { shouldValidate: true });
+                setSelectedEmployee(null);
+                setEmployeeSearch("");
+              }}
+              selectedOption={selectedEmployee}
+              loading={isSearching}
+              error={form.formState.errors.employeeId?.message}
+            />
             <Select
               label="Violation Type"
               required

@@ -10,6 +10,8 @@ import {
   BarChart3,
   AlertTriangle,
   PieChart,
+  Clock,
+  ArrowRight,
 } from "lucide-react";
 import { AppLayout } from "@/components/layout/app-layout";
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
@@ -19,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { useAuthStore, useSbus } from "@/hooks";
 import api from "@/lib/api";
 import { cn } from "@/lib/utils";
+import Link from "next/link";
 
 interface ReportConfig {
   id: string;
@@ -28,9 +31,20 @@ interface ReportConfig {
   endpoint: string;
   roles: string[];
   color: string;
+  type?: "download" | "link";
 }
 
 const REPORTS: ReportConfig[] = [
+  {
+    id: "attendance",
+    title: "Attendance Report",
+    description: "Analyze attendance trends, lateness, and absenteeism.",
+    icon: Clock,
+    endpoint: "/reports/attendance",
+    roles: ["Admin", "SBUHead"],
+    color: "text-orange-600 bg-orange-100",
+    type: "link",
+  },
   {
     id: "employees",
     title: "Employee Data",
@@ -40,6 +54,7 @@ const REPORTS: ReportConfig[] = [
     endpoint: "/reports/employees",
     roles: ["Admin"],
     color: "text-blue-600 bg-blue-100",
+    type: "download",
   },
   {
     id: "payroll",
@@ -198,74 +213,103 @@ export default function ReportsPage() {
                     <div className="flex items-start gap-3">
                       <div
                         className={cn(
-                          "rounded-lg p-2.5",
+                          "flex h-10 w-10 items-center justify-center rounded-lg",
                           report.color
                         )}
                       >
-                        <Icon className="h-5 w-5" />
+                        <Icon className="h-6 w-6" />
                       </div>
-                      <div className="flex-1">
-                        <CardTitle className="text-base">
-                          {report.title}
-                        </CardTitle>
+                      <div>
+                        <CardTitle className="text-lg">{report.title}</CardTitle>
                         <p className="mt-1 text-sm text-gray-500">
                           {report.description}
                         </p>
                       </div>
                     </div>
                   </CardHeader>
-                  <CardContent className="flex-1">
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                      <Select
-                        label="SBU"
-                        options={sbuOptions}
-                        value={reportFilters.sbuId}
-                        onChange={(e) =>
-                          updateFilter(report.id, "sbuId", e.target.value)
-                        }
-                      />
-                      <Input
-                        label="From Date"
-                        type="date"
-                        value={reportFilters.dateFrom}
-                        onChange={(e) =>
-                          updateFilter(report.id, "dateFrom", e.target.value)
-                        }
-                      />
-                      <Input
-                        label="To Date"
-                        type="date"
-                        value={reportFilters.dateTo}
-                        onChange={(e) =>
-                          updateFilter(report.id, "dateTo", e.target.value)
-                        }
-                      />
-                    </div>
-                  </CardContent>
-                  <CardFooter className="flex gap-3">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        handleExport(report.id, report.endpoint, "csv")
-                      }
-                      loading={downloading[`${report.id}-csv`]}
-                    >
-                      <Download className="h-3.5 w-3.5" />
-                      Export CSV
-                    </Button>
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      onClick={() =>
-                        handleExport(report.id, report.endpoint, "xlsx")
-                      }
-                      loading={downloading[`${report.id}-xlsx`]}
-                    >
-                      <Download className="h-3.5 w-3.5" />
-                      Export Excel
-                    </Button>
-                  </CardFooter>
+                  
+                  {report.type === "link" ? (
+                    <CardFooter className="mt-auto pt-4">
+                      <Button asChild className="w-full gap-2">
+                        <Link href={report.endpoint}>
+                          View Report
+                          <ArrowRight className="h-4 w-4" />
+                        </Link>
+                      </Button>
+                    </CardFooter>
+                  ) : (
+                    <>
+                      <CardContent className="space-y-4">
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium text-gray-700">
+                            SBU
+                          </label>
+                          <Select
+                            options={sbuOptions}
+                            value={reportFilters.sbuId}
+                            onChange={(e) =>
+                              updateFilter(report.id, "sbuId", e.target.value)
+                            }
+                            placeholder="Select SBU"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <label className="text-sm font-medium text-gray-700">
+                              From
+                            </label>
+                            <Input
+                              type="date"
+                              value={reportFilters.dateFrom}
+                              onChange={(e) =>
+                                updateFilter(report.id, "dateFrom", e.target.value)
+                              }
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-sm font-medium text-gray-700">
+                              To
+                            </label>
+                            <Input
+                              type="date"
+                              value={reportFilters.dateTo}
+                              onChange={(e) =>
+                                updateFilter(report.id, "dateTo", e.target.value)
+                              }
+                            />
+                          </div>
+                        </div>
+                      </CardContent>
+                      <CardFooter className="flex gap-3 pt-4">
+                        <Button
+                          variant="outline"
+                          className="flex-1 gap-2"
+                          onClick={() =>
+                            handleExport(report.id, report.endpoint, "csv")
+                          }
+                          disabled={downloading[`${report.id}-csv`]}
+                        >
+                          <Download className="h-4 w-4" />
+                          {downloading[`${report.id}-csv`]
+                            ? "Exporting..."
+                            : "CSV"}
+                        </Button>
+                        <Button
+                          className="flex-1 gap-2"
+                          onClick={() =>
+                            handleExport(report.id, report.endpoint, "xlsx")
+                          }
+                          disabled={downloading[`${report.id}-xlsx`]}
+                        >
+                          <Download className="h-4 w-4" />
+                          {downloading[`${report.id}-xlsx`]
+                            ? "Exporting..."
+                            : "Excel"}
+                        </Button>
+                      </CardFooter>
+                    </>
+                  )}
                 </Card>
               );
             })}

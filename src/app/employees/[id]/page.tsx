@@ -20,7 +20,7 @@ import {
   Plus,
   Upload,
 } from "lucide-react";
-import { useForm } from "react-hook-form";
+import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import toast from "react-hot-toast";
@@ -36,6 +36,8 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/loading";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { DocumentList } from "@/components/documents/document-list";
+import { UploadDocumentModal } from "@/components/documents/upload-document-modal";
 import {
   useEmployee,
   useUpdateEmployee,
@@ -45,9 +47,19 @@ import {
   useUploadOfferLetter,
   useDeleteOfferLetter,
   useAuthStore,
+  useEmployees,
+  useSbus,
+  useDepartments,
+  useSalaryHistory,
 } from "@/hooks";
-import { formatDate, formatCurrency, getInitials } from "@/lib/utils";
-import type { LifecycleEventType, ViolationType, DisciplinarySeverity } from "@/types";
+import { useDownloadOfferLetter } from "@/hooks/useOfferLetters";
+import { ProbationActionModal } from "@/components/employees/probation-action-modal";
+import AuditLogList from "@/components/audit/audit-log-list";
+import { EmployeeTags } from "@/components/employees/employee-tags";
+import { formatDate, formatCurrency, getInitials, formatBirthDate,
+} from "@/lib/utils";
+import { AttendanceHistoryTab } from "@/components/employees/attendance-history-tab";
+import type { LifecycleEventType, ViolationType, DisciplinarySeverity, SalaryRecord, SalaryComponent } from "@/types";
 
 const EVENT_ICONS: Record<string, React.ElementType> = {
   Promotion: TrendingUp,
@@ -68,7 +80,53 @@ const lifecycleEventSchema = z.object({
   description: z.string().min(1, "Description is required"),
 });
 
+const editEmployeeSchema = z.object({
+  fullName: z.string().min(1, "Full name is required"),
+  dateOfBirth: z.string().optional(),
+  gender: z.string().optional(),
+  nationality: z.string().optional(),
+  address: z.string().optional(),
+  phone: z.string().optional(),
+  personalEmail: z.string().email("Invalid email").optional().or(z.literal("")),
+  workEmail: z.string().email("Valid work email is required"),
+  maritalStatus: z.string().optional(),
+  nextOfKinName: z.string().optional(),
+  nextOfKinRelationship: z.string().optional(),
+  nextOfKinPhone: z.string().optional(),
+  emergencyContact: z.string().optional(),
+  governmentId: z.string().optional(),
+  tin: z.string().optional(),
+  pensionNumber: z.string().optional(),
+
+  dateOfHire: z.string().optional(),
+  employmentType: z.string().optional(),
+  sbuId: z.string().optional(),
+  departmentId: z.string().optional(),
+  jobTitle: z.string().min(1, "Job title is required"),
+  supervisorId: z.string().optional(),
+  workArrangement: z.string().optional(),
+  probationEndDate: z.string().optional(),
+  employmentStatus: z.enum(["Active", "Suspended", "Terminated", "Resigned"]),
+
+  monthlySalary: z.string().optional(),
+  baseSalary: z.string().optional(),
+  grossPay: z.string().optional(),
+  netPay: z.string().optional(),
+  simpleNetPay: z.string().optional(),
+  pension: z.string().optional(),
+  tax: z.string().optional(),
+  allowances: z.array(z.object({ name: z.string(), amount: z.string() })).default([]),
+  deductions: z.array(z.object({ name: z.string(), amount: z.string() })).default([]),
+  salaryBand: z.string().optional(),
+  accountName: z.string().optional(),
+  accountNumber: z.string().optional(),
+  bankName: z.string().optional(),
+  currency: z.string().optional(),
+  salaryEffectiveDate: z.string().optional(),
+});
+
 type LifecycleFormData = z.infer<typeof lifecycleEventSchema>;
+type EditEmployeeFormData = z.infer<typeof editEmployeeSchema>;
 
 function InfoField({
   label,
@@ -95,11 +153,35 @@ export default function EmployeeProfilePage() {
 
   const isAdmin = user?.role === "Admin";
   const isFinance = user?.role === "Finance";
-  const canViewCompensation = isAdmin || isFinance;
+  const isSBUHead = user?.role === "SBUHead";
+  const isSelf = user?.employeeId === employeeId;
+  const canViewSensitiveInfo = isAdmin || isSelf;
+  const canViewCompensation = isAdmin || isFinance || isSelf;
+  // Restrict sensitive tabs to Admin and the employee themselves
+  // Supervisors should not see these tabs
+  const canViewTimeline = isAdmin || isSelf;
+  const canViewDocuments = isAdmin || isSelf;
+  const canViewDiscipline = isAdmin || isSelf || isSBUHead;
+  const canViewAttendance = isAdmin || isSelf || isSBUHead;
+
+  // Helper to format Date of Birth based on visibility
+  const formatDateOfBirth = (dateString?: string | null) => {
+    if (!dateString) return "-";
+    
+    // Only Admin sees the full date (including year)
+    // Self and SBU Head see "Birth Day Date" (Month + Day)
+    if (canViewSensitiveInfo || isSBUHead) {
+      return formatBirthDate(dateString, isAdmin);
+    }
+    return "-";
+  };
 
   const [activeTab, setActiveTab] = useState("personal");
+  const [editActiveTab, setEditActiveTab] = useState("personal");
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [eventModalOpen, setEventModalOpen] = useState(false);
+  const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const [probationModalOpen, setProbationModalOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   const { data: employee, isLoading } = useEmployee(employeeId);
@@ -107,22 +189,220 @@ export default function EmployeeProfilePage() {
     useLifecycleEvents(employeeId);
   const { data: disciplinaryActions, isLoading: disciplineLoading } =
     useEmployeeDisciplinaryActions(employeeId);
+  const { data: salaryHistory } = useSalaryHistory(employeeId, { enabled: canViewCompensation });
+  const { data: employeesData } = useEmployees({ limit: 1000, status: "Active" });
+  const { data: sbus } = useSbus();
   const updateEmployee = useUpdateEmployee();
   const createEvent = useCreateLifecycleEvent();
   const uploadOfferLetter = useUploadOfferLetter();
   const deleteOfferLetter = useDeleteOfferLetter();
+  const downloadOfferLetter = useDownloadOfferLetter();
 
   const [offerLetterFile, setOfferLetterFile] = useState<File | null>(null);
+
+  const editForm = useForm<EditEmployeeFormData>({
+    resolver: zodResolver(editEmployeeSchema),
+  });
+
+  const { fields: allowanceFields, append: appendAllowance, remove: removeAllowance } = useFieldArray({
+    control: editForm.control,
+    name: "allowances",
+  });
+
+  const { fields: deductionFields, append: appendDeduction, remove: removeDeduction } = useFieldArray({
+    control: editForm.control,
+    name: "deductions",
+  });
+
+  const selectedSbuId = editForm.watch("sbuId");
+  const { data: departments } = useDepartments(selectedSbuId);
+
+  React.useEffect(() => {
+    if (employee && editModalOpen) {
+      editForm.reset({
+        fullName: employee.fullName,
+        dateOfBirth: employee.dateOfBirth ? new Date(employee.dateOfBirth).toISOString().split('T')[0] : undefined,
+        gender: employee.gender || undefined,
+        nationality: employee.nationality || undefined,
+        address: employee.address || undefined,
+        phone: employee.phone || undefined,
+        personalEmail: employee.personalEmail || "",
+        workEmail: employee.workEmail,
+        maritalStatus: employee.maritalStatus || undefined,
+        nextOfKinName: employee.nextOfKinName || undefined,
+        nextOfKinRelationship: employee.nextOfKinRelationship || undefined,
+        nextOfKinPhone: employee.nextOfKinPhone || undefined,
+        emergencyContact: employee.emergencyContact || undefined,
+        governmentId: employee.governmentId || undefined,
+        tin: employee.tin || undefined,
+        pensionNumber: employee.pensionNumber || undefined,
+
+        dateOfHire: employee.dateOfHire ? new Date(employee.dateOfHire).toISOString().split('T')[0] : undefined,
+        employmentType: employee.employmentType || undefined,
+        sbuId: employee.sbu?.id || employee.sbuId || undefined,
+        departmentId: employee.department?.id || employee.departmentId || undefined,
+        jobTitle: employee.jobTitle,
+        supervisorId: employee.supervisorId || undefined,
+        workArrangement: employee.workArrangement || undefined,
+        probationEndDate: employee.probationEndDate ? new Date(employee.probationEndDate).toISOString().split('T')[0] : undefined,
+        employmentStatus: employee.employmentStatus,
+
+        monthlySalary: employee.monthlySalary?.toString() || undefined,
+        simpleNetPay: employee.netPay?.toString() || undefined,
+        baseSalary: employee.salaryBreakdown?.baseSalary?.toString() || undefined,
+        grossPay: employee.salaryBreakdown?.grossPay?.toString() || undefined,
+        netPay: employee.salaryBreakdown?.netPay?.toString() || undefined,
+        pension: employee.salaryBreakdown?.pension?.toString() || undefined,
+        tax: employee.salaryBreakdown?.tax?.toString() || undefined,
+        allowances: employee.salaryBreakdown?.allowances?.map(a => ({
+          name: a.name,
+          amount: a.amount.toString()
+        })) || [],
+        deductions: employee.salaryBreakdown?.deductions?.map(d => ({
+          name: d.name,
+          amount: d.amount.toString()
+        })) || [],
+        salaryBand: employee.salaryBand || undefined,
+        accountName: employee.accountName || undefined,
+        accountNumber: employee.accountNumber || undefined,
+        bankName: employee.bankName || undefined,
+        currency: employee.currency || undefined,
+        salaryEffectiveDate: employee.salaryEffectiveDate ? new Date(employee.salaryEffectiveDate).toISOString().split('T')[0] : undefined,
+      });
+    }
+  }, [employee, editModalOpen, editForm]);
+
+  const handleEditSubmit = async (data: EditEmployeeFormData) => {
+    try {
+      const payload: Record<string, unknown> = {
+        ...data,
+        monthlySalary: data.monthlySalary ? parseFloat(data.monthlySalary) : undefined,
+        netPay: data.netPay
+          ? parseFloat(data.netPay)
+          : (data.simpleNetPay ? parseFloat(data.simpleNetPay) : undefined),
+      };
+
+      // Construct salaryBreakdown if fields are present
+      if (data.baseSalary || data.grossPay || data.allowances.length > 0 || data.deductions.length > 0) {
+        payload.salaryBreakdown = {
+          baseSalary: parseFloat(data.baseSalary || "0"),
+          grossPay: parseFloat(data.grossPay || "0"),
+          netPay: parseFloat(data.netPay || "0"),
+          pension: parseFloat(data.pension || "0"),
+          tax: parseFloat(data.tax || "0"),
+          allowances: data.allowances.map((a) => ({
+            name: a.name,
+            amount: parseFloat(a.amount || "0"),
+          })),
+          deductions: data.deductions.map((d) => ({
+            name: d.name,
+            amount: parseFloat(d.amount || "0"),
+          })),
+          effectiveDate: data.salaryEffectiveDate || new Date().toISOString(),
+        };
+      }
+
+      // Remove empty strings
+      Object.keys(payload).forEach((key) => {
+        if (payload[key] === "" || payload[key] === undefined) {
+          delete payload[key];
+        }
+      });
+
+      await updateEmployee.mutateAsync({
+        id: employeeId,
+        data: payload,
+      });
+      toast.success("Employee updated successfully");
+      setEditModalOpen(false);
+    } catch (error) {
+      toast.error("Failed to update employee");
+    }
+  };
+
+  const sbuOptions = (sbus || []).map((s) => ({
+    label: s.name,
+    value: s.id,
+  }));
+
+  const departmentOptions = (departments || []).map((d) => ({
+    label: d.name,
+    value: d.id,
+  }));
+
+  const supervisorOptions = (employeesData?.data || [])
+    .filter((e) => e.id !== employeeId)
+    .map((e) => ({
+      label: `${e.fullName} (${e.jobTitle})`,
+      value: e.id,
+    }));
+
+  const genderOptions = [
+    { label: "Male", value: "Male" },
+    { label: "Female", value: "Female" },
+    { label: "Non-Binary", value: "NonBinary" },
+    { label: "Prefer Not To Say", value: "PreferNotToSay" },
+  ];
+
+  const employmentTypeOptions = [
+    { label: "Full Time", value: "FullTime" },
+    { label: "Contract", value: "Contract" },
+    { label: "Intern", value: "Intern" },
+  ];
+
+  const workArrangementOptions = [
+    { label: "Hybrid", value: "Hybrid" },
+    { label: "Remote", value: "Remote" },
+    { label: "Onsite", value: "Onsite" },
+  ];
+
+  const statusOptions = [
+    { label: "Active", value: "Active" },
+    { label: "Suspended", value: "Suspended" },
+    { label: "Terminated", value: "Terminated" },
+    { label: "Resigned", value: "Resigned" },
+  ];
+
+  const maritalStatusOptions = [
+    { label: "Single", value: "Single" },
+    { label: "Married", value: "Married" },
+    { label: "Divorced", value: "Divorced" },
+    { label: "Widowed", value: "Widowed" },
+  ];
+
+  const formTabs = [
+    { id: "personal", label: "Personal Info" },
+    { id: "employment", label: "Employment Details" },
+    { id: "compensation", label: "Compensation" },
+  ];
 
   const profileTabs = [
     { id: "personal", label: "Personal" },
     { id: "employment", label: "Employment" },
     ...(canViewCompensation
-      ? [{ id: "compensation", label: "Compensation" }]
+      ? [
+          { id: "compensation", label: "Compensation" },
+          { id: "salary-history", label: "Salary History" },
+        ]
       : []),
-    { id: "timeline", label: "Timeline" },
-    { id: "discipline", label: `Discipline${disciplinaryActions?.length ? ` (${disciplinaryActions.length})` : ""}` },
+    ...(canViewTimeline ? [{ id: "timeline", label: "Timeline" }] : []),
+    ...(canViewDiscipline
+      ? [
+          {
+            id: "discipline",
+            label: `Discipline${
+              disciplinaryActions?.length
+                ? ` (${disciplinaryActions.length})`
+                : ""
+            }`,
+          },
+        ]
+      : []),
+    ...(canViewDocuments ? [{ id: "documents", label: "Documents" }] : []),
+    ...(employee?.subordinates?.length ? [{ id: "team", label: "Team" }] : []),
+    ...(canViewAttendance ? [{ id: "attendance", label: "Attendance" }] : []),
     ...(isAdmin ? [{ id: "offer-letter", label: "Offer Letter" }] : []),
+    ...(isAdmin ? [{ id: "audit", label: "Audit Trail" }] : []),
   ];
 
   const eventForm = useForm<LifecycleFormData>({
@@ -227,7 +507,21 @@ export default function EmployeeProfilePage() {
                 </div>
               </div>
               <div className="flex items-center gap-3">
+                {/* Probation Status in Header */}
+                {(employee.probationEndDate || (employee.probationPeriod && employee.probationPeriod > 0)) && (
+                  <StatusBadge
+                    status={
+                      employee.probationEndDate
+                        ? new Date(employee.probationEndDate) <
+                          new Date(new Date().setHours(0, 0, 0, 0))
+                          ? "Overdue"
+                          : "Probation"
+                        : "Confirmed"
+                    }
+                  />
+                )}
                 <StatusBadge status={employee.employmentStatus} />
+                <EmployeeTags tags={employee.tags} />
                 {isAdmin && (
                   <Button
                     variant="outline"
@@ -256,42 +550,58 @@ export default function EmployeeProfilePage() {
               <dl className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
                 <InfoField label="Full Name" value={employee.fullName} />
                 <InfoField
-                  label="Date of Birth"
-                  value={formatDate(employee.dateOfBirth)}
+                  label="Birth Day Date"
+                  value={formatDateOfBirth(employee.dateOfBirth)}
                 />
-                <InfoField label="Gender" value={employee.gender} />
-                <InfoField label="Nationality" value={employee.nationality} />
-                <InfoField label="Marital Status" value={employee.maritalStatus} />
+                {canViewSensitiveInfo && (
+                  <>
+                    <InfoField label="Gender" value={employee.gender} />
+                    <InfoField label="Nationality" value={employee.nationality} />
+                    <InfoField label="Marital Status" value={employee.maritalStatus} />
+                  </>
+                )}
                 <InfoField label="Work Email" value={employee.workEmail} />
-                <InfoField
-                  label="Personal Email"
-                  value={employee.personalEmail}
-                />
-                <InfoField label="Phone" value={employee.phone} />
-                <InfoField label="Address" value={employee.address} />
-                <InfoField
-                  label="Emergency Contact"
-                  value={employee.emergencyContact}
-                />
-                <InfoField
-                  label="Next of Kin Name"
-                  value={employee.nextOfKinName}
-                />
-                <InfoField
-                  label="Next of Kin Relationship"
-                  value={employee.nextOfKinRelationship}
-                />
-                <InfoField
-                  label="Next of Kin Phone"
-                  value={employee.nextOfKinPhone}
-                />
-                <InfoField label="Government ID" value={employee.governmentId} />
-                <InfoField label="TIN" value={employee.tin} />
-                <InfoField
-                  label="Pension Number"
-                  value={employee.pensionNumber}
-                />
-                <InfoField label="HMO ID" value={employee.hmoId} />
+                {canViewSensitiveInfo && (
+                  <InfoField
+                    label="Personal Email"
+                    value={employee.personalEmail}
+                  />
+                )}
+                {canViewSensitiveInfo && (
+                  <InfoField label="Phone" value={employee.phone} />
+                )}
+                {canViewSensitiveInfo && (
+                  <InfoField label="Address" value={employee.address} />
+                )}
+                {canViewSensitiveInfo && (
+                  <InfoField
+                    label="Emergency Contact"
+                    value={employee.emergencyContact}
+                  />
+                )}
+                {canViewSensitiveInfo && (
+                  <>
+                    <InfoField
+                      label="Next of Kin Name"
+                      value={employee.nextOfKinName}
+                    />
+                    <InfoField
+                      label="Next of Kin Relationship"
+                      value={employee.nextOfKinRelationship}
+                    />
+                    <InfoField
+                      label="Next of Kin Phone"
+                      value={employee.nextOfKinPhone}
+                    />
+                    <InfoField label="Government ID" value={employee.governmentId} />
+                    <InfoField label="TIN" value={employee.tin} />
+                    <InfoField
+                      label="Pension Number"
+                      value={employee.pensionNumber}
+                    />
+                    <InfoField label="HMO ID" value={employee.hmoId} />
+                  </>
+                )}
               </dl>
             </CardContent>
           </Card>
@@ -300,8 +610,13 @@ export default function EmployeeProfilePage() {
         {/* Employment Tab */}
         {activeTab === "employment" && (
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Employment Details</CardTitle>
+              {(isAdmin || isSBUHead) && employee.probationEndDate && (
+                <Button size="sm" onClick={() => setProbationModalOpen(true)}>
+                  Manage Probation
+                </Button>
+              )}
             </CardHeader>
             <CardContent>
               <dl className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -310,12 +625,14 @@ export default function EmployeeProfilePage() {
                   label="Date of Hire"
                   value={formatDate(employee.dateOfHire)}
                 />
-                <InfoField
-                  label="Employment Type"
-                  value={
-                    <StatusBadge status={employee.employmentType} />
-                  }
-                />
+                {canViewSensitiveInfo && (
+                  <InfoField
+                    label="Employment Type"
+                    value={
+                      <StatusBadge status={employee.employmentType} />
+                    }
+                  />
+                )}
                 <InfoField label="SBU" value={employee.sbu?.name} />
                 <InfoField
                   label="Department"
@@ -326,15 +643,40 @@ export default function EmployeeProfilePage() {
                   label="Supervisor"
                   value={employee.supervisor?.fullName}
                 />
+                {canViewSensitiveInfo && (
+                  <InfoField
+                    label="Work Arrangement"
+                    value={
+                      <StatusBadge status={employee.workArrangement} />
+                    }
+                  />
+                )}
                 <InfoField
-                  label="Work Arrangement"
-                  value={
-                    <StatusBadge status={employee.workArrangement} />
-                  }
+                  label="Probation Period"
+                  value={employee.probationPeriod ? `${employee.probationPeriod} Months` : undefined}
                 />
                 <InfoField
                   label="Probation End Date"
                   value={formatDate(employee.probationEndDate)}
+                />
+                <InfoField
+                  label="Probation Status"
+                  value={
+                    employee.probationEndDate ? (
+                      <StatusBadge
+                        status={
+                          new Date(employee.probationEndDate) <
+                          new Date(new Date().setHours(0, 0, 0, 0))
+                            ? "Overdue"
+                            : "Probation"
+                        }
+                      />
+                    ) : employee.probationPeriod && employee.probationPeriod > 0 ? (
+                      <StatusBadge status="Confirmed" />
+                    ) : (
+                      "-"
+                    )
+                  }
                 />
                 <InfoField
                   label="Employment Status"
@@ -349,42 +691,200 @@ export default function EmployeeProfilePage() {
 
         {/* Compensation Tab */}
         {activeTab === "compensation" && canViewCompensation && (
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Compensation Summary</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {employee.salaryBreakdown ? (
+                  <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+                    <div className="rounded-lg bg-blue-50 p-4">
+                      <p className="text-sm font-medium text-blue-600">Base Salary</p>
+                      <p className="mt-2 text-2xl font-bold text-blue-900">
+                        {formatCurrency(employee.salaryBreakdown.baseSalary, employee.currency || "NGN")}
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-green-50 p-4">
+                      <p className="text-sm font-medium text-green-600">Gross Pay</p>
+                      <p className="mt-2 text-2xl font-bold text-green-900">
+                        {formatCurrency(employee.salaryBreakdown.grossPay, employee.currency || "NGN")}
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-purple-50 p-4">
+                      <p className="text-sm font-medium text-purple-600">Net Pay</p>
+                      <p className="mt-2 text-2xl font-bold text-purple-900">
+                        {formatCurrency(employee.salaryBreakdown.netPay, employee.currency || "NGN")}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <dl className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                    <InfoField
+                      label="Gross Pay"
+                      value={formatCurrency(
+                        employee.monthlySalary,
+                        employee.currency || "NGN"
+                      )}
+                    />
+                    {employee.netPay && (
+                      <InfoField
+                        label="Net Pay"
+                        value={formatCurrency(
+                          employee.netPay,
+                          employee.currency || "NGN"
+                        )}
+                      />
+                    )}
+                    <InfoField label="Salary Band" value={employee.salaryBand} />
+                    <InfoField label="Currency" value={employee.currency} />
+                    <InfoField
+                      label="Salary Effective Date"
+                      value={formatDate(employee.salaryEffectiveDate)}
+                    />
+                    <InfoField
+                      label="Last Salary Review"
+                      value={formatDate(employee.lastSalaryReview)}
+                    />
+                  </dl>
+                )}
+              </CardContent>
+            </Card>
+
+            {employee.salaryBreakdown && (
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                {/* Earnings */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Earnings</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div className="flex justify-between border-b pb-2">
+                        <span className="font-medium">Base Salary</span>
+                        <span>{formatCurrency(employee.salaryBreakdown.baseSalary, employee.currency || "NGN")}</span>
+                      </div>
+                      {employee.salaryBreakdown.allowances.map((allowance, index) => (
+                        <div key={index} className="flex justify-between border-b pb-2">
+                          <span className="font-medium">{allowance.name}</span>
+                          <span>{formatCurrency(allowance.amount, employee.currency || "NGN")}</span>
+                        </div>
+                      ))}
+                      <div className="flex justify-between pt-2 font-bold">
+                        <span>Total Earnings</span>
+                        <span>{formatCurrency(employee.salaryBreakdown.grossPay, employee.currency || "NGN")}</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Deductions */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Deductions</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div className="flex justify-between border-b pb-2">
+                        <span className="font-medium">Tax</span>
+                        <span className="text-red-600">-{formatCurrency(employee.salaryBreakdown.tax, employee.currency || "NGN")}</span>
+                      </div>
+                      <div className="flex justify-between border-b pb-2">
+                        <span className="font-medium">Pension</span>
+                        <span className="text-red-600">-{formatCurrency(employee.salaryBreakdown.pension, employee.currency || "NGN")}</span>
+                      </div>
+                      {employee.salaryBreakdown.deductions.map((deduction, index) => (
+                        <div key={index} className="flex justify-between border-b pb-2">
+                          <span className="font-medium">{deduction.name}</span>
+                          <span className="text-red-600">-{formatCurrency(deduction.amount, employee.currency || "NGN")}</span>
+                        </div>
+                      ))}
+                      <div className="flex justify-between pt-2 font-bold">
+                        <span>Total Deductions</span>
+                        <span className="text-red-600">
+                          -{formatCurrency(
+                            (employee.salaryBreakdown.grossPay - employee.salaryBreakdown.netPay),
+                            employee.currency || "NGN"
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Bank Details</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <dl className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                  <InfoField label="Account Name" value={employee.accountName} />
+                  <InfoField
+                    label="Account Number"
+                    value={employee.accountNumber}
+                  />
+                  <InfoField label="Bank Name" value={employee.bankName} />
+                </dl>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Salary History Tab */}
+        {activeTab === "salary-history" && canViewCompensation && (
           <Card>
             <CardHeader>
-              <CardTitle>Compensation Details</CardTitle>
+              <CardTitle>Salary History</CardTitle>
             </CardHeader>
             <CardContent>
-              <dl className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                <InfoField
-                  label="Monthly Salary"
-                  value={formatCurrency(
-                    employee.monthlySalary,
-                    employee.currency || "NGN"
-                  )}
-                />
-                <InfoField label="Salary Band" value={employee.salaryBand} />
-                <InfoField label="Currency" value={employee.currency} />
-                <InfoField
-                  label="Salary Effective Date"
-                  value={formatDate(employee.salaryEffectiveDate)}
-                />
-                <InfoField
-                  label="Last Salary Review"
-                  value={formatDate(employee.lastSalaryReview)}
-                />
-                <InfoField label="Account Name" value={employee.accountName} />
-                <InfoField
-                  label="Account Number"
-                  value={employee.accountNumber}
-                />
-                <InfoField label="Bank Name" value={employee.bankName} />
-              </dl>
+              {!salaryHistory || salaryHistory.length === 0 ? (
+                <div className="py-12 text-center text-sm text-gray-500">
+                  No salary history recorded
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left">
+                    <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+                      <tr>
+                        <th className="px-4 py-3 font-medium">Effective Date</th>
+                        <th className="px-4 py-3 font-medium">Base Salary</th>
+                        <th className="px-4 py-3 font-medium">Gross Pay</th>
+                        <th className="px-4 py-3 font-medium">Net Pay</th>
+                        <th className="px-4 py-3 font-medium">Created By</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {salaryHistory.map((record) => (
+                        <tr key={record.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 text-gray-900">
+                            {formatDate(record.effectiveDate)}
+                          </td>
+                          <td className="px-4 py-3 text-gray-600">
+                            {formatCurrency(record.baseSalary, employee.currency || "NGN")}
+                          </td>
+                          <td className="px-4 py-3 text-gray-600">
+                            {formatCurrency(record.grossPay, employee.currency || "NGN")}
+                          </td>
+                          <td className="px-4 py-3 text-gray-600">
+                            {formatCurrency(record.netPay, employee.currency || "NGN")}
+                          </td>
+                          <td className="px-4 py-3 text-gray-500">
+                            {employeesData?.data?.find(e => e.id === record.createdById)?.fullName || record.createdById}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
 
         {/* Timeline Tab */}
-        {activeTab === "timeline" && (
+        {activeTab === "timeline" && canViewTimeline && (
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Lifecycle Timeline</CardTitle>
@@ -463,8 +963,14 @@ export default function EmployeeProfilePage() {
                                   {event.attachments.map((att) => (
                                     <a
                                       key={att.id}
-                                      href={att.fileKey}
+                                      href={att.signedUrl || "#"}
                                       target="_blank"
+                                      onClick={(e) => {
+                                        if (!att.signedUrl) {
+                                          e.preventDefault();
+                                          toast.error("Attachment URL not available");
+                                        }
+                                      }}
                                       rel="noopener noreferrer"
                                       className="inline-flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-xs text-blue-600 hover:bg-blue-50"
                                     >
@@ -486,7 +992,7 @@ export default function EmployeeProfilePage() {
         )}
 
         {/* Discipline Tab */}
-        {activeTab === "discipline" && (
+        {activeTab === "discipline" && canViewDiscipline && (
           <Card>
             <CardHeader>
               <CardTitle>Disciplinary History</CardTitle>
@@ -552,6 +1058,90 @@ export default function EmployeeProfilePage() {
           </Card>
         )}
 
+        {/* Documents Tab */}
+        {activeTab === "documents" && canViewDocuments && (
+          <div className="space-y-6">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>Documents</CardTitle>
+                <Button onClick={() => setUploadModalOpen(true)}>
+                  <Upload className="mr-2 h-4 w-4" />
+                  Upload Document
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <DocumentList employeeId={employeeId} />
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        <UploadDocumentModal
+          isOpen={uploadModalOpen}
+          onClose={() => setUploadModalOpen(false)}
+          employeeId={employeeId}
+        />
+
+        <ProbationActionModal
+          isOpen={probationModalOpen}
+          onClose={() => setProbationModalOpen(false)}
+          employeeId={employeeId}
+          employeeName={employee.fullName}
+        />
+
+        {/* Team Tab */}
+        {activeTab === "team" && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Direct Reports ({employee.subordinates?.length || 0})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {!employee.subordinates?.length ? (
+                <div className="py-12 text-center text-sm text-gray-500">
+                  No direct reports found.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left">
+                    <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+                      <tr>
+                        <th className="px-4 py-3 font-medium">Name</th>
+                        <th className="px-4 py-3 font-medium">Job Title</th>
+                        <th className="px-4 py-3 font-medium">Department</th>
+                        <th className="px-4 py-3 font-medium">Email</th>
+                        <th className="px-4 py-3 font-medium">Phone</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {employee.subordinates.map((sub) => (
+                        <tr key={sub.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 font-medium text-gray-900">
+                            {sub.fullName}
+                            <div className="text-xs text-gray-500">{sub.employeeId}</div>
+                          </td>
+                          <td className="px-4 py-3 text-gray-600">{sub.jobTitle}</td>
+                          <td className="px-4 py-3 text-gray-600">
+                            {sub.department?.name || "-"}
+                          </td>
+                          <td className="px-4 py-3 text-gray-600">{sub.workEmail}</td>
+                          <td className="px-4 py-3 text-gray-600">{sub.phone || "-"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Attendance Tab */}
+        {activeTab === "attendance" && canViewAttendance && (
+          <div className="space-y-6">
+            <AttendanceHistoryTab employeeId={employeeId} />
+          </div>
+        )}
+
         {/* Offer Letter Tab */}
         {activeTab === "offer-letter" && isAdmin && (
           <Card>
@@ -573,21 +1163,14 @@ export default function EmployeeProfilePage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => {
-                          const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
-                          const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1";
-                          fetch(`${API_URL}/employees/${employeeId}/offer-letter`, {
-                            headers: { Authorization: `Bearer ${token}` },
-                          })
-                            .then((res) => res.blob())
-                            .then((blob) => {
-                              const url = URL.createObjectURL(blob);
-                              const a = document.createElement("a");
-                              a.href = url;
-                              a.download = employee.offerLetterFileName || "offer-letter.pdf";
-                              a.click();
-                              URL.revokeObjectURL(url);
-                            });
+                        onClick={async () => {
+                          try {
+                            const url = await downloadOfferLetter.mutateAsync(employeeId);
+                            if (url) window.open(url, "_blank");
+                          } catch (e) {
+                            console.error(e);
+                            toast.error("Failed to download offer letter");
+                          }
                         }}
                       >
                         Download
@@ -640,10 +1223,8 @@ export default function EmployeeProfilePage() {
                         size="sm"
                         loading={uploadOfferLetter.isPending}
                         onClick={async () => {
-                          const formData = new FormData();
-                          formData.append("file", offerLetterFile);
                           try {
-                            await uploadOfferLetter.mutateAsync({ employeeId, data: formData });
+                            await uploadOfferLetter.mutateAsync({ employeeId, file: offerLetterFile });
                             toast.success("Offer letter uploaded");
                             setOfferLetterFile(null);
                           } catch {
@@ -661,25 +1242,385 @@ export default function EmployeeProfilePage() {
           </Card>
         )}
 
+        {/* Audit Trail Tab */}
+        {activeTab === "audit" && isAdmin && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Audit Trail</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <AuditLogList entityType="Employee" entityId={employeeId} />
+            </CardContent>
+          </Card>
+        )}
+
         {/* Edit Modal */}
         <Modal
           isOpen={editModalOpen}
           onClose={() => setEditModalOpen(false)}
           title="Edit Employee"
           size="lg"
+          className="max-w-4xl"
         >
-          <p className="text-sm text-gray-500">
-            To edit this employee, update the fields and save.
-            Full edit functionality is available through the Admin panel.
-          </p>
-          <div className="mt-4 flex justify-end">
-            <Button
-              variant="outline"
-              onClick={() => setEditModalOpen(false)}
-            >
-              Close
-            </Button>
-          </div>
+          <form onSubmit={editForm.handleSubmit(handleEditSubmit)}>
+            <Tabs
+              tabs={formTabs}
+              activeTab={editActiveTab}
+              onChange={setEditActiveTab}
+              className="mb-6"
+            />
+
+            {/* Personal Info Tab */}
+            {editActiveTab === "personal" && (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <Input
+                  label="Full Name"
+                  required
+                  error={editForm.formState.errors.fullName?.message}
+                  {...editForm.register("fullName")}
+                />
+                <Input
+                  label="Date of Birth"
+                  type="date"
+                  error={editForm.formState.errors.dateOfBirth?.message}
+                  {...editForm.register("dateOfBirth")}
+                />
+                <Select
+                  label="Gender"
+                  options={genderOptions}
+                  placeholder="Select gender"
+                  error={editForm.formState.errors.gender?.message}
+                  {...editForm.register("gender")}
+                />
+                <Input
+                  label="Nationality"
+                  error={editForm.formState.errors.nationality?.message}
+                  {...editForm.register("nationality")}
+                />
+                <Input
+                  label="Work Email"
+                  type="email"
+                  required
+                  error={editForm.formState.errors.workEmail?.message}
+                  {...editForm.register("workEmail")}
+                />
+                <Input
+                  label="Personal Email"
+                  type="email"
+                  error={editForm.formState.errors.personalEmail?.message}
+                  {...editForm.register("personalEmail")}
+                />
+                <Input
+                  label="Phone"
+                  type="tel"
+                  error={editForm.formState.errors.phone?.message}
+                  {...editForm.register("phone")}
+                />
+                <Input
+                  label="Address"
+                  error={editForm.formState.errors.address?.message}
+                  {...editForm.register("address")}
+                />
+                <Select
+                  label="Marital Status"
+                  options={maritalStatusOptions}
+                  placeholder="Select status"
+                  error={editForm.formState.errors.maritalStatus?.message}
+                  {...editForm.register("maritalStatus")}
+                />
+                <Input
+                  label="Next of Kin Name"
+                  error={editForm.formState.errors.nextOfKinName?.message}
+                  {...editForm.register("nextOfKinName")}
+                />
+                <Input
+                  label="Next of Kin Relationship"
+                  error={editForm.formState.errors.nextOfKinRelationship?.message}
+                  {...editForm.register("nextOfKinRelationship")}
+                />
+                <Input
+                  label="Next of Kin Phone"
+                  type="tel"
+                  error={editForm.formState.errors.nextOfKinPhone?.message}
+                  {...editForm.register("nextOfKinPhone")}
+                />
+                <Input
+                  label="Emergency Contact"
+                  type="tel"
+                  error={editForm.formState.errors.emergencyContact?.message}
+                  {...editForm.register("emergencyContact")}
+                />
+                <Input
+                  label="Government ID"
+                  error={editForm.formState.errors.governmentId?.message}
+                  {...editForm.register("governmentId")}
+                />
+                <Input
+                  label="TIN"
+                  error={editForm.formState.errors.tin?.message}
+                  {...editForm.register("tin")}
+                />
+                <Input
+                  label="Pension Number"
+                  error={editForm.formState.errors.pensionNumber?.message}
+                  {...editForm.register("pensionNumber")}
+                />
+              </div>
+            )}
+
+            {/* Employment Details Tab */}
+            {editActiveTab === "employment" && (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <Input
+                  label="Date of Hire"
+                  type="date"
+                  error={editForm.formState.errors.dateOfHire?.message}
+                  {...editForm.register("dateOfHire")}
+                />
+                <Select
+                  label="Employment Type"
+                  options={employmentTypeOptions}
+                  error={editForm.formState.errors.employmentType?.message}
+                  {...editForm.register("employmentType")}
+                />
+                <Select
+                  label="SBU"
+                  options={sbuOptions}
+                  placeholder="Select SBU"
+                  error={editForm.formState.errors.sbuId?.message}
+                  {...editForm.register("sbuId")}
+                />
+                <Select
+                  label="Department"
+                  options={departmentOptions}
+                  placeholder="Select department"
+                  error={editForm.formState.errors.departmentId?.message}
+                  {...editForm.register("departmentId")}
+                />
+                <Input
+                  label="Job Title"
+                  required
+                  error={editForm.formState.errors.jobTitle?.message}
+                  {...editForm.register("jobTitle")}
+                />
+                <Select
+                  label="Supervisor"
+                  options={supervisorOptions}
+                  placeholder="Select a supervisor"
+                  error={editForm.formState.errors.supervisorId?.message}
+                  {...editForm.register("supervisorId")}
+                />
+                <Select
+                  label="Work Arrangement"
+                  options={workArrangementOptions}
+                  error={editForm.formState.errors.workArrangement?.message}
+                  {...editForm.register("workArrangement")}
+                />
+                <Input
+                  label="Probation End Date"
+                  type="date"
+                  error={editForm.formState.errors.probationEndDate?.message}
+                  {...editForm.register("probationEndDate")}
+                />
+                <Select
+                  label="Employment Status"
+                  options={statusOptions}
+                  error={editForm.formState.errors.employmentStatus?.message}
+                  {...editForm.register("employmentStatus")}
+                />
+              </div>
+            )}
+
+            {/* Compensation Tab */}
+            {editActiveTab === "compensation" && (
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <Input
+                    label="Gross Pay"
+                    type="number"
+                    error={editForm.formState.errors.monthlySalary?.message}
+                    {...editForm.register("monthlySalary")}
+                  />
+                  <Input
+                    label="Net Pay"
+                    type="number"
+                    error={editForm.formState.errors.simpleNetPay?.message}
+                    {...editForm.register("simpleNetPay")}
+                  />
+                  <Input
+                    label="Salary Effective Date"
+                    type="date"
+                    error={editForm.formState.errors.salaryEffectiveDate?.message}
+                    {...editForm.register("salaryEffectiveDate")}
+                  />
+                  <Input
+                    label="Base Salary (Breakdown)"
+                    type="number"
+                    error={editForm.formState.errors.baseSalary?.message}
+                    {...editForm.register("baseSalary")}
+                  />
+                  <Input
+                    label="Gross Pay (Breakdown)"
+                    type="number"
+                    error={editForm.formState.errors.grossPay?.message}
+                    {...editForm.register("grossPay")}
+                  />
+                  <Input
+                    label="Net Pay (Breakdown)"
+                    type="number"
+                    error={editForm.formState.errors.netPay?.message}
+                    {...editForm.register("netPay")}
+                  />
+                  <Input
+                    label="Pension"
+                    type="number"
+                    error={editForm.formState.errors.pension?.message}
+                    {...editForm.register("pension")}
+                  />
+                  <Input
+                    label="Tax"
+                    type="number"
+                    error={editForm.formState.errors.tax?.message}
+                    {...editForm.register("tax")}
+                  />
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-medium text-gray-900">Allowances</h3>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => appendAllowance({ name: "", amount: "" })}
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add Allowance
+                    </Button>
+                  </div>
+                  {allowanceFields.map((field, index) => (
+                    <div key={field.id} className="flex gap-4">
+                      <div className="flex-1">
+                        <Input
+                          placeholder="Name"
+                          error={editForm.formState.errors.allowances?.[index]?.name?.message}
+                          {...editForm.register(`allowances.${index}.name`)}
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <Input
+                          placeholder="Amount"
+                          type="number"
+                          error={editForm.formState.errors.allowances?.[index]?.amount?.message}
+                          {...editForm.register(`allowances.${index}.amount`)}
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0 text-red-500 hover:text-red-700"
+                        onClick={() => removeAllowance(index)}
+                      >
+                        <UserX className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-medium text-gray-900">Deductions</h3>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => appendDeduction({ name: "", amount: "" })}
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add Deduction
+                    </Button>
+                  </div>
+                  {deductionFields.map((field, index) => (
+                    <div key={field.id} className="flex gap-4">
+                      <div className="flex-1">
+                        <Input
+                          placeholder="Name"
+                          error={editForm.formState.errors.deductions?.[index]?.name?.message}
+                          {...editForm.register(`deductions.${index}.name`)}
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <Input
+                          placeholder="Amount"
+                          type="number"
+                          error={editForm.formState.errors.deductions?.[index]?.amount?.message}
+                          {...editForm.register(`deductions.${index}.amount`)}
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0 text-red-500 hover:text-red-700"
+                        onClick={() => removeDeduction(index)}
+                      >
+                        <UserX className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <Input
+                    label="Salary Band"
+                    placeholder="e.g. L3, L4"
+                    error={editForm.formState.errors.salaryBand?.message}
+                    {...editForm.register("salaryBand")}
+                  />
+                  <Select
+                    label="Currency"
+                    options={[
+                      { label: "NGN - Nigerian Naira", value: "NGN" },
+                      { label: "USD - US Dollar", value: "USD" },
+                      { label: "GBP - British Pound", value: "GBP" },
+                      { label: "EUR - Euro", value: "EUR" },
+                    ]}
+                    error={editForm.formState.errors.currency?.message}
+                    {...editForm.register("currency")}
+                  />
+                  <Input
+                    label="Account Name"
+                    error={editForm.formState.errors.accountName?.message}
+                    {...editForm.register("accountName")}
+                  />
+                  <Input
+                    label="Account Number"
+                    error={editForm.formState.errors.accountNumber?.message}
+                    {...editForm.register("accountNumber")}
+                  />
+                  <Input
+                    label="Bank Name"
+                    error={editForm.formState.errors.bankName?.message}
+                    {...editForm.register("bankName")}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3 pt-6">
+              <Button
+                variant="outline"
+                type="button"
+                onClick={() => setEditModalOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" loading={updateEmployee.isPending}>
+                Save Changes
+              </Button>
+            </div>
+          </form>
         </Modal>
 
         {/* Lifecycle Event Modal */}

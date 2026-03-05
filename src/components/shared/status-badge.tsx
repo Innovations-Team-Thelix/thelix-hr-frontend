@@ -35,8 +35,10 @@ const statusVariantMap: Record<string, BadgeVariant> = {
 
   // Additional statuses
   completed: "success",
+  confirmed: "success",
   draft: "neutral",
   expired: "danger",
+  overdue: "danger",
   processing: "info",
 };
 

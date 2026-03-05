@@ -1,7 +1,12 @@
 "use client";
 
-import React, { useState, useMemo, useCallback } from "react";
+// cspell:ignore Sbus
+
+import { useState, useMemo, useEffect, useRef } from "react";
 import toast from "react-hot-toast";
+import { DayPicker } from "react-day-picker";
+import type { DateRange } from "react-day-picker";
+import "react-day-picker/style.css";
 import {
   ChevronLeft,
   ChevronRight,
@@ -9,24 +14,30 @@ import {
   Save,
   AlertTriangle,
   Building2,
+  CalendarRange,
 } from "lucide-react";
 import { AppLayout } from "@/components/layout/app-layout";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/loading";
 import { Avatar } from "@/components/ui/avatar";
+import {
+  useSbus,
+  useDepartments,
+  useAuthStore,
+  useEmployees,
+} from "@/hooks";
 import {
   useRoster,
   useGenerateRoster,
   useOverrideRoster,
-  useSbus,
-  useDepartments,
-  useAuthStore,
-} from "@/hooks";
+} from "@/hooks/useRoster";
+import { useAttendance } from "@/hooks/useAttendance";
 import { cn } from "@/lib/utils";
-import type { RosterEntry, RosterDayType } from "@/types";
+import type { RosterDayType } from "@/types";
+import { AttendanceStatus, ApprovalStatus } from "@/types/attendance";
+import dayjs from "dayjs";
 
 function getMonday(d: Date): Date {
   const date = new Date(d);
@@ -38,7 +49,10 @@ function getMonday(d: Date): Date {
 }
 
 function toDateStr(d: Date): string {
-  return d.toISOString().split("T")[0];
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function addDays(d: Date, n: number): Date {
@@ -47,13 +61,53 @@ function addDays(d: Date, n: number): Date {
   return result;
 }
 
+function getDaysInRange(from: Date, to: Date): Date[] {
+  const days: Date[] = [];
+  let current = new Date(from);
+  current.setHours(0, 0, 0, 0);
+  const end = new Date(to);
+  end.setHours(0, 0, 0, 0);
+  while (current <= end) {
+    days.push(new Date(current));
+    current = addDays(current, 1);
+  }
+  return days;
+}
+
+function getThisWeekRange(): DateRange {
+  const monday = getMonday(new Date());
+  return { from: monday, to: addDays(monday, 4) };
+}
+
+const DAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+// Roster schedule colours (shown when no attendance record exists)
 const DAY_TYPE_STYLES: Record<RosterDayType, { bg: string; text: string; label: string }> = {
   Onsite: { bg: "bg-emerald-100", text: "text-emerald-700", label: "Onsite" },
-  Remote: { bg: "bg-blue-100", text: "text-blue-700", label: "Remote" },
-  Leave: { bg: "bg-amber-100", text: "text-amber-700", label: "Leave" },
+  Remote: { bg: "bg-blue-100",    text: "text-blue-700",    label: "Remote" },
+  Leave:  { bg: "bg-amber-100",   text: "text-amber-700",   label: "Leave"  },
 };
 
-const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+// Attendance status colours (take priority over schedule when record exists)
+type AttendanceTileType = "pending" | "late" | "clocked_in" | "clocked_out" | "absent";
+
+const ATTENDANCE_TILE_STYLES: Record<AttendanceTileType, { bg: string; text: string; label: string }> = {
+  pending:     { bg: "bg-gray-200",    text: "text-gray-700",    label: "Pending"     },
+  late:        { bg: "bg-orange-100",  text: "text-orange-700",  label: "Late"        },
+  clocked_in:  { bg: "bg-emerald-600", text: "text-white",       label: "Clocked In"  },
+  clocked_out: { bg: "bg-teal-100",    text: "text-teal-700",    label: "Clocked Out" },
+  absent:      { bg: "bg-red-100",     text: "text-red-700",     label: "Absent"      },
+};
+
+function getAttendanceTile(attendance: any): AttendanceTileType | null {
+  if (!attendance) return null;
+  if (attendance.status === AttendanceStatus.Absent) return "absent";
+  if (attendance.approvalStatus === ApprovalStatus.Pending) return "pending";
+  if (attendance.isLate || attendance.status === AttendanceStatus.Late) return "late";
+  if (attendance.clockOutTime) return "clocked_out";
+  if (attendance.approvalStatus === ApprovalStatus.Approved) return "clocked_in";
+  return null;
+}
 
 export default function RosterPage() {
   const { user } = useAuthStore();
@@ -61,123 +115,151 @@ export default function RosterPage() {
 
   const [selectedSbuId, setSelectedSbuId] = useState("");
   const [selectedDeptId, setSelectedDeptId] = useState("");
-  const [weekStart, setWeekStart] = useState(() => getMonday(new Date()));
-  const [localOverrides, setLocalOverrides] = useState<
-    Map<string, RosterDayType>
-  >(new Map());
+  const [dateRange, setDateRange] = useState<DateRange | null>(null);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [pendingRange, setPendingRange] = useState<DateRange | undefined>();
+  const [localOverrides, setLocalOverrides] = useState<Map<string, RosterDayType>>(new Map());
+  const calendarRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setDateRange(getThisWeekRange());
+  }, []);
+
+  // Close calendar on outside click
+  useEffect(() => {
+    if (!calendarOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (calendarRef.current && !calendarRef.current.contains(e.target as Node)) {
+        setCalendarOpen(false);
+        setPendingRange(undefined);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [calendarOpen]);
 
   const { data: sbus } = useSbus();
   const { data: departments } = useDepartments(selectedSbuId || undefined);
 
-  const weekEnd = useMemo(() => addDays(weekStart, 4), [weekStart]);
+  const rangeFrom = dateRange?.from ?? null;
+  const rangeTo = dateRange?.to ?? null;
 
-  const { data: rosterEntries, isLoading } = useRoster({
+  const { data: rosterEntries, isLoading: isRosterLoading } = useRoster({
     departmentId: selectedDeptId || undefined,
     sbuId: selectedSbuId || undefined,
-    startDate: toDateStr(weekStart),
-    endDate: toDateStr(weekEnd),
+    startDate: rangeFrom ? toDateStr(rangeFrom) : "",
+    endDate: rangeTo ? toDateStr(rangeTo) : "",
+  }, { enabled: !!rangeFrom && !!rangeTo });
+
+  const { data: attendanceEntries, isLoading: isAttendanceLoading } = useAttendance({
+    departmentId: selectedDeptId || undefined,
+    sbuId: selectedSbuId || undefined,
+    startDate: rangeFrom ? toDateStr(rangeFrom) : "",
+    endDate: rangeTo ? toDateStr(rangeTo) : "",
+  }, { enabled: !!rangeFrom && !!rangeTo });
+
+  const { data: employeesData } = useEmployees({
+    departmentId: selectedDeptId || undefined,
+    sbuId: selectedSbuId || undefined,
+    limit: 1000,
   });
+
+  const isLoading = isRosterLoading || isAttendanceLoading || !rangeFrom || !rangeTo;
+
+  const days = useMemo(
+    () => (rangeFrom && rangeTo ? getDaysInRange(rangeFrom, rangeTo) : []),
+    [rangeFrom, rangeTo]
+  );
 
   const generateRoster = useGenerateRoster();
   const overrideRoster = useOverrideRoster();
 
-  // Get selected department min_onsite
   const selectedDept = departments?.find((d) => d.id === selectedDeptId);
   const minOnsite = selectedDept?.minOnsite ?? 1;
 
-  // Group entries by employee
   const employeeMap = useMemo(() => {
-    const map = new Map<
-      string,
-      {
-        id: string;
-        name: string;
-        entries: Map<string, RosterDayType>;
-      }
-    >();
+    const map = new Map<string, {
+      id: string;
+      name: string;
+      entries: Map<string, RosterDayType>;
+      attendance: Map<string, any>;
+    }>();
 
-    if (!rosterEntries) return map;
+    if (rosterEntries) {
+      rosterEntries.forEach((entry) => {
+        const empId = entry.employeeId;
+        if (!map.has(empId)) {
+          const empFromList = employeesData?.data?.find(e => e.id === empId);
+          map.set(empId, {
+            id: empId,
+            name: entry.employee?.fullName || empFromList?.fullName || "Unknown",
+            entries: new Map(),
+            attendance: new Map(),
+          });
+        }
+        if (!entry.date) return;
+        const dateKey = entry.date.split("T")[0];
+        const overrideKey = `${empId}-${dateKey}`;
+        map.get(empId)!.entries.set(dateKey, localOverrides.get(overrideKey) ?? entry.dayType);
+      });
+    }
 
-    rosterEntries.forEach((entry) => {
-      const empId = entry.employeeId;
-      if (!map.has(empId)) {
-        map.set(empId, {
-          id: empId,
-          name: entry.employee?.fullName || "Unknown",
-          entries: new Map(),
-        });
-      }
-      const dateKey = entry.date.split("T")[0];
-      // Check for local override
-      const overrideKey = `${empId}-${dateKey}`;
-      if (localOverrides.has(overrideKey)) {
-        map.get(empId)!.entries.set(dateKey, localOverrides.get(overrideKey)!);
-      } else {
-        map.get(empId)!.entries.set(dateKey, entry.dayType);
-      }
-    });
+    if (attendanceEntries) {
+      attendanceEntries.forEach((entry) => {
+        const empId = entry.employeeId;
+        if (!map.has(empId)) {
+          const empFromList = employeesData?.data?.find(e => e.id === empId);
+          map.set(empId, {
+            id: empId,
+            name: entry.employee?.fullName || empFromList?.fullName || "Unknown",
+            entries: new Map(),
+            attendance: new Map(),
+          });
+        }
+        map.get(empId)!.attendance.set(entry.date.split("T")[0], entry);
+      });
+    }
 
     return map;
-  }, [rosterEntries, localOverrides]);
+  }, [rosterEntries, localOverrides, attendanceEntries, employeesData]);
 
-  // Count onsite per day
   const onsiteCounts = useMemo(() => {
-    const counts: number[] = [0, 0, 0, 0, 0];
-    employeeMap.forEach((emp) => {
-      DAY_NAMES.forEach((_, index) => {
-        const dateStr = toDateStr(addDays(weekStart, index));
-        const type = emp.entries.get(dateStr);
-        if (type === "Onsite") counts[index]++;
+    return days.map((day) => {
+      const dateStr = toDateStr(day);
+      let count = 0;
+      employeeMap.forEach((emp) => {
+        if (emp.entries.get(dateStr) === "Onsite") count++;
       });
+      return count;
     });
-    return counts;
-  }, [employeeMap, weekStart]);
+  }, [employeeMap, days]);
 
-  const belowMinDays = onsiteCounts.some(
-    (count) => count < minOnsite && employeeMap.size > 0
-  );
+  const belowMinDays = onsiteCounts.some((count) => count < minOnsite && employeeMap.size > 0);
 
-  const sbuOptions = (sbus || []).map((s) => ({
-    label: s.name,
-    value: s.id,
-  }));
-
-  const deptOptions = (departments || []).map((d) => ({
-    label: d.name,
-    value: d.id,
-  }));
+  const sbuOptions = (sbus || []).map((s) => ({ label: s.name, value: s.id }));
+  const deptOptions = (departments || []).map((d) => ({ label: d.name, value: d.id }));
 
   const handleCellClick = (employeeId: string, dateStr: string) => {
     if (!isAdmin) return;
-
     const overrideKey = `${employeeId}-${dateStr}`;
-    const current =
-      localOverrides.get(overrideKey) ||
-      employeeMap.get(employeeId)?.entries.get(dateStr);
-
-    // Toggle: Onsite -> Remote -> Onsite
-    if (current === "Leave") return; // Can't override leave days
-    const newType: RosterDayType =
-      current === "Onsite" ? "Remote" : "Onsite";
-
+    const current = localOverrides.get(overrideKey) ?? employeeMap.get(employeeId)?.entries.get(dateStr);
+    if (current === "Leave") return;
     setLocalOverrides((prev) => {
       const next = new Map(prev);
-      next.set(overrideKey, newType);
+      next.set(overrideKey, current === "Onsite" ? "Remote" : "Onsite");
       return next;
     });
   };
 
   const handleAutoGenerate = async () => {
-    if (!selectedDeptId) {
-      toast.error("Please select a department first");
-      return;
-    }
-
+    if (!selectedDeptId) { toast.error("Please select a department first"); return; }
+    if (!rangeFrom || !rangeTo) { toast.error("Please select a date range first"); return; }
     try {
       await generateRoster.mutateAsync({
         departmentId: selectedDeptId,
-        startDate: toDateStr(weekStart),
-        endDate: toDateStr(weekEnd),
+        sbuId: selectedSbuId || undefined,
+        startDate: toDateStr(rangeFrom),
+        endDate: toDateStr(rangeTo),
       });
       toast.success("Roster generated successfully");
       setLocalOverrides(new Map());
@@ -188,24 +270,13 @@ export default function RosterPage() {
   };
 
   const handleSaveOverrides = async () => {
-    if (localOverrides.size === 0) {
-      toast.error("No changes to save");
-      return;
-    }
-
+    if (localOverrides.size === 0) { toast.error("No changes to save"); return; }
     try {
-      const promises = Array.from(localOverrides.entries()).map(
-        ([key, dayType]) => {
-          const [employeeId, date] = key.split("-", 2);
-          const fullDate = key.substring(employeeId.length + 1);
-          return overrideRoster.mutateAsync({
-            employeeId,
-            date: fullDate,
-            dayType: dayType as "Onsite" | "Remote",
-          });
-        }
-      );
-
+      const promises = Array.from(localOverrides.entries()).map(([key, dayType]) => {
+        const employeeId = key.substring(0, 36);
+        const dateStr = key.substring(37);
+        return overrideRoster.mutateAsync({ employeeId, date: dateStr, dayType: dayType as "Onsite" | "Remote" });
+      });
       await Promise.all(promises);
       toast.success("Roster overrides saved successfully");
       setLocalOverrides(new Map());
@@ -214,87 +285,125 @@ export default function RosterPage() {
     }
   };
 
-  const handlePrevWeek = () => {
-    setWeekStart((prev) => addDays(prev, -7));
+  const rangeSpanDays = rangeFrom && rangeTo
+    ? Math.round((rangeTo.getTime() - rangeFrom.getTime()) / 86400000)
+    : 6;
+
+  const handlePrevPeriod = () => {
+    if (!rangeFrom || !rangeTo) return;
+    const span = rangeSpanDays + 1;
+    setDateRange({ from: addDays(rangeFrom, -span), to: addDays(rangeTo, -span) });
     setLocalOverrides(new Map());
   };
 
-  const handleNextWeek = () => {
-    setWeekStart((prev) => addDays(prev, 7));
+  const handleNextPeriod = () => {
+    if (!rangeFrom || !rangeTo) return;
+    const span = rangeSpanDays + 1;
+    setDateRange({ from: addDays(rangeFrom, span), to: addDays(rangeTo, span) });
     setLocalOverrides(new Map());
   };
 
   const handleThisWeek = () => {
-    setWeekStart(getMonday(new Date()));
+    setDateRange(getThisWeekRange());
     setLocalOverrides(new Map());
+    setCalendarOpen(false);
+    setPendingRange(undefined);
   };
+
+  const handleOpenCalendar = () => {
+    setPendingRange(dateRange ?? undefined);
+    setCalendarOpen(true);
+  };
+
+  const handleRangeSelect = (range: DateRange | undefined) => {
+    setPendingRange(range);
+    if (range?.from && range?.to) {
+      setDateRange(range);
+      setLocalOverrides(new Map());
+      setCalendarOpen(false);
+      setPendingRange(undefined);
+    }
+  };
+
+  const displayLabel = rangeFrom && rangeTo
+    ? `${toDateStr(rangeFrom)} → ${toDateStr(rangeTo)}`
+    : rangeFrom
+    ? `${toDateStr(rangeFrom)} → ...`
+    : "Select date range";
 
   return (
     <AppLayout pageTitle="Roster">
       <div className="space-y-6">
         <div className="flex items-center gap-3">
           <Building2 className="h-6 w-6 text-primary" />
-          <h2 className="text-xl font-semibold text-gray-900">
-            Hybrid Roster
-          </h2>
+          <h2 className="text-xl font-semibold text-gray-900">Hybrid Roster</h2>
         </div>
 
         {/* Filters */}
         <div className="flex flex-wrap items-end gap-4">
           <div className="w-48">
-            <Select
-              label="SBU"
-              options={sbuOptions}
-              placeholder="All SBUs"
-              value={selectedSbuId}
-              onChange={(e) => {
-                setSelectedSbuId(e.target.value);
-                setSelectedDeptId("");
-              }}
-            />
+            <Select label="SBU" options={sbuOptions} placeholder="All SBUs" value={selectedSbuId}
+              onChange={(e) => { setSelectedSbuId(e.target.value); setSelectedDeptId(""); }} />
           </div>
           <div className="w-48">
-            <Select
-              label="Department"
-              options={deptOptions}
-              placeholder="All Departments"
-              value={selectedDeptId}
-              onChange={(e) => setSelectedDeptId(e.target.value)}
-            />
+            <Select label="Department" options={deptOptions} placeholder="All Departments" value={selectedDeptId}
+              onChange={(e) => setSelectedDeptId(e.target.value)} />
           </div>
+
+          {/* Date range picker */}
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={handlePrevWeek}>
+            <Button variant="outline" size="sm" onClick={handlePrevPeriod} disabled={!rangeFrom}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
+
+            <div className="relative" ref={calendarRef}>
+              <button
+                type="button"
+                onClick={handleOpenCalendar}
+                className="flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary/50"
+              >
+                <CalendarRange className="h-4 w-4 text-gray-400" />
+                <span className="min-w-[200px] text-left">{displayLabel}</span>
+              </button>
+
+              {calendarOpen && (
+                <div className="absolute left-0 top-full z-50 mt-1 rounded-xl border border-gray-200 bg-white p-3 shadow-lg">
+                  <div className="mb-2 flex justify-end">
+                    <Button variant="outline" size="sm" onClick={handleThisWeek}>
+                      This Week
+                    </Button>
+                  </div>
+                  <DayPicker
+                    mode="range"
+                    selected={pendingRange}
+                    onSelect={handleRangeSelect}
+                    numberOfMonths={2}
+                  />
+                  {pendingRange?.from && !pendingRange?.to && (
+                    <p className="mt-1 text-center text-xs text-gray-400">
+                      Select an end date
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
             <Button variant="outline" size="sm" onClick={handleThisWeek}>
               This Week
             </Button>
-            <Button variant="outline" size="sm" onClick={handleNextWeek}>
+
+            <Button variant="outline" size="sm" onClick={handleNextPeriod} disabled={!rangeFrom}>
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
-          <span className="text-sm font-medium text-gray-600">
-            {toDateStr(weekStart)} to {toDateStr(weekEnd)}
-          </span>
+
           {isAdmin && (
             <div className="ml-auto flex items-center gap-2">
-              <Button
-                variant="outline"
-                onClick={handleAutoGenerate}
-                loading={generateRoster.isPending}
-                disabled={!selectedDeptId}
-              >
-                <Wand2 className="h-4 w-4" />
-                Auto-Generate
+              <Button variant="outline" onClick={handleAutoGenerate} loading={generateRoster.isPending} disabled={!selectedDeptId}>
+                <Wand2 className="h-4 w-4" /> Auto-Generate
               </Button>
-              <Button
-                variant="outline"
-                onClick={handleSaveOverrides}
-                loading={overrideRoster.isPending}
-                disabled={localOverrides.size === 0}
-              >
-                <Save className="h-4 w-4" />
-                Save
+              <Button variant="outline" onClick={handleSaveOverrides} loading={overrideRoster.isPending} disabled={localOverrides.size === 0}>
+                <Save className="h-4 w-4" /> Save
               </Button>
             </div>
           )}
@@ -305,8 +414,7 @@ export default function RosterPage() {
           <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
             <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
             <p className="text-sm text-amber-800">
-              Warning: One or more days are below the minimum onsite requirement
-              of {minOnsite} employee(s).
+              Warning: One or more days are below the minimum onsite requirement of {minOnsite} employee(s).
             </p>
           </div>
         )}
@@ -316,9 +424,7 @@ export default function RosterPage() {
           <CardContent className="p-0">
             {isLoading ? (
               <div className="p-6 space-y-3">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <Skeleton key={i} className="h-12 w-full" />
-                ))}
+                {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
               </div>
             ) : employeeMap.size === 0 ? (
               <div className="py-16 text-center text-sm text-gray-500">
@@ -334,17 +440,12 @@ export default function RosterPage() {
                       <th className="sticky left-0 z-10 bg-gray-50 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 min-w-[200px]">
                         Employee
                       </th>
-                      {DAY_NAMES.map((day, index) => {
-                        const dateStr = toDateStr(addDays(weekStart, index));
+                      {days.map((day) => {
+                        const dateStr = toDateStr(day);
                         return (
-                          <th
-                            key={day}
-                            className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-500 min-w-[120px]"
-                          >
-                            <div>{day}</div>
-                            <div className="text-[10px] font-normal text-gray-400">
-                              {dateStr.substring(5)}
-                            </div>
+                          <th key={dateStr} className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-500 min-w-[120px]">
+                            <div>{DAY_SHORT[day.getDay()]}</div>
+                            <div className="text-[10px] font-normal text-gray-400">{dateStr.substring(5)}</div>
                           </th>
                         );
                       })}
@@ -352,56 +453,55 @@ export default function RosterPage() {
                   </thead>
                   <tbody>
                     {Array.from(employeeMap.values()).map((emp) => (
-                      <tr
-                        key={emp.id}
-                        className="border-b border-gray-100 hover:bg-gray-50/50"
-                      >
+                      <tr key={emp.id} className="border-b border-gray-100 hover:bg-gray-50/50">
                         <td className="sticky left-0 z-10 bg-white px-4 py-3">
                           <div className="flex items-center gap-2">
                             <Avatar name={emp.name} size="sm" />
-                            <span className="font-medium text-gray-900 truncate">
-                              {emp.name}
-                            </span>
+                            <span className="font-medium text-gray-900 truncate">{emp.name}</span>
                           </div>
                         </td>
-                        {DAY_NAMES.map((_, index) => {
-                          const dateStr = toDateStr(addDays(weekStart, index));
+                        {days.map((day) => {
+                          const dateStr = toDateStr(day);
                           const dayType = emp.entries.get(dateStr);
+                          const attendance = emp.attendance.get(dateStr);
                           const overrideKey = `${emp.id}-${dateStr}`;
                           const isOverridden = localOverrides.has(overrideKey);
-                          const style = dayType
-                            ? DAY_TYPE_STYLES[dayType]
-                            : null;
+
+                          const attendanceTile = getAttendanceTile(attendance);
+                          const tileStyle = attendanceTile
+                            ? ATTENDANCE_TILE_STYLES[attendanceTile]
+                            : dayType
+                              ? DAY_TYPE_STYLES[dayType]
+                              : null;
+
+                          const tooltipLines = [
+                            dayType ? `Roster: ${dayType}` : null,
+                            attendanceTile ? `Status: ${ATTENDANCE_TILE_STYLES[attendanceTile].label}` : null,
+                            attendance?.clockInTime  ? `In: ${dayjs(attendance.clockInTime).format("HH:mm")}`  : null,
+                            attendance?.clockOutTime ? `Out: ${dayjs(attendance.clockOutTime).format("HH:mm")}` : null,
+                          ].filter(Boolean).join("\n");
 
                           return (
                             <td
-                              key={index}
+                              key={dateStr}
                               className={cn(
                                 "px-4 py-3 text-center",
-                                isAdmin &&
-                                  dayType !== "Leave" &&
-                                  "cursor-pointer hover:bg-gray-100"
+                                isAdmin && dayType !== "Leave" && "cursor-pointer hover:bg-gray-100"
                               )}
-                              onClick={() =>
-                                handleCellClick(emp.id, dateStr)
-                              }
+                              onClick={() => handleCellClick(emp.id, dateStr)}
+                              title={tooltipLines || undefined}
                             >
-                              {style ? (
-                                <span
-                                  className={cn(
-                                    "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium",
-                                    style.bg,
-                                    style.text,
-                                    isOverridden &&
-                                      "ring-2 ring-blue-400 ring-offset-1"
-                                  )}
-                                >
-                                  {style.label}
+                              {tileStyle ? (
+                                <span className={cn(
+                                  "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium",
+                                  tileStyle.bg,
+                                  tileStyle.text,
+                                  isOverridden && "ring-2 ring-blue-400 ring-offset-1"
+                                )}>
+                                  {tileStyle.label}
                                 </span>
                               ) : (
-                                <span className="text-xs text-gray-400">
-                                  -
-                                </span>
+                                <span className="text-xs text-gray-400">-</span>
                               )}
                             </td>
                           );
@@ -409,29 +509,18 @@ export default function RosterPage() {
                       </tr>
                     ))}
                   </tbody>
-                  {/* Footer: Onsite count */}
                   <tfoot>
                     <tr className="border-t-2 border-gray-200 bg-gray-50">
                       <td className="sticky left-0 z-10 bg-gray-50 px-4 py-3 text-xs font-semibold text-gray-600">
                         Onsite Count
                       </td>
                       {onsiteCounts.map((count, index) => (
-                        <td
-                          key={index}
-                          className="px-4 py-3 text-center"
-                        >
-                          <span
-                            className={cn(
-                              "inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-bold",
-                              count < minOnsite
-                                ? "bg-red-100 text-red-700"
-                                : "bg-emerald-100 text-emerald-700"
-                            )}
-                          >
-                            {count}
-                            <span className="ml-1 font-normal text-gray-400">
-                              / {minOnsite}
-                            </span>
+                        <td key={index} className="px-4 py-3 text-center">
+                          <span className={cn(
+                            "inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-bold",
+                            count < minOnsite ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"
+                          )}>
+                            {count}<span className="ml-1 font-normal text-gray-400">/ {minOnsite}</span>
                           </span>
                         </td>
                       ))}
@@ -443,26 +532,28 @@ export default function RosterPage() {
           </CardContent>
         </Card>
 
-        {/* Legend */}
-        <div className="flex flex-wrap items-center gap-4">
-          <span className="text-xs font-medium text-gray-500 uppercase">
-            Legend:
-          </span>
-          {Object.entries(DAY_TYPE_STYLES).map(([type, style]) => (
-            <div key={type} className="flex items-center gap-1.5">
-              <span
-                className={cn(
-                  "inline-block h-3 w-3 rounded",
-                  style.bg
-                )}
-              />
-              <span className="text-xs text-gray-600">{style.label}</span>
-            </div>
-          ))}
+        {/* Unified Legend */}
+        <div className="rounded-lg border border-gray-100 bg-gray-50 px-4 py-3 space-y-2">
+          <div className="flex flex-wrap items-center gap-4">
+            <span className="text-xs font-semibold text-gray-500 uppercase w-20 shrink-0">Schedule:</span>
+            {Object.entries(DAY_TYPE_STYLES).map(([type, style]) => (
+              <div key={type} className="flex items-center gap-1.5">
+                <span className={cn("inline-block h-3 w-3 rounded-full", style.bg)} />
+                <span className="text-xs text-gray-600">{style.label}</span>
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-4">
+            <span className="text-xs font-semibold text-gray-500 uppercase w-20 shrink-0">Attendance:</span>
+            {Object.entries(ATTENDANCE_TILE_STYLES).map(([type, style]) => (
+              <div key={type} className="flex items-center gap-1.5">
+                <span className={cn("inline-block h-3 w-3 rounded-full", style.bg, type === "clocked_in" && "bg-emerald-600")} />
+                <span className="text-xs text-gray-600">{style.label}</span>
+              </div>
+            ))}
+          </div>
           {isAdmin && (
-            <span className="text-xs text-gray-400 italic ml-2">
-              Click cells to toggle Onsite/Remote
-            </span>
+            <p className="text-xs text-gray-400 italic">Click cells to toggle Onsite / Remote schedule</p>
           )}
         </div>
       </div>

@@ -2,18 +2,18 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import toast from "react-hot-toast";
-import { ArrowLeft, Save, Loader2 } from "lucide-react";
+import { ArrowLeft, Save, Loader2, Plus, Trash2 } from "lucide-react";
 import { AppLayout } from "@/components/layout/app-layout";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Tabs } from "@/components/ui/tabs";
-import { useCreateEmployee, useSbus, useDepartments, useAuth } from "@/hooks";
+import { useCreateEmployee, useSbus, useDepartments, useAuth, useEmployees } from "@/hooks";
 
 const createEmployeeSchema = z.object({
   fullName: z.string().min(1, "Full name is required"),
@@ -40,10 +40,20 @@ const createEmployeeSchema = z.object({
   jobTitle: z.string().min(1, "Job title is required"),
   supervisorId: z.string().optional(),
   workArrangement: z.string().default("Hybrid"),
+  probationPeriod: z.string().optional(),
   probationEndDate: z.string().optional(),
   employmentStatus: z.string().default("Active"),
-
-  monthlySalary: z.string().optional(),
+  
+  monthlySalary: z.string().optional().or(z.literal("")),
+  baseSalary: z.string().optional().or(z.literal("")),
+  grossPay: z.string().optional().or(z.literal("")),
+  netPay: z.string().optional().or(z.literal("")),
+  simpleNetPay: z.string().optional().or(z.literal("")),
+  pension: z.string().optional(),
+  tax: z.string().optional(),
+  allowances: z.array(z.object({ name: z.string(), amount: z.string() })).default([]),
+  deductions: z.array(z.object({ name: z.string(), amount: z.string() })).default([]),
+  
   salaryBand: z.string().optional(),
   accountName: z.string().optional(),
   accountNumber: z.string().optional(),
@@ -66,11 +76,13 @@ export default function CreateEmployeePage() {
   const [activeTab, setActiveTab] = useState("personal");
 
   const { data: sbus } = useSbus();
+  const { data: employeesData } = useEmployees({ limit: 1000, status: "Active" });
   const createEmployee = useCreateEmployee();
 
   const {
     register,
     handleSubmit,
+    control,
     watch,
     formState: { errors },
   } = useForm<CreateEmployeeFormData>({
@@ -80,7 +92,19 @@ export default function CreateEmployeePage() {
       workArrangement: "Hybrid",
       employmentStatus: "Active",
       currency: "NGN",
+      allowances: [],
+      deductions: [],
     },
+  });
+
+  const { fields: allowanceFields, append: appendAllowance, remove: removeAllowance } = useFieldArray({
+    control,
+    name: "allowances",
+  });
+
+  const { fields: deductionFields, append: appendDeduction, remove: removeDeduction } = useFieldArray({
+    control,
+    name: "deductions",
   });
 
   const selectedSbuId = watch("sbuId");
@@ -101,6 +125,11 @@ export default function CreateEmployeePage() {
   const departmentOptions = (departments || []).map((d) => ({
     label: d.name,
     value: d.id,
+  }));
+
+  const supervisorOptions = (employeesData?.data || []).map((e) => ({
+    label: `${e.fullName} (${e.jobTitle})`,
+    value: e.id,
   }));
 
   const genderOptions = [
@@ -138,22 +167,76 @@ export default function CreateEmployeePage() {
 
   const onSubmit = async (data: CreateEmployeeFormData) => {
     try {
+      // Base payload with explicit nulls for optional fields
       const payload: Record<string, unknown> = {
         ...data,
-        monthlySalary: data.monthlySalary
-          ? parseFloat(data.monthlySalary)
-          : undefined,
-        personalEmail: data.personalEmail || undefined,
-        dateOfBirth: data.dateOfBirth || undefined,
-        probationEndDate: data.probationEndDate || undefined,
-        salaryEffectiveDate: data.salaryEffectiveDate || undefined,
-        supervisorId: data.supervisorId || undefined,
+        // Personal
+        dateOfBirth: data.dateOfBirth || null,
+        gender: data.gender || null,
+        nationality: data.nationality || null,
+        address: data.address || null,
+        phone: data.phone || null,
+        personalEmail: data.personalEmail || null,
+        maritalStatus: data.maritalStatus || null,
+        nextOfKinName: data.nextOfKinName || null,
+        nextOfKinRelationship: data.nextOfKinRelationship || null,
+        nextOfKinPhone: data.nextOfKinPhone || null,
+        emergencyContact: data.emergencyContact || null,
+        governmentId: data.governmentId || null,
+        tin: data.tin || null,
+        pensionNumber: data.pensionNumber || null,
+        
+        // Employment
+        supervisorId: data.supervisorId || null,
+        probationPeriod: data.probationPeriod ? parseInt(data.probationPeriod) : null,
+        probationEndDate: data.probationEndDate || null,
+        
+        // Compensation
+        monthlySalary: data.monthlySalary ? parseFloat(data.monthlySalary) : null,
+        netPay: data.netPay
+          ? parseFloat(data.netPay)
+          : (data.simpleNetPay ? parseFloat(data.simpleNetPay) : null),
+        salaryBand: data.salaryBand || null,
+        accountName: data.accountName || null,
+        accountNumber: data.accountNumber || null,
+        bankName: data.bankName || null,
+        salaryEffectiveDate: data.salaryEffectiveDate || null,
+        currency: data.currency || "NGN",
       };
 
-      // Remove empty strings
+      // Construct salaryBreakdown if any salary fields are present
+      if (data.baseSalary || data.grossPay || data.allowances.length > 0 || data.deductions.length > 0) {
+        payload.salaryBreakdown = {
+          baseSalary: parseFloat(data.baseSalary || "0"),
+          grossPay: parseFloat(data.grossPay || "0"),
+          netPay: parseFloat(data.netPay || "0"),
+          pension: parseFloat(data.pension || "0"),
+          tax: parseFloat(data.tax || "0"),
+          allowances: data.allowances.map((a) => ({
+            name: a.name,
+            amount: parseFloat(a.amount || "0"),
+          })),
+          deductions: data.deductions.map((d) => ({
+            name: d.name,
+            amount: parseFloat(d.amount || "0"),
+          })),
+          effectiveDate: data.salaryEffectiveDate || new Date().toISOString(),
+        };
+      }
+
+      // Remove helper fields that are not part of the Employee entity
+      delete payload.simpleNetPay;
+      delete payload.baseSalary;
+      delete payload.grossPay;
+      delete payload.allowances;
+      delete payload.deductions;
+      delete payload.pension;
+      delete payload.tax;
+
+      // Remove any remaining empty strings (just in case)
       Object.keys(payload).forEach((key) => {
         if (payload[key] === "") {
-          delete payload[key];
+          payload[key] = null;
         }
       });
 
@@ -161,6 +244,7 @@ export default function CreateEmployeePage() {
       toast.success("Employee created successfully");
       router.push(`/employees/${employee.id}`);
     } catch (error: unknown) {
+      console.error("Create employee error:", error);
       const err = error as { response?: { data?: { message?: string } } };
       toast.error(err.response?.data?.message || "Failed to create employee");
     }
@@ -345,9 +429,10 @@ export default function CreateEmployeePage() {
                     error={errors.jobTitle?.message}
                     {...register("jobTitle")}
                   />
-                  <Input
-                    label="Supervisor ID"
-                    placeholder="Enter supervisor UUID"
+                  <Select
+                    label="Supervisor"
+                    options={supervisorOptions}
+                    placeholder="Select a supervisor"
                     error={errors.supervisorId?.message}
                     {...register("supervisorId")}
                   />
@@ -356,6 +441,12 @@ export default function CreateEmployeePage() {
                     options={workArrangementOptions}
                     error={errors.workArrangement?.message}
                     {...register("workArrangement")}
+                  />
+                  <Input
+                    label="Probation Period (Months)"
+                    type="number"
+                    error={errors.probationPeriod?.message}
+                    {...register("probationPeriod")}
                   />
                   <Input
                     label="Probation End Date"
@@ -376,59 +467,225 @@ export default function CreateEmployeePage() {
 
           {/* Compensation Tab */}
           {activeTab === "compensation" && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Compensation</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  <Input
-                    label="Monthly Salary"
-                    type="number"
-                    error={errors.monthlySalary?.message}
-                    {...register("monthlySalary")}
-                  />
-                  <Input
-                    label="Salary Band"
-                    placeholder="e.g. L3, L4"
-                    error={errors.salaryBand?.message}
-                    {...register("salaryBand")}
-                  />
-                  <Select
-                    label="Currency"
-                    options={[
-                      { label: "NGN - Nigerian Naira", value: "NGN" },
-                      { label: "USD - US Dollar", value: "USD" },
-                      { label: "GBP - British Pound", value: "GBP" },
-                      { label: "EUR - Euro", value: "EUR" },
-                    ]}
-                    error={errors.currency?.message}
-                    {...register("currency")}
-                  />
-                  <Input
-                    label="Account Name"
-                    error={errors.accountName?.message}
-                    {...register("accountName")}
-                  />
-                  <Input
-                    label="Account Number"
-                    error={errors.accountNumber?.message}
-                    {...register("accountNumber")}
-                  />
-                  <Input
-                    label="Bank Name"
-                    error={errors.bankName?.message}
-                    {...register("bankName")}
-                  />
-                  <Input
-                    label="Salary Effective Date"
-                    type="date"
-                    error={errors.salaryEffectiveDate?.message}
-                    {...register("salaryEffectiveDate")}
-                  />
-                </div>
-              </CardContent>
-            </Card>
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>General Compensation Details</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    <Input
+                      label="Gross Pay"
+                      type="number"
+                      error={errors.monthlySalary?.message}
+                      {...register("monthlySalary")}
+                    />
+                    <Input
+                      label="Net Pay"
+                      type="number"
+                      error={errors.simpleNetPay?.message}
+                      {...register("simpleNetPay")}
+                    />
+                    <Input
+                      label="Salary Band"
+                      placeholder="e.g. L3, L4"
+                      error={errors.salaryBand?.message}
+                      {...register("salaryBand")}
+                    />
+                    <Select
+                      label="Currency"
+                      options={[
+                        { label: "NGN - Nigerian Naira", value: "NGN" },
+                        { label: "USD - US Dollar", value: "USD" },
+                        { label: "GBP - British Pound", value: "GBP" },
+                        { label: "EUR - Euro", value: "EUR" },
+                      ]}
+                      error={errors.currency?.message}
+                      {...register("currency")}
+                    />
+                    <Input
+                      label="Account Name"
+                      error={errors.accountName?.message}
+                      {...register("accountName")}
+                    />
+                    <Input
+                      label="Account Number"
+                      error={errors.accountNumber?.message}
+                      {...register("accountNumber")}
+                    />
+                    <Input
+                      label="Bank Name"
+                      error={errors.bankName?.message}
+                      {...register("bankName")}
+                    />
+                    <Input
+                      label="Salary Effective Date"
+                      type="date"
+                      error={errors.salaryEffectiveDate?.message}
+                      {...register("salaryEffectiveDate")}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Salary Breakdown</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    <Input
+                      label="Base Salary"
+                      type="number"
+                      error={errors.baseSalary?.message}
+                      {...register("baseSalary")}
+                    />
+                    <Input
+                      label="Gross Pay"
+                      type="number"
+                      error={errors.grossPay?.message}
+                      {...register("grossPay")}
+                    />
+                    <Input
+                      label="Net Pay"
+                      type="number"
+                      error={errors.netPay?.message}
+                      {...register("netPay")}
+                    />
+                    <Input
+                      label="Pension"
+                      type="number"
+                      error={errors.pension?.message}
+                      {...register("pension")}
+                    />
+                    <Input
+                      label="Tax"
+                      type="number"
+                      error={errors.tax?.message}
+                      {...register("tax")}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                {/* Allowances */}
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-base font-semibold">
+                      Allowances
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {allowanceFields.map((field, index) => (
+                        <div key={field.id} className="flex items-start gap-3">
+                          <div className="flex-1">
+                            <Input
+                              label={index === 0 ? "Name" : undefined}
+                              placeholder="Name"
+                              error={errors.allowances?.[index]?.name?.message}
+                              {...register(`allowances.${index}.name`)}
+                            />
+                          </div>
+                          <div className="w-32">
+                            <Input
+                              label={index === 0 ? "Amount" : undefined}
+                              type="number"
+                              placeholder="0.00"
+                              error={
+                                errors.allowances?.[index]?.amount?.message
+                              }
+                              {...register(`allowances.${index}.amount`)}
+                            />
+                          </div>
+                          <div className={index === 0 ? "mt-8" : "mt-1"}>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 text-red-500 hover:text-red-600"
+                              onClick={() => removeAllowance(index)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          appendAllowance({ name: "", amount: "" })
+                        }
+                      >
+                        <Plus className="mr-2 h-4 w-4" />
+                        Add Allowance
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Deductions */}
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-base font-semibold">
+                      Deductions
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {deductionFields.map((field, index) => (
+                        <div key={field.id} className="flex items-start gap-3">
+                          <div className="flex-1">
+                            <Input
+                              label={index === 0 ? "Name" : undefined}
+                              placeholder="Name"
+                              error={errors.deductions?.[index]?.name?.message}
+                              {...register(`deductions.${index}.name`)}
+                            />
+                          </div>
+                          <div className="w-32">
+                            <Input
+                              label={index === 0 ? "Amount" : undefined}
+                              type="number"
+                              placeholder="0.00"
+                              error={
+                                errors.deductions?.[index]?.amount?.message
+                              }
+                              {...register(`deductions.${index}.amount`)}
+                            />
+                          </div>
+                          <div className={index === 0 ? "mt-8" : "mt-1"}>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 text-red-500 hover:text-red-600"
+                              onClick={() => removeDeduction(index)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          appendDeduction({ name: "", amount: "" })
+                        }
+                      >
+                        <Plus className="mr-2 h-4 w-4" />
+                        Add Deduction
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
           )}
 
           {/* Submit */}
