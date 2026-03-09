@@ -135,12 +135,14 @@ export default function AttendanceReportsPage() {
   const { data: sbus } = useSbus();
   const { data: departments } = useDepartments(selectedSbu);
 
-  const { data: records, isLoading } = useAttendance({
+  const { data: response, isLoading } = useAttendance({
     startDate: dateRange.startDate,
     endDate: dateRange.endDate,
     sbuId: selectedSbu || undefined,
     departmentId: selectedDepartment || undefined,
   });
+
+  const records = response?.data || [];
 
   const stats = useMemo(() => {
     if (!records) return null;

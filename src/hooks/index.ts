@@ -100,9 +100,29 @@ export function useDepartments(sbuId?: string) {
   return useQuery<Department[]>({
     queryKey: ["departments", sbuId],
     queryFn: async () => {
-      const params = sbuId ? { sbuId } : {};
+      const params = sbuId ? { sbuId, limit: 1000 } : { limit: 1000 };
       const res = await api.get<Department[]>("/departments", { params });
       return res.data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function usePaginatedDepartments(params: { sbuId?: string; page?: number; limit?: number } = {}) {
+  return useQuery<{
+    data: Department[];
+    pagination: PaginationMeta;
+  }>({
+    queryKey: ["departments", params],
+    queryFn: async () => {
+      const queryParams = buildParams(params as Record<string, unknown>);
+      const res = await api.get<Department[]>("/departments", {
+        params: queryParams,
+      });
+      return {
+        data: res.data,
+        pagination: res.pagination!,
+      };
     },
     staleTime: 5 * 60 * 1000,
   });

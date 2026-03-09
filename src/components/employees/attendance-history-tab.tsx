@@ -17,11 +17,13 @@ export function AttendanceHistoryTab({ employeeId }: AttendanceHistoryTabProps) 
   const startDate = dayjs().subtract(3, "month").format("YYYY-MM-DD");
   const endDate = dayjs().format("YYYY-MM-DD");
 
-  const { data: attendanceRecords, isLoading } = useAttendance({
+  const { data: response, isLoading } = useAttendance({
     employeeId,
     startDate,
     endDate,
   });
+
+  const attendanceRecords = response?.data || [];
 
   if (isLoading) {
     return (

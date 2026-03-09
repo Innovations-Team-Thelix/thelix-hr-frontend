@@ -17,10 +17,12 @@ export function ClockInWidget() {
   const yesterday = dayjs().subtract(1, 'day').format('YYYY-MM-DD');
   
   // Fetch both yesterday and today to handle timezone offsets and overnight shifts
-  const { data: attendanceRecords, isLoading, refetch } = useAttendance({
+  const { data: response, isLoading, refetch } = useAttendance({
     startDate: yesterday,
     endDate: today,
   });
+
+  const attendanceRecords = response?.data || [];
 
   const { mutate: clockOut, isPending: isClockOutPending } = useClockOut();
   const [isModalOpen, setIsModalOpen] = useState(false);

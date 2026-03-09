@@ -71,4 +71,7 @@ export interface AttendanceFilters {
   departmentId?: string;
   sbuId?: string;
   status?: AttendanceStatus;
+  approvalStatus?: ApprovalStatus;
+  page?: number;
+  limit?: number;
 }

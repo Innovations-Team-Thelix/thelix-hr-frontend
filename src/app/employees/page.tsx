@@ -45,7 +45,7 @@ function EmployeesPageContent() {
 
   const [filters, setFilters] = useState<EmployeeFilters>({
     page: 1,
-    limit: 20,
+    limit: 10,
     joined: joinedParam || undefined,
     status: statusParam || undefined,
   });

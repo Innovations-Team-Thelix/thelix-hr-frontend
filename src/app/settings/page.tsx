@@ -28,17 +28,25 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import { Tabs } from "@/components/ui/tabs";
-import { useSbus, useDepartments } from "@/hooks";
+import { Pagination } from "@/components/ui/pagination";
+import { useSbus, useDepartments, useEmployees, usePaginatedDepartments } from "@/hooks";
 import api from "@/lib/api";
 import toast from "react-hot-toast";
-import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 
 // ─── Department Management ───────────────────────────
 
 function DepartmentManagement() {
   const queryClient = useQueryClient();
   const { data: sbus } = useSbus();
-  const { data: departments, isLoading } = useDepartments();
+  
+  const [page, setPage] = useState(1);
+  const limit = 10;
+
+  const { data: departmentsData, isLoading } = usePaginatedDepartments({ page, limit });
+  const departments = departmentsData?.data || [];
+  const pagination = departmentsData?.pagination;
+
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("");
@@ -196,6 +204,15 @@ function DepartmentManagement() {
               </TableBody>
             </Table>
           )}
+          {pagination && pagination.totalPages > 1 && (
+            <div className="border-t border-gray-100 p-4">
+              <Pagination
+                currentPage={pagination.page}
+                totalPages={pagination.totalPages}
+                onPageChange={setPage}
+              />
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
@@ -214,13 +231,19 @@ const ROLE_OPTIONS = [
 function UserManagement() {
   const queryClient = useQueryClient();
   const { data: sbus } = useSbus();
-  const { data: users, isLoading } = useQuery<any[]>({
-    queryKey: ["admin-users"],
-    queryFn: async () => {
-      const res = await api.get<any[]>("/employees?limit=100");
-      return res.data;
-    },
+  
+  const [page, setPage] = useState(1);
+  const limit = 10;
+
+  const { data: employeesData, isLoading } = useEmployees({ 
+    page, 
+    limit,
+    sortBy: "createdAt",
+    sortOrder: "desc"
   });
+  
+  const users = employeesData?.data || [];
+  const pagination = employeesData?.pagination;
 
   const [showForm, setShowForm] = useState(false);
   const [fullName, setFullName] = useState("");
@@ -468,6 +491,16 @@ function UserManagement() {
                 )}
               </TableBody>
             </Table>
+          )}
+
+          {pagination && pagination.totalPages > 1 && (
+            <div className="border-t border-gray-100 p-4">
+              <Pagination
+                currentPage={pagination.page}
+                totalPages={pagination.totalPages}
+                onPageChange={setPage}
+              />
+            </div>
           )}
         </CardContent>
       </Card>

@@ -5,6 +5,7 @@ import {
   AttendanceRecord,
   ApprovalStatus,
 } from '@/types/attendance';
+import { PaginatedResponse } from '@/types';
 import { toast } from 'react-hot-toast';
 
 export const attendanceKeys = {
@@ -15,12 +16,7 @@ export const attendanceKeys = {
 
 // --- API Functions ---
 
-const fetchAttendance = async (filters: AttendanceFilters) => {
-  const { data } = await api.get<AttendanceRecord[]>('/attendance', {
-    params: filters,
-  });
-  return data;
-};
+// Removed fetchAttendance as it is now integrated into the hook for better control
 
 const clockIn = async (payload: {
   workLocation: 'Onsite' | 'Remote';
@@ -81,9 +77,64 @@ const overrideAttendance = async ({
 // --- Hooks ---
 
 export function useAttendance(filters: AttendanceFilters, options?: { enabled?: boolean }) {
-  return useQuery({
+  return useQuery<PaginatedResponse<AttendanceRecord>>({
     queryKey: attendanceKeys.list(filters),
-    queryFn: () => fetchAttendance(filters),
+    queryFn: async () => {
+      const params = new URLSearchParams();
+
+      if (filters.startDate) params.set('startDate', filters.startDate);
+      if (filters.endDate) params.set('endDate', filters.endDate);
+      if (filters.employeeId) params.set('employeeId', filters.employeeId);
+      if (filters.departmentId) params.set('departmentId', filters.departmentId);
+      if (filters.sbuId) params.set('sbuId', filters.sbuId);
+      if (filters.status) params.set('status', filters.status);
+      if (filters.approvalStatus) params.set('approvalStatus', filters.approvalStatus);
+      if (filters.page) params.set('page', String(filters.page));
+      if (filters.limit) params.set('limit', String(filters.limit));
+
+      const response = await api.get<AttendanceRecord[]>('/attendance', {
+        params,
+      });
+
+      // Handle server-side pagination if available
+      if (response.pagination) {
+        return {
+          data: response.data,
+          pagination: response.pagination,
+          message: response.message,
+        };
+      }
+
+      // Fallback: Client-side pagination and filtering
+      let data = response.data;
+
+      // Filter by approvalStatus if backend didn't (client-side fallback)
+      if (filters.approvalStatus) {
+        data = data.filter((r) => r.approvalStatus === filters.approvalStatus);
+      }
+
+      const page = filters.page || 1;
+      const limit = filters.limit || 10;
+      const total = data.length;
+      const totalPages = Math.ceil(total / limit);
+      const start = (page - 1) * limit;
+      const end = start + limit;
+      
+      const paginatedData = data.slice(start, end);
+
+      return {
+        data: paginatedData,
+        pagination: {
+          total,
+          page,
+          limit,
+          totalPages,
+          hasNextPage: page < totalPages,
+          hasPrevPage: page > 1,
+        },
+        message: response.message,
+      };
+    },
     enabled: options?.enabled,
   });
 }
@@ -135,7 +186,7 @@ export function useOverrideAttendance() {
   return useMutation({
     mutationFn: overrideAttendance,
     onSuccess: () => {
-      toast.success('Attendance record overridden.');
+      toast.success('Attendance overridden successfully');
       queryClient.invalidateQueries({ queryKey: attendanceKeys.all });
     },
     onError: (error: any) => {

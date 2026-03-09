@@ -191,7 +191,7 @@ export default function EmployeeProfilePage() {
   const { data: disciplinaryActions, isLoading: disciplineLoading } =
     useEmployeeDisciplinaryActions(employeeId);
   const { data: salaryHistory } = useSalaryHistory(employeeId, { enabled: canViewCompensation });
-  const { data: employeesData } = useEmployees({ limit: 1000, status: "Active" });
+  const { data: employeesData } = useEmployees({ limit: 1000 });
   const { data: sbus } = useSbus();
   const updateEmployee = useUpdateEmployee();
   const createEvent = useCreateLifecycleEvent();
@@ -873,7 +873,7 @@ export default function EmployeeProfilePage() {
                             {formatCurrency(record.netPay, employee.currency || "NGN")}
                           </td>
                           <td className="px-4 py-3 text-gray-500">
-                            {employeesData?.data?.find(e => e.id === record.createdById)?.fullName || record.createdById}
+                            {record.createdBy?.fullName || record.createdById}
                           </td>
                         </tr>
                       ))}
