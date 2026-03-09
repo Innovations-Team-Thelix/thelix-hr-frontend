@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { Spinner } from "@/components/ui/loading";
 import { Select } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableHeader,
@@ -29,6 +30,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Modal } from "@/components/ui/modal";
 import toast from "react-hot-toast";
 
+import { Pagination } from "@/components/ui/pagination";
+
 type Tab = "Pending" | "Approved" | "Rejected" | "All";
 
 const STATUS_VARIANTS: Record<ApprovalStatus, "warning" | "success" | "danger" | "neutral"> = {
@@ -41,16 +44,34 @@ export default function AttendanceApprovalsPage() {
   const { user } = useAuthStore();
   const isAdmin = user?.role === "Admin";
 
-  const startDate = dayjs().startOf("month").format("YYYY-MM-DD");
-  const endDate   = dayjs().endOf("month").format("YYYY-MM-DD");
-
-  const { data: attendanceRecords, isLoading } = useAttendance({ startDate, endDate });
+  const [startDate, setStartDate] = useState(dayjs().startOf("month").format("YYYY-MM-DD"));
+  const [endDate, setEndDate] = useState(dayjs().endOf("month").format("YYYY-MM-DD"));
 
   const [activeTab, setActiveTab] = useState<Tab>("Pending");
+  const [page, setPage] = useState(1);
+  const limit = 10;
 
-  const filtered = (attendanceRecords ?? []).filter((r) =>
-    activeTab === "All" ? true : r.approvalStatus === activeTab
-  );
+  const handleDateChange = (value: string, type: 'start' | 'end') => {
+    if (type === 'start') setStartDate(value);
+    else setEndDate(value);
+    setPage(1);
+  };
+
+  const { data: response, isLoading } = useAttendance({
+    startDate,
+    endDate,
+    approvalStatus: activeTab === "All" ? undefined : (activeTab as ApprovalStatus),
+    page,
+    limit,
+  });
+
+  const attendanceRecords = response?.data || [];
+  const pagination = response?.pagination;
+
+  const handleTabChange = (tab: Tab) => {
+    setActiveTab(tab);
+    setPage(1);
+  };
 
   const { mutate: approve, isPending: isApprovePending } = useApproveAttendance();
   const { mutate: override, isPending: isOverridePending } = useOverrideAttendance();
@@ -122,9 +143,29 @@ export default function AttendanceApprovalsPage() {
   return (
     <AppLayout pageTitle="Attendance Approvals">
       <div className="space-y-6">
-        <div className="flex items-center gap-3">
-          <Clock className="h-6 w-6 text-primary" />
-          <h2 className="text-xl font-semibold text-gray-900">Attendance Approvals</h2>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <Clock className="h-6 w-6 text-primary" />
+            <h2 className="text-xl font-semibold text-gray-900">Attendance Approvals</h2>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <div className="w-40">
+              <Input
+                type="date"
+                value={startDate}
+                onChange={(e) => handleDateChange(e.target.value, 'start')}
+              />
+            </div>
+            <span className="text-gray-500">to</span>
+            <div className="w-40">
+              <Input
+                type="date"
+                value={endDate}
+                onChange={(e) => handleDateChange(e.target.value, 'end')}
+              />
+            </div>
+          </div>
         </div>
 
         {/* Filter tabs */}
@@ -132,7 +173,7 @@ export default function AttendanceApprovalsPage() {
           {tabs.map((tab) => (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => handleTabChange(tab)}
               className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
                 activeTab === tab
                   ? "border-primary text-primary"
@@ -140,11 +181,6 @@ export default function AttendanceApprovalsPage() {
               }`}
             >
               {tab}
-              {tab !== "All" && (
-                <span className="ml-1.5 rounded-full bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600">
-                  {(attendanceRecords ?? []).filter((r) => r.approvalStatus === tab).length}
-                </span>
-              )}
             </button>
           ))}
         </div>
@@ -153,87 +189,99 @@ export default function AttendanceApprovalsPage() {
           <CardContent className="p-0">
             {isLoading ? (
               <div className="flex justify-center py-8"><Spinner size="lg" /></div>
-            ) : filtered.length === 0 ? (
+            ) : attendanceRecords.length === 0 ? (
               <div className="py-16 text-center text-sm text-gray-500">
-                No {activeTab === "All" ? "" : activeTab.toLowerCase()} attendance records this month.
+                No {activeTab === "All" ? "" : activeTab.toLowerCase()} attendance records found for the selected period.
               </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Employee</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Time</TableHead>
-                    <TableHead>Location</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Reason</TableHead>
-                    <TableHead>Approval</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filtered.map((record) => (
-                    <TableRow key={record.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          <Avatar name={record.employee?.fullName || "Unknown"} size="sm" />
-                          <div>
-                            <div className="font-medium text-gray-900">{record.employee?.fullName}</div>
-                            <div className="text-xs text-gray-500">{record.employee?.department?.name || "-"}</div>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>{dayjs(record.date).format("MMM D, YYYY")}</TableCell>
-                      <TableCell>
-                        <div className="flex flex-col text-xs">
-                          <span>In: {record.clockInTime ? dayjs(record.clockInTime).format("HH:mm") : "-"}</span>
-                          <span>Out: {record.clockOutTime ? dayjs(record.clockOutTime).format("HH:mm") : "-"}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-xs text-gray-600">{record.workLocation}</span>
-                      </TableCell>
-                      <TableCell>
-                        {record.isLate ? <Badge variant="warning">Late</Badge> : <Badge variant="success">On Time</Badge>}
-                      </TableCell>
-                      <TableCell className="max-w-xs truncate text-sm text-gray-600">
-                        {record.lateReason || record.rejectionReason || "-"}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={STATUS_VARIANTS[record.approvalStatus]}>
-                          {record.approvalStatus}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          {record.approvalStatus === ApprovalStatus.Pending && (
-                            <>
-                              <Button size="sm" variant="outline"
-                                className="text-red-600 hover:bg-red-50 hover:text-red-700 border-red-200"
-                                onClick={() => openRejectModal(record.id)} disabled={isApprovePending}>
-                                <X className="h-4 w-4" />
-                              </Button>
-                              <Button size="sm" variant="outline"
-                                className="text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 border-emerald-200"
-                                onClick={() => handleApprove(record.id)} disabled={isApprovePending}>
-                                <Check className="h-4 w-4" />
-                              </Button>
-                            </>
-                          )}
-                          {isAdmin && (
-                            <Button size="sm" variant="outline"
-                              className="text-purple-600 hover:bg-purple-50 hover:text-purple-700 border-purple-200"
-                              onClick={() => openOverrideModal(record)} disabled={isOverridePending}
-                              title="HR Override">
-                              <ShieldCheck className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Employee</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Time</TableHead>
+                      <TableHead>Location</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Reason</TableHead>
+                      <TableHead>Approval</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {attendanceRecords.map((record) => (
+                      <TableRow key={record.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <Avatar name={record.employee?.fullName || "Unknown"} size="sm" />
+                            <div>
+                              <div className="font-medium text-gray-900">{record.employee?.fullName}</div>
+                              <div className="text-xs text-gray-500">{record.employee?.department?.name || "-"}</div>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>{dayjs(record.date).format("MMM D, YYYY")}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-col text-xs">
+                            <span>In: {record.clockInTime ? dayjs(record.clockInTime).format("HH:mm") : "-"}</span>
+                            <span>Out: {record.clockOutTime ? dayjs(record.clockOutTime).format("HH:mm") : "-"}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-xs text-gray-600">{record.workLocation}</span>
+                        </TableCell>
+                        <TableCell>
+                          {record.isLate ? <Badge variant="warning">Late</Badge> : <Badge variant="success">On Time</Badge>}
+                        </TableCell>
+                        <TableCell className="max-w-xs truncate text-sm text-gray-600">
+                          {record.lateReason || record.rejectionReason || "-"}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={STATUS_VARIANTS[record.approvalStatus]}>
+                            {record.approvalStatus}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            {record.approvalStatus === ApprovalStatus.Pending && (
+                              <>
+                                <Button size="sm" variant="outline"
+                                  className="text-red-600 hover:bg-red-50 hover:text-red-700 border-red-200"
+                                  onClick={() => openRejectModal(record.id)} disabled={isApprovePending}>
+                                  <X className="h-4 w-4" />
+                                </Button>
+                                <Button size="sm" variant="outline"
+                                  className="text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 border-emerald-200"
+                                  onClick={() => handleApprove(record.id)} disabled={isApprovePending}>
+                                  <Check className="h-4 w-4" />
+                                </Button>
+                              </>
+                            )}
+                            {isAdmin && (
+                              <Button size="sm" variant="outline"
+                                className="text-purple-600 hover:bg-purple-50 hover:text-purple-700 border-purple-200"
+                                onClick={() => openOverrideModal(record)} disabled={isOverridePending}
+                                title="HR Override">
+                                <ShieldCheck className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                
+                {pagination && pagination.totalPages > 1 && (
+                  <div className="border-t border-gray-100 px-4 py-3">
+                    <Pagination
+                      currentPage={pagination.page}
+                      totalPages={pagination.totalPages}
+                      onPageChange={setPage}
+                    />
+                  </div>
+                )}
+              </>
             )}
           </CardContent>
         </Card>

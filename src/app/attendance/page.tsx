@@ -1,10 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import dayjs from "dayjs";
 import { AppLayout } from "@/components/layout/app-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/loading";
+import { Pagination } from "@/components/ui/pagination";
 import {
   Table,
   TableHeader,
@@ -29,10 +31,12 @@ export default function MyAttendancePage() {
   const startDate = dayjs().startOf("month").format("YYYY-MM-DD");
   const endDate   = dayjs().format("YYYY-MM-DD");
 
-  const { data: records, isLoading } = useAttendance({ startDate, endDate });
+  const { data: response, isLoading } = useAttendance({ startDate, endDate });
+
+  const records = response?.data || [];
 
   // Derive stats from records
-  const stats = (records ?? []).reduce(
+  const stats = records.reduce(
     (acc, r) => {
       if (r.status === AttendanceStatus.Present || r.status === AttendanceStatus.Late) {
         acc.present++;
@@ -54,6 +58,15 @@ export default function MyAttendancePage() {
 
   const sorted = [...(records ?? [])].sort(
     (a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf()
+  );
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+  const totalPages = Math.ceil(sorted.length / itemsPerPage);
+  
+  const paginatedRecords = sorted.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
   );
 
   return (
@@ -99,8 +112,9 @@ export default function MyAttendancePage() {
             ) : sorted.length === 0 ? (
               <div className="py-12 text-center text-sm text-gray-500">No attendance records yet this month.</div>
             ) : (
-              <Table>
-                <TableHeader>
+              <>
+                <Table>
+                  <TableHeader>
                   <TableRow>
                     <TableHead>Date</TableHead>
                     <TableHead>Status</TableHead>
@@ -111,7 +125,7 @@ export default function MyAttendancePage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {sorted.map((record) => {
+                  {paginatedRecords.map((record) => {
                     const statusInfo = STATUS_BADGE[record.status] ?? { variant: "neutral" as const, label: record.status };
                     const approvalVariant =
                       record.approvalStatus === ApprovalStatus.Approved ? "success" :
@@ -133,6 +147,23 @@ export default function MyAttendancePage() {
                   })}
                 </TableBody>
               </Table>
+              {totalPages > 1 && (
+                <div className="border-t border-gray-100 px-4 py-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-gray-500">
+                      Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
+                      {Math.min(currentPage * itemsPerPage, sorted.length)} of{" "}
+                      {sorted.length} entries
+                    </p>
+                    <Pagination
+                      currentPage={currentPage}
+                      totalPages={totalPages}
+                      onPageChange={setCurrentPage}
+                    />
+                  </div>
+                </div>
+              )}
+              </>
             )}
           </CardContent>
         </Card>

@@ -55,9 +55,35 @@ export function useEmployees(
         params,
       });
 
+      // Handle server-side pagination if available
+      if (response.pagination) {
+        return {
+          data: response.data,
+          pagination: response.pagination,
+          message: response.message,
+        };
+      }
+
+      // Fallback: Client-side pagination if server doesn't support it
+      const page = filters.page || 1;
+      const limit = filters.limit || 10;
+      const total = response.data.length;
+      const totalPages = Math.ceil(total / limit);
+      const start = (page - 1) * limit;
+      const end = start + limit;
+      
+      const paginatedData = response.data.slice(start, end);
+
       return {
-        data: response.data,
-        pagination: response.pagination!,
+        data: paginatedData,
+        pagination: {
+          total,
+          page,
+          limit,
+          totalPages,
+          hasNextPage: page < totalPages,
+          hasPrevPage: page > 1,
+        },
         message: response.message,
       };
     },

@@ -151,12 +151,14 @@ export default function RosterPage() {
     endDate: rangeTo ? toDateStr(rangeTo) : "",
   }, { enabled: !!rangeFrom && !!rangeTo });
 
-  const { data: attendanceEntries, isLoading: isAttendanceLoading } = useAttendance({
+  const { data: attendanceResponse, isLoading: isAttendanceLoading } = useAttendance({
     departmentId: selectedDeptId || undefined,
     sbuId: selectedSbuId || undefined,
     startDate: rangeFrom ? toDateStr(rangeFrom) : "",
     endDate: rangeTo ? toDateStr(rangeTo) : "",
   }, { enabled: !!rangeFrom && !!rangeTo });
+
+  const attendanceEntries = attendanceResponse?.data || [];
 
   const { data: employeesData } = useEmployees({
     departmentId: selectedDeptId || undefined,

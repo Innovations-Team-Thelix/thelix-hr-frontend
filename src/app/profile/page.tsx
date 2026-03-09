@@ -653,7 +653,7 @@ export default function ProfilePage() {
                             {formatCurrency(record.netPay, profile.currency || "NGN")}
                           </td>
                           <td className="px-4 py-3 text-gray-500">
-                            {record.createdById}
+                            {record.createdBy?.fullName || record.createdById}
                           </td>
                         </tr>
                       ))}

@@ -49,6 +49,11 @@ export interface SalaryRecord {
   isActive: boolean;
   createdById: string;
   createdAt: string;
+  createdBy?: {
+    id: string;
+    fullName: string;
+    employeeId: string;
+  };
 }
 
 export interface Employee {
