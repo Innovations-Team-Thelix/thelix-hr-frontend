@@ -19,6 +19,10 @@ import {
   Paperclip,
   Plus,
   Upload,
+  Package,
+  Pencil,
+  Trash2,
+  LogOut,
 } from "lucide-react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -51,6 +55,12 @@ import {
   useSbus,
   useDepartments,
   useSalaryHistory,
+  useEmployeeAssets,
+  useCreateAsset,
+  useUpdateAsset,
+  useDeleteAsset,
+  useExitEmployee,
+  useEffectiveRole,
 } from "@/hooks";
 import { useDownloadOfferLetter } from "@/hooks/useOfferLetters";
 import { ProbationActionModal } from "@/components/employees/probation-action-modal";
@@ -59,7 +69,8 @@ import { EmployeeTags } from "@/components/employees/employee-tags";
 import { formatDate, formatCurrency, getInitials, formatBirthDate,
 } from "@/lib/utils";
 import { AttendanceHistoryTab } from "@/components/employees/attendance-history-tab";
-import type { LifecycleEventType, ViolationType, DisciplinarySeverity, SalaryRecord, SalaryComponent } from "@/types";
+import { CompensationSummary } from "@/components/employees/compensation-summary";
+import type { LifecycleEventType, ViolationType, DisciplinarySeverity, SalaryRecord, SalaryComponent, AssetCondition } from "@/types";
 
 const EVENT_ICONS: Record<string, React.ElementType> = {
   Promotion: TrendingUp,
@@ -152,9 +163,10 @@ export default function EmployeeProfilePage() {
   const { user } = useAuthStore();
   const employeeId = params.id as string;
 
-  const isAdmin = user?.role === "Admin";
-  const isFinance = user?.role === "Finance";
-  const isSBUHead = user?.role === "SBUHead";
+  const effectiveRole = useEffectiveRole();
+  const isAdmin = effectiveRole === "Admin";
+  const isFinance = effectiveRole === "Finance";
+  const isSBUHead = effectiveRole === "SBUHead";
   const isSelf = user?.employeeId === employeeId;
   const canViewSensitiveInfo = isAdmin || isSelf;
   const canViewCompensation = isAdmin || isFinance || isSelf;
@@ -184,6 +196,18 @@ export default function EmployeeProfilePage() {
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [probationModalOpen, setProbationModalOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [assetModalOpen, setAssetModalOpen] = useState(false);
+  const [editingAssetId, setEditingAssetId] = useState<string | null>(null);
+  const [assetForm, setAssetForm] = useState({
+    equipmentType: "",
+    assetTag: "",
+    brand: "",
+    model: "",
+    condition: "BrandNew" as AssetCondition,
+    dateIssued: "",
+    dateReturned: "",
+    notes: "",
+  });
 
   const { data: employee, isLoading } = useEmployee(employeeId);
   const { data: lifecycleEvents, isLoading: eventsLoading } =
@@ -191,6 +215,7 @@ export default function EmployeeProfilePage() {
   const { data: disciplinaryActions, isLoading: disciplineLoading } =
     useEmployeeDisciplinaryActions(employeeId);
   const { data: salaryHistory } = useSalaryHistory(employeeId, { enabled: canViewCompensation });
+  const { data: assets, isLoading: assetsLoading } = useEmployeeAssets(employeeId);
   const { data: employeesData } = useEmployees({ limit: 1000 });
   const { data: sbus } = useSbus();
   const updateEmployee = useUpdateEmployee();
@@ -198,6 +223,19 @@ export default function EmployeeProfilePage() {
   const uploadOfferLetter = useUploadOfferLetter();
   const deleteOfferLetter = useDeleteOfferLetter();
   const downloadOfferLetter = useDownloadOfferLetter();
+  const createAsset = useCreateAsset();
+  const updateAsset = useUpdateAsset();
+  const deleteAsset = useDeleteAsset();
+  const exitEmployee = useExitEmployee();
+
+  const [exitModalOpen, setExitModalOpen] = useState(false);
+  const [exitForm, setExitForm] = useState({
+    exitType: "Resignation" as "Resignation" | "Termination",
+    exitDate: new Date().toISOString().split("T")[0],
+    reason: "",
+    lastWorkingDay: "",
+    notes: "",
+  });
 
   const [offerLetterFile, setOfferLetterFile] = useState<File | null>(null);
 
@@ -403,6 +441,10 @@ export default function EmployeeProfilePage() {
     ...(canViewDocuments ? [{ id: "documents", label: "Documents" }] : []),
     ...(employee?.subordinates?.length ? [{ id: "team", label: "Team" }] : []),
     ...(canViewAttendance ? [{ id: "attendance", label: "Attendance" }] : []),
+    ...(isAdmin || isSBUHead || isSelf ? [{
+      id: "assets",
+      label: `Assets${assets?.length ? ` (${assets.length})` : ""}`,
+    }] : []),
     ...(isAdmin ? [{ id: "offer-letter", label: "Offer Letter" }] : []),
     ...(isAdmin ? [{ id: "audit", label: "Audit Trail" }] : []),
   ];
@@ -534,6 +576,25 @@ export default function EmployeeProfilePage() {
                     Edit
                   </Button>
                 )}
+                {isAdmin && employee.employmentStatus === "Active" && (
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={() => {
+                      setExitForm({
+                        exitType: "Resignation",
+                        exitDate: new Date().toISOString().split("T")[0],
+                        reason: "",
+                        lastWorkingDay: "",
+                        notes: "",
+                      });
+                      setExitModalOpen(true);
+                    }}
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Exit Employee
+                  </Button>
+                )}
               </div>
             </div>
           </CardContent>
@@ -614,7 +675,7 @@ export default function EmployeeProfilePage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Employment Details</CardTitle>
-              {(isAdmin || isSBUHead) && employee.probationEndDate && (
+              {isAdmin && employee.probationEndDate && (
                 <Button size="sm" onClick={() => setProbationModalOpen(true)}>
                   Manage Probation
                 </Button>
@@ -693,146 +754,20 @@ export default function EmployeeProfilePage() {
 
         {/* Compensation Tab */}
         {activeTab === "compensation" && canViewCompensation && (
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Compensation Summary</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {employee.salaryBreakdown ? (
-                  <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-                    <div className="rounded-lg bg-blue-50 p-4">
-                      <p className="text-sm font-medium text-blue-600">Base Salary</p>
-                      <p className="mt-2 text-2xl font-bold text-blue-900">
-                        {formatCurrency(employee.salaryBreakdown.baseSalary, employee.currency || "NGN")}
-                      </p>
-                    </div>
-                    <div className="rounded-lg bg-green-50 p-4">
-                      <p className="text-sm font-medium text-green-600">Gross Pay</p>
-                      <p className="mt-2 text-2xl font-bold text-green-900">
-                        {formatCurrency(employee.salaryBreakdown.grossPay, employee.currency || "NGN")}
-                      </p>
-                    </div>
-                    <div className="rounded-lg bg-purple-50 p-4">
-                      <p className="text-sm font-medium text-purple-600">Net Pay</p>
-                      <p className="mt-2 text-2xl font-bold text-purple-900">
-                        {formatCurrency(employee.salaryBreakdown.netPay, employee.currency || "NGN")}
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <dl className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                    <InfoField
-                      label="Gross Pay"
-                      value={formatCurrency(
-                        employee.monthlySalary,
-                        employee.currency || "NGN"
-                      )}
-                    />
-                    {employee.netPay && (
-                      <InfoField
-                        label="Net Pay"
-                        value={formatCurrency(
-                          employee.netPay,
-                          employee.currency || "NGN"
-                        )}
-                      />
-                    )}
-                    <InfoField label="Salary Band" value={employee.salaryBand} />
-                    <InfoField label="Currency" value={employee.currency} />
-                    <InfoField
-                      label="Salary Effective Date"
-                      value={formatDate(employee.salaryEffectiveDate)}
-                    />
-                    <InfoField
-                      label="Last Salary Review"
-                      value={formatDate(employee.lastSalaryReview)}
-                    />
-                  </dl>
-                )}
-              </CardContent>
-            </Card>
-
-            {employee.salaryBreakdown && (
-              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-                {/* Earnings */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Earnings</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      <div className="flex justify-between border-b pb-2">
-                        <span className="font-medium">Base Salary</span>
-                        <span>{formatCurrency(employee.salaryBreakdown.baseSalary, employee.currency || "NGN")}</span>
-                      </div>
-                      {employee.salaryBreakdown.allowances.map((allowance, index) => (
-                        <div key={index} className="flex justify-between border-b pb-2">
-                          <span className="font-medium">{allowance.name}</span>
-                          <span>{formatCurrency(allowance.amount, employee.currency || "NGN")}</span>
-                        </div>
-                      ))}
-                      <div className="flex justify-between pt-2 font-bold">
-                        <span>Total Earnings</span>
-                        <span>{formatCurrency(employee.salaryBreakdown.grossPay, employee.currency || "NGN")}</span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Deductions */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Deductions</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      <div className="flex justify-between border-b pb-2">
-                        <span className="font-medium">Tax</span>
-                        <span className="text-red-600">-{formatCurrency(employee.salaryBreakdown.tax, employee.currency || "NGN")}</span>
-                      </div>
-                      <div className="flex justify-between border-b pb-2">
-                        <span className="font-medium">Pension</span>
-                        <span className="text-red-600">-{formatCurrency(employee.salaryBreakdown.pension, employee.currency || "NGN")}</span>
-                      </div>
-                      {employee.salaryBreakdown.deductions.map((deduction, index) => (
-                        <div key={index} className="flex justify-between border-b pb-2">
-                          <span className="font-medium">{deduction.name}</span>
-                          <span className="text-red-600">-{formatCurrency(deduction.amount, employee.currency || "NGN")}</span>
-                        </div>
-                      ))}
-                      <div className="flex justify-between pt-2 font-bold">
-                        <span>Total Deductions</span>
-                        <span className="text-red-600">
-                          -{formatCurrency(
-                            (employee.salaryBreakdown.grossPay - employee.salaryBreakdown.netPay),
-                            employee.currency || "NGN"
-                          )}
-                        </span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            )}
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Bank Details</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <dl className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                  <InfoField label="Account Name" value={employee.accountName} />
-                  <InfoField
-                    label="Account Number"
-                    value={employee.accountNumber}
-                  />
-                  <InfoField label="Bank Name" value={employee.bankName} />
-                </dl>
-              </CardContent>
-            </Card>
-          </div>
+          <CompensationSummary
+            salaryBreakdown={employee.salaryBreakdown}
+            currency={employee.currency}
+            monthlySalary={employee.monthlySalary}
+            netPay={employee.netPay}
+            salaryBand={employee.salaryBand}
+            salaryEffectiveDate={employee.salaryEffectiveDate}
+            lastSalaryReview={employee.lastSalaryReview}
+            accountName={employee.accountName}
+            accountNumber={employee.accountNumber}
+            bankName={employee.bankName}
+          />
         )}
+
 
         {/* Salary History Tab */}
         {activeTab === "salary-history" && canViewCompensation && (
@@ -1143,6 +1078,247 @@ export default function EmployeeProfilePage() {
             <AttendanceHistoryTab employeeId={employeeId} />
           </div>
         )}
+
+        {/* Assets Tab */}
+        {activeTab === "assets" && (isAdmin || isSBUHead || isSelf) && (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Package className="h-5 w-5 text-primary" />
+                Issued Assets
+              </CardTitle>
+              {(isAdmin || isSBUHead) && (
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setEditingAssetId(null);
+                    setAssetForm({ equipmentType: "", assetTag: "", brand: "", model: "", condition: "BrandNew", dateIssued: new Date().toISOString().split("T")[0], dateReturned: "", notes: "" });
+                    setAssetModalOpen(true);
+                  }}
+                >
+                  <Plus className="h-4 w-4" />
+                  Issue Asset
+                </Button>
+              )}
+            </CardHeader>
+            <CardContent>
+              {assetsLoading ? (
+                <div className="space-y-3">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <Skeleton key={i} className="h-16 w-full" variant="rectangular" />
+                  ))}
+                </div>
+              ) : !assets || assets.length === 0 ? (
+                <div className="py-12 text-center text-sm text-gray-500">
+                  No assets issued to this employee
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200 text-left text-xs font-medium uppercase tracking-wide text-gray-500">
+                        <th className="px-4 py-3">Equipment</th>
+                        <th className="px-4 py-3">Asset Tag</th>
+                        <th className="px-4 py-3">Brand / Model</th>
+                        <th className="px-4 py-3">Condition</th>
+                        <th className="px-4 py-3">Date Issued</th>
+                        <th className="px-4 py-3">Date Returned</th>
+                        <th className="px-4 py-3">Status</th>
+                        {(isAdmin || isSBUHead) && <th className="px-4 py-3" />}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {assets.map((asset) => (
+                        <tr key={asset.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 font-medium text-gray-900">{asset.equipmentType}</td>
+                          <td className="px-4 py-3 text-gray-600 font-mono text-xs">{asset.assetTag || "-"}</td>
+                          <td className="px-4 py-3 text-gray-600">
+                            {[asset.brand, asset.model].filter(Boolean).join(" ") || "-"}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                              asset.condition === "BrandNew" ? "bg-green-100 text-green-700" :
+                              asset.condition === "Good" ? "bg-blue-100 text-blue-700" :
+                              asset.condition === "Fair" ? "bg-amber-100 text-amber-700" :
+                              "bg-red-100 text-red-700"
+                            }`}>
+                              {asset.condition === "BrandNew" ? "Brand New" : asset.condition}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-gray-600">{formatDate(asset.dateIssued)}</td>
+                          <td className="px-4 py-3 text-gray-600">{asset.dateReturned ? formatDate(asset.dateReturned) : "-"}</td>
+                          <td className="px-4 py-3">
+                            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                              asset.isActive ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-600"
+                            }`}>
+                              {asset.isActive ? "Active" : "Returned"}
+                            </span>
+                          </td>
+                          {(isAdmin || isSBUHead) && (
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => {
+                                    setEditingAssetId(asset.id);
+                                    setAssetForm({
+                                      equipmentType: asset.equipmentType,
+                                      assetTag: asset.assetTag || "",
+                                      brand: asset.brand || "",
+                                      model: asset.model || "",
+                                      condition: asset.condition,
+                                      dateIssued: asset.dateIssued.split("T")[0],
+                                      dateReturned: asset.dateReturned ? asset.dateReturned.split("T")[0] : "",
+                                      notes: asset.notes || "",
+                                    });
+                                    setAssetModalOpen(true);
+                                  }}
+                                  className="rounded p-1 text-gray-400 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                                  title="Edit asset"
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </button>
+                                {isAdmin && (
+                                  <button
+                                    onClick={async () => {
+                                      if (!confirm("Delete this asset record?")) return;
+                                      await deleteAsset.mutateAsync(asset.id);
+                                    }}
+                                    className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                                    title="Delete asset"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Asset Modal */}
+        <Modal
+          isOpen={assetModalOpen}
+          onClose={() => { setAssetModalOpen(false); setEditingAssetId(null); }}
+          title={editingAssetId ? "Edit Asset" : "Issue Asset"}
+          size="md"
+        >
+          <div className="space-y-4">
+            <Input
+              label="Equipment Type"
+              required
+              placeholder="e.g. Laptop, Monitor, Phone"
+              value={assetForm.equipmentType}
+              onChange={(e) => setAssetForm((f) => ({ ...f, equipmentType: e.target.value }))}
+            />
+            <div className="grid grid-cols-2 gap-4">
+              <Input
+                label="Asset Tag / Serial No."
+                placeholder="e.g. THL-001"
+                value={assetForm.assetTag}
+                onChange={(e) => setAssetForm((f) => ({ ...f, assetTag: e.target.value }))}
+              />
+              <Select
+                label="Condition"
+                options={[
+                  { label: "Brand New", value: "BrandNew" },
+                  { label: "Good", value: "Good" },
+                  { label: "Fair", value: "Fair" },
+                  { label: "Poor", value: "Poor" },
+                ]}
+                value={assetForm.condition}
+                onChange={(e) => setAssetForm((f) => ({ ...f, condition: e.target.value as AssetCondition }))}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Input
+                label="Brand"
+                placeholder="e.g. Dell, Apple"
+                value={assetForm.brand}
+                onChange={(e) => setAssetForm((f) => ({ ...f, brand: e.target.value }))}
+              />
+              <Input
+                label="Model"
+                placeholder="e.g. XPS 15, MacBook Pro"
+                value={assetForm.model}
+                onChange={(e) => setAssetForm((f) => ({ ...f, model: e.target.value }))}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Input
+                label="Date Issued"
+                type="date"
+                required
+                value={assetForm.dateIssued}
+                onChange={(e) => setAssetForm((f) => ({ ...f, dateIssued: e.target.value }))}
+              />
+              <Input
+                label="Date Returned"
+                type="date"
+                value={assetForm.dateReturned}
+                onChange={(e) => setAssetForm((f) => ({ ...f, dateReturned: e.target.value }))}
+              />
+            </div>
+            <Textarea
+              label="Notes"
+              placeholder="Additional notes..."
+              rows={2}
+              value={assetForm.notes}
+              onChange={(e) => setAssetForm((f) => ({ ...f, notes: e.target.value }))}
+            />
+            <div className="flex justify-end gap-3 pt-2">
+              <Button variant="outline" onClick={() => { setAssetModalOpen(false); setEditingAssetId(null); }}>
+                Cancel
+              </Button>
+              <Button
+                loading={createAsset.isPending || updateAsset.isPending}
+                onClick={async () => {
+                  if (!assetForm.equipmentType || !assetForm.dateIssued) {
+                    toast.error("Equipment type and date issued are required.");
+                    return;
+                  }
+                  if (editingAssetId) {
+                    await updateAsset.mutateAsync({
+                      id: editingAssetId,
+                      data: {
+                        equipmentType: assetForm.equipmentType,
+                        assetTag: assetForm.assetTag || undefined,
+                        brand: assetForm.brand || undefined,
+                        model: assetForm.model || undefined,
+                        condition: assetForm.condition,
+                        dateIssued: assetForm.dateIssued,
+                        dateReturned: assetForm.dateReturned || null,
+                        notes: assetForm.notes || undefined,
+                        isActive: !assetForm.dateReturned,
+                      },
+                    });
+                  } else {
+                    await createAsset.mutateAsync({
+                      employeeId,
+                      equipmentType: assetForm.equipmentType,
+                      assetTag: assetForm.assetTag || undefined,
+                      brand: assetForm.brand || undefined,
+                      model: assetForm.model || undefined,
+                      condition: assetForm.condition,
+                      dateIssued: assetForm.dateIssued,
+                      notes: assetForm.notes || undefined,
+                    });
+                  }
+                  setAssetModalOpen(false);
+                  setEditingAssetId(null);
+                }}
+              >
+                {editingAssetId ? "Save Changes" : "Issue Asset"}
+              </Button>
+            </div>
+          </div>
+        </Modal>
 
         {/* Offer Letter Tab */}
         {activeTab === "offer-letter" && isAdmin && (
@@ -1708,6 +1884,90 @@ export default function EmployeeProfilePage() {
                   </span>
                 )}
               </div>
+            </div>
+          </div>
+        </Modal>
+
+        {/* Exit Employee Modal */}
+        <Modal
+          isOpen={exitModalOpen}
+          onClose={() => setExitModalOpen(false)}
+          title="Exit Employee"
+          size="md"
+        >
+          <div className="space-y-4">
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+              This action will update the employee's status and send notification emails. It cannot be undone.
+            </div>
+            <Select
+              label="Exit Type"
+              required
+              options={[
+                { label: "Resignation (Voluntary)", value: "Resignation" },
+                { label: "Termination (Dismissed)", value: "Termination" },
+              ]}
+              value={exitForm.exitType}
+              onChange={(e) => setExitForm((f) => ({ ...f, exitType: e.target.value as "Resignation" | "Termination" }))}
+            />
+            <div className="grid grid-cols-2 gap-4">
+              <Input
+                label="Exit Date"
+                type="date"
+                required
+                value={exitForm.exitDate}
+                onChange={(e) => setExitForm((f) => ({ ...f, exitDate: e.target.value }))}
+              />
+              <Input
+                label="Last Working Day"
+                type="date"
+                value={exitForm.lastWorkingDay}
+                onChange={(e) => setExitForm((f) => ({ ...f, lastWorkingDay: e.target.value }))}
+              />
+            </div>
+            <Textarea
+              label="Reason"
+              required
+              placeholder={exitForm.exitType === "Resignation" ? "e.g. Personal reasons, better opportunity..." : "e.g. Performance issues, policy violation..."}
+              rows={3}
+              value={exitForm.reason}
+              onChange={(e) => setExitForm((f) => ({ ...f, reason: e.target.value }))}
+            />
+            <Textarea
+              label="Additional Notes"
+              placeholder="Any additional details..."
+              rows={2}
+              value={exitForm.notes}
+              onChange={(e) => setExitForm((f) => ({ ...f, notes: e.target.value }))}
+            />
+            <div className="flex justify-end gap-3 pt-2">
+              <Button variant="outline" onClick={() => setExitModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                loading={exitEmployee.isPending}
+                onClick={async () => {
+                  if (!exitForm.reason.trim()) {
+                    toast.error("Reason is required.");
+                    return;
+                  }
+                  await exitEmployee.mutateAsync({
+                    id: employeeId,
+                    data: {
+                      exitType: exitForm.exitType,
+                      exitDate: exitForm.exitDate,
+                      reason: exitForm.reason,
+                      lastWorkingDay: exitForm.lastWorkingDay || undefined,
+                      notes: exitForm.notes || undefined,
+                    },
+                  });
+                  setExitModalOpen(false);
+                  toast.success(`Employee ${exitForm.exitType === "Termination" ? "terminated" : "resignation recorded"} successfully.`);
+                }}
+              >
+                <LogOut className="h-4 w-4" />
+                Confirm Exit
+              </Button>
             </div>
           </div>
         </Modal>

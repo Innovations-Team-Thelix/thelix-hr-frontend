@@ -51,6 +51,7 @@ interface AuthState {
   token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  viewAs: 'Employee' | null;
 
   // Actions
   login: (email: string, password: string) => Promise<LoginResponse>;
@@ -59,6 +60,7 @@ interface AuthState {
   refreshToken: () => Promise<void>;
   checkAuth: () => void;
   setProfile: (profile: Employee) => void;
+  setViewAs: (role: 'Employee' | null) => void;
 }
 
 // ─── Store ─────────────────────────────────────────────────
@@ -69,6 +71,9 @@ export const useAuth = create<AuthState>((set, get) => ({
   token: null,
   isAuthenticated: false,
   isLoading: true,
+  viewAs: null,
+
+  setViewAs: (role) => set({ viewAs: role }),
 
   /**
    * Authenticate with email and password.
@@ -159,6 +164,7 @@ export const useAuth = create<AuthState>((set, get) => ({
       token: null,
       isAuthenticated: false,
       isLoading: false,
+      viewAs: null,
     });
 
     if (typeof window !== 'undefined') {

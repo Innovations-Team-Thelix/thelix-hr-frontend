@@ -144,7 +144,7 @@ export function useClockIn() {
   return useMutation({
     mutationFn: clockIn,
     onSuccess: () => {
-      toast.success('Clocked in successfully');
+      toast.success('Clock-in awaiting approval');
       queryClient.invalidateQueries({ queryKey: attendanceKeys.all });
     },
     onError: (error: any) => {
@@ -171,8 +171,12 @@ export function useApproveAttendance() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: approveAttendance,
-    onSuccess: () => {
-      toast.success('Attendance updated successfully');
+    onSuccess: (data, variables) => {
+      if (variables.approved) {
+        toast.success('Clock-in approval successful');
+      } else {
+        toast.success('Attendance rejected successfully');
+      }
       queryClient.invalidateQueries({ queryKey: attendanceKeys.all });
     },
     onError: (error: any) => {

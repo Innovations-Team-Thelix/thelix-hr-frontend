@@ -33,9 +33,10 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { DocumentList } from "@/components/documents/document-list";
 import { UploadDocumentModal } from "@/components/documents/upload-document-modal";
 import { useMyProfile, useUpdateMyProfile, useMyLeaveBalances, useSalaryHistory,
-  useAuthStore
+  useAuthStore, useEffectiveRole
 } from "@/hooks";
 import { AttendanceHistoryTab } from "@/components/employees/attendance-history-tab";
+import { CompensationSummary } from "@/components/employees/compensation-summary";
 import { useRoster } from "@/hooks/useRoster";
 import { formatDate, formatCurrency, cn, formatBirthDate } from "@/lib/utils";
 
@@ -94,7 +95,8 @@ function InfoRow({
 export default function ProfilePage() {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const { user } = useAuthStore();
-  const isAdmin = user?.role === "Admin";
+  const effectiveRole = useEffectiveRole();
+  const isAdmin = effectiveRole === "Admin";
   const { data: profile, isLoading } = useMyProfile();
   const { data: leaveBalances, isLoading: balancesLoading } = useMyLeaveBalances();
   const { data: salaryHistory } = useSalaryHistory(profile?.id || "", { enabled: !!profile });
@@ -482,136 +484,17 @@ export default function ProfilePage() {
 
         {/* Compensation Tab */}
         {activeTab === "compensation" && (
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Compensation Summary</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {profile.salaryBreakdown ? (
-                  <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-                    <div className="rounded-lg bg-blue-50 p-4">
-                      <p className="text-sm font-medium text-blue-600">Base Salary</p>
-                      <p className="mt-2 text-2xl font-bold text-blue-900">
-                        {formatCurrency(profile.salaryBreakdown.baseSalary, profile.currency || "NGN")}
-                      </p>
-                    </div>
-                    <div className="rounded-lg bg-green-50 p-4">
-                      <p className="text-sm font-medium text-green-600">Gross Pay</p>
-                      <p className="mt-2 text-2xl font-bold text-green-900">
-                        {formatCurrency(profile.salaryBreakdown.grossPay, profile.currency || "NGN")}
-                      </p>
-                    </div>
-                    <div className="rounded-lg bg-purple-50 p-4">
-                      <p className="text-sm font-medium text-purple-600">Net Pay</p>
-                      <p className="mt-2 text-2xl font-bold text-purple-900">
-                        {formatCurrency(profile.salaryBreakdown.netPay, profile.currency || "NGN")}
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <dl className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                    <InfoField
-                      label="Gross Pay"
-                      value={formatCurrency(
-                        profile.monthlySalary,
-                        profile.currency || "NGN"
-                      )}
-                    />
-                    <InfoField label="Salary Band" value={profile.salaryBand} />
-                    <InfoField label="Currency" value={profile.currency} />
-                    <InfoField
-                      label="Salary Effective Date"
-                      value={formatDate(profile.salaryEffectiveDate)}
-                    />
-                    <InfoField
-                      label="Last Salary Review"
-                      value={formatDate(profile.lastSalaryReview)}
-                    />
-                  </dl>
-                )}
-              </CardContent>
-            </Card>
-
-            {profile.salaryBreakdown && (
-              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-                {/* Earnings */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Earnings</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      <div className="flex justify-between border-b pb-2">
-                        <span className="font-medium">Base Salary</span>
-                        <span>{formatCurrency(profile.salaryBreakdown.baseSalary, profile.currency || "NGN")}</span>
-                      </div>
-                      {profile.salaryBreakdown.allowances.map((allowance, index) => (
-                        <div key={index} className="flex justify-between border-b pb-2">
-                          <span className="font-medium">{allowance.name}</span>
-                          <span>{formatCurrency(allowance.amount, profile.currency || "NGN")}</span>
-                        </div>
-                      ))}
-                      <div className="flex justify-between pt-2 font-bold">
-                        <span>Total Earnings</span>
-                        <span>{formatCurrency(profile.salaryBreakdown.grossPay, profile.currency || "NGN")}</span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Deductions */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Deductions</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      <div className="flex justify-between border-b pb-2">
-                        <span className="font-medium">Tax</span>
-                        <span className="text-red-600">-{formatCurrency(profile.salaryBreakdown.tax, profile.currency || "NGN")}</span>
-                      </div>
-                      <div className="flex justify-between border-b pb-2">
-                        <span className="font-medium">Pension</span>
-                        <span className="text-red-600">-{formatCurrency(profile.salaryBreakdown.pension, profile.currency || "NGN")}</span>
-                      </div>
-                      {profile.salaryBreakdown.deductions.map((deduction, index) => (
-                        <div key={index} className="flex justify-between border-b pb-2">
-                          <span className="font-medium">{deduction.name}</span>
-                          <span className="text-red-600">-{formatCurrency(deduction.amount, profile.currency || "NGN")}</span>
-                        </div>
-                      ))}
-                      <div className="flex justify-between pt-2 font-bold">
-                        <span>Total Deductions</span>
-                        <span className="text-red-600">
-                          -{formatCurrency(
-                            (profile.salaryBreakdown.grossPay - profile.salaryBreakdown.netPay),
-                            profile.currency || "NGN"
-                          )}
-                        </span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            )}
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Bank Details</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <dl className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                  <InfoField label="Account Name" value={profile.accountName} />
-                  <InfoField
-                    label="Account Number"
-                    value={profile.accountNumber}
-                  />
-                  <InfoField label="Bank Name" value={profile.bankName} />
-                </dl>
-              </CardContent>
-            </Card>
-          </div>
+          <CompensationSummary
+            salaryBreakdown={profile.salaryBreakdown}
+            currency={profile.currency}
+            monthlySalary={profile.monthlySalary}
+            salaryBand={profile.salaryBand}
+            salaryEffectiveDate={profile.salaryEffectiveDate}
+            lastSalaryReview={profile.lastSalaryReview}
+            accountName={profile.accountName}
+            accountNumber={profile.accountNumber}
+            bankName={profile.bankName}
+          />
         )}
 
         {/* Salary History Tab */}

@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { Skeleton } from "@/components/ui/loading";
 import { Badge } from "@/components/ui/badge";
-import { useAuthStore } from "@/hooks";
+import { useAuthStore, useEffectiveRole } from "@/hooks";
 import { usePolicies, useUploadPolicy, useDeletePolicy, useDownloadPolicy } from "@/hooks/usePolicies";
 import { formatDate } from "@/lib/utils";
 
@@ -18,7 +18,8 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1
 
 export default function PolicyPage() {
   const { user } = useAuthStore();
-  const isAdmin = user?.role === "Admin";
+  const effectiveRole = useEffectiveRole();
+  const isAdmin = effectiveRole === "Admin";
 
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [previewPolicy, setPreviewPolicy] = useState<any | null>(null);
