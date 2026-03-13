@@ -53,6 +53,7 @@ import {
   useCelebrations,
   useSbus,
   useEffectiveRole,
+  useEmployee,
 } from "@/hooks";
 import { useAuth } from "@/hooks/useAuth";
 import { cn, formatDate } from "@/lib/utils";
@@ -288,6 +289,7 @@ function getGreeting() {
 // ─── Main page ───────────────────────────────────────────
 export default function DashboardPage() {
   const { user } = useAuth();
+  const { data: currentEmployee } = useEmployee(user?.employeeId ?? "");
   const effectiveRole = useEffectiveRole();
   const isSbuHead = effectiveRole === "SBUHead";
   const isAdmin = effectiveRole === "Admin";
@@ -389,7 +391,7 @@ export default function DashboardPage() {
                 {getGreeting()}
               </p>
               <h2 className="mt-0.5 text-xl font-bold text-white">
-                Welcome back 👋
+                Welcome back, {currentEmployee?.fullName?.split(" ")[0] ?? "there"} 👋
               </h2>
               <p className="mt-1 text-sm text-white/50">
                 Here&apos;s what&apos;s happening across your workforce today.
