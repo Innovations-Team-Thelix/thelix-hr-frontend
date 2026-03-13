@@ -9,5 +9,5 @@ import { useAuth } from './useAuth';
  */
 export function useEffectiveRole() {
   const { user, viewAs } = useAuth();
-  return (viewAs ?? user?.role) as typeof user.role;
+  return (viewAs ?? user?.role) ?? null;
 }
