@@ -20,6 +20,7 @@ import {
 import { Pagination } from "@/components/ui/pagination";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuthStore } from "@/store/auth";
+import { useEffectiveRole } from "@/hooks";
 import { useAuditLogs, useSbus, useDepartments } from "@/hooks";
 import { formatTimestamp, jsonToCsv, downloadFile, cn } from "@/lib/utils";
 import type { AuditLog } from "@/types/audit";
@@ -66,6 +67,7 @@ const ACTION_BADGE_VARIANT: Record<string, "success" | "warning" | "danger" | "i
 export default function AuditPage() {
   const router = useRouter();
   const { user } = useAuthStore();
+  const effectiveRole = useEffectiveRole();
 
   const [entityType, setEntityType] = useState("");
   const [action, setAction] = useState("");
@@ -84,7 +86,7 @@ export default function AuditPage() {
 
   // Redirect non-admin users
   useEffect(() => {
-    if (user && user.role !== "Admin") {
+    if (user && effectiveRole !== "Admin") {
       router.push("/dashboard");
     }
   }, [user, router]);

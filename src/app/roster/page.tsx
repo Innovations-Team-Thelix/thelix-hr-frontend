@@ -25,8 +25,8 @@ import { Avatar } from "@/components/ui/avatar";
 import {
   useSbus,
   useDepartments,
-  useAuthStore,
   useEmployees,
+  useEffectiveRole,
 } from "@/hooks";
 import {
   useRoster,
@@ -110,8 +110,8 @@ function getAttendanceTile(attendance: any): AttendanceTileType | null {
 }
 
 export default function RosterPage() {
-  const { user } = useAuthStore();
-  const isAdmin = user?.role === "Admin";
+  const effectiveRole = useEffectiveRole();
+  const isAdmin = effectiveRole === "Admin";
 
   const [selectedSbuId, setSelectedSbuId] = useState("");
   const [selectedDeptId, setSelectedDeptId] = useState("");
@@ -470,15 +470,38 @@ export default function RosterPage() {
                           const isOverridden = localOverrides.has(overrideKey);
 
                           const attendanceTile = getAttendanceTile(attendance);
-                          const tileStyle = attendanceTile
-                            ? ATTENDANCE_TILE_STYLES[attendanceTile]
-                            : dayType
-                              ? DAY_TYPE_STYLES[dayType]
-                              : null;
+                          const workLocation = attendance?.workLocation || dayType;
+                          
+                          // Determine background style:
+                          // 1. If Absent, use Absent style (Red)
+                          // 2. If present/late/etc, use WorkLocation style (Green/Blue) from DAY_TYPE_STYLES
+                          // 3. If no attendance, use dayType style
+                          let bgStyle = "bg-white";
+                          let textStyle = "text-gray-400";
+                          let label = "-";
+
+                          if (attendanceTile === "absent") {
+                            bgStyle = ATTENDANCE_TILE_STYLES.absent.bg;
+                            // For absent, we want the text to be red as well, but the pill will handle the status style
+                          } else if (workLocation && DAY_TYPE_STYLES[workLocation as RosterDayType]) {
+                            // Use location color for cell background
+                            const locationStyle = DAY_TYPE_STYLES[workLocation as RosterDayType];
+                            bgStyle = locationStyle.bg;
+                            // Text style for the cell content that is NOT the pill (like location text)
+                            textStyle = locationStyle.text;
+                          }
+                          
+                          // Determine label for the status pill
+                          if (attendanceTile) {
+                              label = ATTENDANCE_TILE_STYLES[attendanceTile].label;
+                          } else if (workLocation && DAY_TYPE_STYLES[workLocation as RosterDayType]) {
+                              label = DAY_TYPE_STYLES[workLocation as RosterDayType].label;
+                          }
 
                           const tooltipLines = [
                             dayType ? `Roster: ${dayType}` : null,
                             attendanceTile ? `Status: ${ATTENDANCE_TILE_STYLES[attendanceTile].label}` : null,
+                            attendance?.workLocation ? `Work Mode: ${attendance.workLocation}` : null,
                             attendance?.clockInTime  ? `In: ${dayjs(attendance.clockInTime).format("HH:mm")}`  : null,
                             attendance?.clockOutTime ? `Out: ${dayjs(attendance.clockOutTime).format("HH:mm")}` : null,
                           ].filter(Boolean).join("\n");
@@ -487,24 +510,45 @@ export default function RosterPage() {
                             <td
                               key={dateStr}
                               className={cn(
-                                "px-4 py-3 text-center",
-                                isAdmin && dayType !== "Leave" && "cursor-pointer hover:bg-gray-100"
+                                "px-4 py-3 text-center transition-colors border-l border-gray-100",
+                                bgStyle,
+                                isAdmin && dayType !== "Leave" && "cursor-pointer hover:brightness-95"
                               )}
                               onClick={() => handleCellClick(emp.id, dateStr)}
                               title={tooltipLines || undefined}
                             >
-                              {tileStyle ? (
-                                <span className={cn(
-                                  "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium",
-                                  tileStyle.bg,
-                                  tileStyle.text,
-                                  isOverridden && "ring-2 ring-blue-400 ring-offset-1"
-                                )}>
-                                  {tileStyle.label}
-                                </span>
-                              ) : (
-                                <span className="text-xs text-gray-400">-</span>
-                              )}
+                              <div className="flex flex-col items-center justify-center gap-1.5">
+                                {attendanceTile ? (
+                                  <span className={cn(
+                                    "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide shadow-sm",
+                                    ATTENDANCE_TILE_STYLES[attendanceTile].bg,
+                                    ATTENDANCE_TILE_STYLES[attendanceTile].text,
+                                    // Special case for Clocked In to ensure it pops
+                                    attendanceTile === "clocked_in" && "bg-emerald-600 text-white ring-1 ring-emerald-600",
+                                    // Special case for Absent to ensure it pops
+                                    attendanceTile === "absent" && "bg-red-100 text-red-700 ring-1 ring-red-200"
+                                  )}>
+                                    {ATTENDANCE_TILE_STYLES[attendanceTile].label}
+                                  </span>
+                                ) : (
+                                  <span className={cn(
+                                    "text-xs font-medium",
+                                    textStyle,
+                                    isOverridden && "underline decoration-blue-500 decoration-2 underline-offset-4"
+                                  )}>
+                                    {label}
+                                  </span>
+                                )}
+                                
+                                {attendanceTile && attendanceTile !== "absent" && workLocation && (
+                                  <span className={cn(
+                                    "text-[10px] font-bold uppercase tracking-tight opacity-90",
+                                     textStyle
+                                  )}>
+                                    {workLocation}
+                                  </span>
+                                )}
+                              </div>
                             </td>
                           );
                         })}

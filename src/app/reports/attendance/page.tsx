@@ -151,7 +151,7 @@ export default function AttendanceReportsPage() {
 
   const handleExport = () => {
     if (!records?.length) return;
-    const headers = ["Date", "Employee", "Department", "Status", "Late", "Clock In", "Clock Out", "Location"];
+    const headers = ["Date", "Employee", "Department", "Status", "Late", "Clock In", "Clock Out", "Work Mode"];
     const rows = records.map((r) => [
       dayjs(r.date).format("YYYY-MM-DD"),
       r.employee?.fullName ?? "",
@@ -356,7 +356,7 @@ export default function AttendanceReportsPage() {
               {/* Location Split Chart */}
               <Card className="col-span-3">
                 <CardHeader>
-                  <CardTitle>Work Location Split</CardTitle>
+                  <CardTitle>Work Mode Split</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <ResponsiveContainer width="100%" height={350}>

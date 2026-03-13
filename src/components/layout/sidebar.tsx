@@ -26,6 +26,9 @@ import {
   Clock,
   ClipboardCheck,
   BarChart3,
+  Package,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -45,6 +48,12 @@ const navItems: NavItem[] = [
     href: "/dashboard",
     icon: LayoutDashboard,
     roles: ["Admin", "SBUHead"],
+  },
+  {
+    label: "My Dashboard",
+    href: "/employee-dashboard",
+    icon: LayoutDashboard,
+    roles: ["Finance", "Employee"],
   },
   {
     label: "Employees",
@@ -119,6 +128,12 @@ const navItems: NavItem[] = [
     roles: ["Admin", "SBUHead"],
   },
   {
+    label: "Assets",
+    href: "/assets",
+    icon: Package,
+    roles: ["Admin", "SBUHead"],
+  },
+  {
     label: "Policy",
     href: "/policy",
     icon: BookOpen,
@@ -164,15 +179,17 @@ interface SidebarProps {
 
 export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
   const pathname = usePathname();
-  const { user, profile, logout } = useAuth();
+  const { user, profile, logout, viewAs, setViewAs } = useAuth();
 
   const displayName = profile?.fullName || "User";
   const displayRole = user?.role || "";
 
-  const userRole = user?.role;
+  const actualRole = user?.role;
+  const canPreview = actualRole === "Admin" || actualRole === "SBUHead";
+  const effectiveRole = (viewAs ?? actualRole) as UserRole | undefined;
 
   const filteredNavItems = navItems.filter(
-    (item) => userRole && item.roles.includes(userRole)
+    (item) => effectiveRole && item.roles.includes(effectiveRole)
   );
 
   const isActive = (href: string): boolean => {
@@ -207,15 +224,34 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
           collapsed ? "justify-center" : "gap-3"
         )}
       >
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary-900 text-white font-bold text-sm">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-white font-bold text-sm">
           T
         </div>
         {!collapsed && (
-          <span className="text-lg font-semibold text-primary-900 truncate">
+          <span className="text-lg font-semibold text-primary truncate">
             Thelix HRIS
           </span>
         )}
       </div>
+
+      {/* Employee Preview Banner */}
+      {viewAs === 'Employee' && !collapsed && (
+        <div className="mx-3 mt-2 flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2">
+          <Eye className="h-3.5 w-3.5 shrink-0 text-amber-600" />
+          <span className="text-xs font-medium text-amber-700">Employee Preview</span>
+          <button
+            onClick={() => setViewAs(null)}
+            className="ml-auto text-xs text-amber-600 underline hover:text-amber-800"
+          >
+            Exit
+          </button>
+        </div>
+      )}
+      {viewAs === 'Employee' && collapsed && (
+        <div className="mx-2 mt-2 flex justify-center rounded-lg bg-amber-50 border border-amber-300 py-1">
+          <Eye className="h-4 w-4 text-amber-600" />
+        </div>
+      )}
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-4 px-2">
@@ -277,6 +313,21 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
                 </p>
                 <p className="text-xs text-gray-500 truncate">{displayRole}</p>
               </div>
+            )}
+            {canPreview && (
+              <button
+                onClick={() => setViewAs(viewAs === 'Employee' ? null : 'Employee')}
+                className={cn(
+                  "shrink-0 rounded-lg p-1.5 transition-colors",
+                  viewAs === 'Employee'
+                    ? "text-amber-600 hover:bg-amber-50"
+                    : "text-gray-400 hover:bg-gray-100 hover:text-gray-600",
+                  collapsed && "mt-1"
+                )}
+                title={viewAs === 'Employee' ? `Exit Employee Preview (viewing as ${actualRole})` : "Preview as Employee"}
+              >
+                {viewAs === 'Employee' ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
             )}
             <button
               onClick={handleLogout}

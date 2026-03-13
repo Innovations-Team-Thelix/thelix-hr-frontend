@@ -38,7 +38,7 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import {
-  useLeaveTypes,
+  useLeaveTypes, useEffectiveRole,
   useAuthStore,
   useMyProfile,
 } from "@/hooks";
@@ -84,11 +84,12 @@ const LEAVE_TYPE_COLORS: Record<string, string> = {
 export default function LeavePage() {
   const { user } = useAuthStore();
   const { data: profile } = useMyProfile();
-  const isAdmin = user?.role === "Admin";
-  const isSBUHead = user?.role === "SBUHead";
+  const effectiveRole = useEffectiveRole();
+  const isAdmin = effectiveRole === "Admin";
+  const isSBUHead = effectiveRole === "SBUHead";
   const isSupervisor = (profile?.subordinates?.length ?? 0) > 0;
   const canApprove = isAdmin || isSBUHead || isSupervisor;
-  const isEmployee = user?.role === "Employee";
+  const isEmployee = effectiveRole === "Employee";
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
 
   const [activeTab, setActiveTab] = useState("my-requests");

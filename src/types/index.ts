@@ -566,3 +566,59 @@ export interface EmployeeDocument {
   uploadedAt: string;
   signedUrl?: string;
 }
+
+// ─── Asset types ─────────────────────────────────────
+
+export type AssetCondition = 'BrandNew' | 'Good' | 'Fair' | 'Poor';
+
+export interface Asset {
+  id: string;
+  employeeId: string;
+  issuedById: string;
+  equipmentType: string;
+  assetTag?: string | null;
+  brand?: string | null;
+  model?: string | null;
+  condition: AssetCondition;
+  dateIssued: string;
+  dateReturned?: string | null;
+  notes?: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+
+  employee?: Pick<Employee, 'id' | 'employeeId' | 'fullName' | 'jobTitle'> & { department?: { name: string } };
+  issuedBy?: Pick<Employee, 'id' | 'employeeId' | 'fullName'>;
+}
+
+export interface AssetFilters {
+  employeeId?: string;
+  equipmentType?: string;
+  condition?: AssetCondition;
+  isActive?: boolean;
+  page?: number;
+  limit?: number;
+}
+
+export interface CreateAssetInput {
+  employeeId: string;
+  equipmentType: string;
+  assetTag?: string;
+  brand?: string;
+  model?: string;
+  condition: AssetCondition;
+  dateIssued: string;
+  notes?: string;
+}
+
+export interface UpdateAssetInput {
+  equipmentType?: string;
+  assetTag?: string;
+  brand?: string;
+  model?: string;
+  condition?: AssetCondition;
+  dateIssued?: string;
+  dateReturned?: string | null;
+  notes?: string;
+  isActive?: boolean;
+}
