@@ -389,7 +389,7 @@ export default function DashboardPage() {
                 {getGreeting()}
               </p>
               <h2 className="mt-0.5 text-xl font-bold text-white">
-                Welcome back, {user?.name?.split(" ")[0] ?? "there"} 👋
+                Welcome back 👋
               </h2>
               <p className="mt-1 text-sm text-white/50">
                 Here&apos;s what&apos;s happening across your workforce today.

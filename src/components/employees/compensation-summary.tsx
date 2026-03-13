@@ -15,15 +15,15 @@ interface SalaryBreakdown {
 
 export interface CompensationSummaryProps {
   salaryBreakdown?: SalaryBreakdown | null;
-  currency?: string;
-  monthlySalary?: number;
-  netPay?: number;
-  salaryBand?: string;
-  salaryEffectiveDate?: string;
-  lastSalaryReview?: string;
-  accountName?: string;
-  accountNumber?: string;
-  bankName?: string;
+  currency?: string | null;
+  monthlySalary?: number | null;
+  netPay?: number | null;
+  salaryBand?: string | null;
+  salaryEffectiveDate?: string | null;
+  lastSalaryReview?: string | null;
+  accountName?: string | null;
+  accountNumber?: string | null;
+  bankName?: string | null;
 }
 
 function InfoField({ label, value }: { label: string; value?: React.ReactNode }) {

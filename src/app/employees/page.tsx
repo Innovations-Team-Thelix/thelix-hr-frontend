@@ -418,7 +418,7 @@ function EmployeesPageContent() {
                   options={statusOptions}
                   placeholder="All Statuses"
                   value={filters.status || ""}
-                  onChange={(e) => handleFilterSelect("status", e.target.value as EmployeeFilters["status"])}
+                  onChange={(e) => handleFilterSelect("status", e.target.value)}
                 />
               </div>
               {hasActiveFilters && (
