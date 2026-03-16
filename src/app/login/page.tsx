@@ -44,10 +44,7 @@ export default function LoginPage() {
     formState: { errors, isSubmitting },
   } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
-    defaultValues: {
-      email: "",
-      password: "",
-    },
+    defaultValues: { email: "", password: "" },
   });
 
   const {
@@ -63,30 +60,23 @@ export default function LoginPage() {
     checkAuth();
   }, [checkAuth]);
 
-  // Redirect if already authenticated
   useEffect(() => {
     if (mounted && isAuthenticated && user) {
-      const destination =
-        user.role === "Employee" ? "/profile" : "/dashboard";
+      const destination = user.role === "Employee" ? "/profile" : "/dashboard";
       router.push(destination);
     }
   }, [mounted, isAuthenticated, user, router]);
 
   const onSubmit = async (data: LoginFormData) => {
     setLoginError(null);
-
     try {
       const result = await login(data.email, data.password);
-
       if (result.requiresMfa && result.mfaToken) {
         setMfaToken(result.mfaToken);
         return;
       }
-
-      // Redirect based on role
       const authUser = useAuth.getState().user;
-      const destination =
-        authUser?.role === "Employee" ? "/profile" : "/dashboard";
+      const destination = authUser?.role === "Employee" ? "/profile" : "/dashboard";
       router.push(destination);
     } catch (error: unknown) {
       const axiosError = error as { response?: { data?: { message?: string } } };
@@ -99,228 +89,319 @@ export default function LoginPage() {
 
   const onMfaSubmit = async (data: MfaFormData) => {
     setLoginError(null);
-
     if (!mfaToken) return;
-
     try {
       await verifyMfa(mfaToken, data.code);
-
       const authUser = useAuth.getState().user;
-      const destination =
-        authUser?.role === "Employee" ? "/profile" : "/dashboard";
+      const destination = authUser?.role === "Employee" ? "/profile" : "/dashboard";
       router.push(destination);
     } catch (error: unknown) {
       const axiosError = error as { response?: { data?: { message?: string } } };
       const message =
-        axiosError?.response?.data?.message ||
-        "Invalid MFA code. Please try again.";
+        axiosError?.response?.data?.message || "Invalid MFA code. Please try again.";
       setLoginError(message);
     }
   };
 
-  // Show nothing while checking auth state on mount
-  if (!mounted) {
-    return null;
-  }
-
-  // If already authenticated, show nothing (redirect is happening)
-  if (isAuthenticated && user) {
-    return null;
-  }
+  if (!mounted) return null;
+  if (isAuthenticated && user) return null;
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-primary-900 via-primary-800 to-primary-950 p-4">
-      <div className="w-full max-w-md">
-        <div className="rounded-2xl border border-gray-200 bg-white px-8 py-10 shadow-xl">
-          {/* Logo / Title */}
-          <div className="mb-8 text-center">
-            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-primary-900 text-white">
-              <span className="text-2xl font-bold">T</span>
-            </div>
-            <h1 className="text-2xl font-bold text-gray-900">Thelix HRIS</h1>
-            <p className="mt-1 text-sm text-gray-500">
-              Sign in to your account
-            </p>
+    <div className="flex min-h-screen flex-col" style={{ backgroundColor: "#111729" }}>
+      {/* Top nav */}
+      <header
+        className="flex items-center justify-between px-8 py-5"
+        style={{ backgroundColor: "#111729" }}
+      >
+        {/* Logo */}
+        <div className="flex items-center gap-2.5">
+          <div
+            className="flex h-9 w-9 items-center justify-center rounded-lg"
+            style={{ backgroundColor: "#f48220" }}
+          >
+            <span className="text-base font-bold text-white">T</span>
           </div>
+          <span className="text-lg font-semibold text-white tracking-tight">
+            Thelix HRIS
+          </span>
+        </div>
 
-          {/* Error Alert */}
-          {loginError && (
-            <div className="mb-6 rounded-lg border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-700">
-              {loginError}
-            </div>
-          )}
+        {/* Help link */}
+        <div className="text-sm text-white/70">
+          Having trouble?{" "}
+          <a
+            href="mailto:support@thelixholdings.com"
+            className="font-medium transition-colors"
+            style={{ color: "#f48220" }}
+          >
+            Get help →
+          </a>
+        </div>
+      </header>
 
-          {/* Login Form or MFA Form */}
-          {!mfaToken ? (
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-              {/* Email Field */}
-              <div>
-                <label
-                  htmlFor="email"
-                  className="mb-1.5 block text-sm font-medium text-gray-700"
-                >
-                  Email address
-                </label>
-                <input
-                  {...register("email")}
-                  id="email"
-                  type="email"
-                  autoComplete="email"
-                  placeholder="you@thelixholdings.com"
-                  className={cn(
-                    "block w-full rounded-lg border bg-white px-3.5 py-2.5 text-sm text-gray-900",
-                    "placeholder:text-gray-400 transition-colors duration-150",
-                    "focus:outline-none focus:ring-2 focus:ring-offset-0",
-                    errors.email
-                      ? "border-danger-400 focus:border-danger-500 focus:ring-danger-500/20"
-                      : "border-gray-300 focus:border-primary-500 focus:ring-primary-500/20"
-                  )}
-                />
-                {errors.email && (
-                  <p className="mt-1.5 text-xs text-danger-600" role="alert">
-                    {errors.email.message}
-                  </p>
-                )}
-              </div>
-
-              {/* Password Field */}
-              <div>
-                <label
-                  htmlFor="password"
-                  className="mb-1.5 block text-sm font-medium text-gray-700"
-                >
-                  Password
-                </label>
-                <div className="relative">
-                  <input
-                    {...register("password")}
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    autoComplete="current-password"
-                    placeholder="Enter your password"
-                    className={cn(
-                      "block w-full rounded-lg border bg-white px-3.5 py-2.5 pr-10 text-sm text-gray-900",
-                      "placeholder:text-gray-400 transition-colors duration-150",
-                      "focus:outline-none focus:ring-2 focus:ring-offset-0",
-                      errors.password
-                        ? "border-danger-400 focus:border-danger-500 focus:ring-danger-500/20"
-                        : "border-gray-300 focus:border-primary-500 focus:ring-primary-500/20"
-                    )}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
-                    tabIndex={-1}
-                  >
-                    {showPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </button>
-                </div>
-                {errors.password && (
-                  <p className="mt-1.5 text-xs text-danger-600" role="alert">
-                    {errors.password.message}
-                  </p>
-                )}
-              </div>
-
-              {/* Submit Button */}
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className={cn(
-                  "flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white",
-                  "transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2",
-                  "disabled:cursor-not-allowed disabled:opacity-60",
-                  "bg-primary-900 hover:bg-primary-800 active:scale-[0.98]"
-                )}
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Signing in...
-                  </>
-                ) : (
-                  "Sign in"
-                )}
-              </button>
-            </form>
-          ) : (
-            <form onSubmit={handleSubmitMfa(onMfaSubmit)} className="space-y-5">
-              <p className="text-sm text-gray-600 text-center">
-                Enter the 6-digit code from your authenticator app.
-              </p>
-              <div>
-                <label
-                  htmlFor="mfa-code"
-                  className="mb-1.5 block text-sm font-medium text-gray-700"
-                >
-                  Verification code
-                </label>
-                <input
-                  {...registerMfa("code")}
-                  id="mfa-code"
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  maxLength={6}
-                  placeholder="000000"
-                  className={cn(
-                    "block w-full rounded-lg border bg-white px-3.5 py-2.5 text-sm text-gray-900 text-center tracking-widest",
-                    "placeholder:text-gray-400 transition-colors duration-150",
-                    "focus:outline-none focus:ring-2 focus:ring-offset-0",
-                    mfaErrors.code
-                      ? "border-danger-400 focus:border-danger-500 focus:ring-danger-500/20"
-                      : "border-gray-300 focus:border-primary-500 focus:ring-primary-500/20"
-                  )}
-                />
-                {mfaErrors.code && (
-                  <p className="mt-1.5 text-xs text-danger-600" role="alert">
-                    {mfaErrors.code.message}
-                  </p>
-                )}
-              </div>
-
-              <button
-                type="submit"
-                disabled={isMfaSubmitting}
-                className={cn(
-                  "flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white",
-                  "transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2",
-                  "disabled:cursor-not-allowed disabled:opacity-60",
-                  "bg-primary-900 hover:bg-primary-800 active:scale-[0.98]"
-                )}
-              >
-                {isMfaSubmitting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Verifying...
-                  </>
-                ) : (
-                  "Verify"
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setMfaToken(null);
-                  setLoginError(null);
-                }}
-                className="w-full text-center text-sm text-gray-500 hover:text-gray-700 transition-colors"
-              >
-                Back to sign in
-              </button>
-            </form>
-          )}
-
-          {/* Footer */}
-          <p className="mt-8 text-center text-xs text-gray-400">
-            Thelix Holdings Internal HRIS &copy; {new Date().getFullYear()}
+      {/* Main content */}
+      <div className="relative flex flex-1 overflow-hidden">
+        {/* Left panel — brand messaging */}
+        <div className="hidden lg:flex lg:flex-1 flex-col justify-center px-16 xl:px-24">
+          <h2 className="text-5xl xl:text-6xl font-bold text-white leading-tight max-w-md">
+            Your people,{" "}
+            <span style={{ color: "#f48220" }}>all in one place.</span>
+          </h2>
+          <p className="mt-6 text-lg text-white/60 max-w-sm leading-relaxed">
+            From onboarding to payroll, Thelix HRIS keeps your workforce
+            running smoothly — every single day.
           </p>
+        </div>
+
+        {/* Right panel — login card */}
+        <div className="flex flex-1 items-center justify-center px-6 py-12 lg:px-16 xl:px-24">
+          <div className="w-full max-w-md">
+            <div className="rounded-2xl bg-white px-8 py-10 shadow-2xl">
+              {!mfaToken ? (
+                <>
+                  <div className="mb-8">
+                    <h1 className="text-3xl font-bold text-gray-900">
+                      Welcome back!
+                    </h1>
+                    <p className="mt-1 text-sm text-gray-500">
+                      Sign in to your Thelix account
+                    </p>
+                  </div>
+
+                  {loginError && (
+                    <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                      {loginError}
+                    </div>
+                  )}
+
+                  <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+                    <div>
+                      <input
+                        {...register("email")}
+                        id="email"
+                        type="email"
+                        autoComplete="email"
+                        placeholder="Email Address"
+                        className={cn(
+                          "block w-full rounded-lg border bg-white px-4 py-3 text-sm text-gray-900",
+                          "placeholder:text-gray-400 transition-colors duration-150",
+                          "focus:outline-none focus:ring-2 focus:ring-offset-0",
+                          errors.email
+                            ? "border-red-400 focus:border-red-500 focus:ring-red-500/20"
+                            : "border-gray-300 focus:ring-2"
+                        )}
+                        style={
+                          !errors.email
+                            ? ({ "--tw-ring-color": "#f4822033" } as React.CSSProperties)
+                            : undefined
+                        }
+                        onFocus={(e) => {
+                          if (!errors.email) {
+                            e.currentTarget.style.borderColor = "#f48220";
+                          }
+                        }}
+                        onBlur={(e) => {
+                          if (!errors.email) {
+                            e.currentTarget.style.borderColor = "";
+                          }
+                        }}
+                      />
+                      {errors.email && (
+                        <p className="mt-1.5 text-xs text-red-600" role="alert">
+                          {errors.email.message}
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <div className="relative">
+                        <input
+                          {...register("password")}
+                          id="password"
+                          type={showPassword ? "text" : "password"}
+                          autoComplete="current-password"
+                          placeholder="Password"
+                          className={cn(
+                            "block w-full rounded-lg border bg-white px-4 py-3 pr-11 text-sm text-gray-900",
+                            "placeholder:text-gray-400 transition-colors duration-150",
+                            "focus:outline-none focus:ring-2 focus:ring-offset-0",
+                            errors.password
+                              ? "border-red-400 focus:border-red-500 focus:ring-red-500/20"
+                              : "border-gray-300"
+                          )}
+                          onFocus={(e) => {
+                            if (!errors.password) {
+                              e.currentTarget.style.borderColor = "#f48220";
+                            }
+                          }}
+                          onBlur={(e) => {
+                            if (!errors.password) {
+                              e.currentTarget.style.borderColor = "";
+                            }
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                          tabIndex={-1}
+                        >
+                          {showPassword ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </button>
+                      </div>
+                      {errors.password && (
+                        <p className="mt-1.5 text-xs text-red-600" role="alert">
+                          {errors.password.message}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex justify-end">
+                      <a
+                        href="#"
+                        className="text-sm font-medium transition-colors"
+                        style={{ color: "#f48220" }}
+                      >
+                        Forgot password?
+                      </a>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="flex w-full items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-semibold text-white transition-all duration-200 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60 active:scale-[0.98]"
+                      style={{ backgroundColor: "#111729" }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = "#1a2333";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = "#111729";
+                      }}
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Signing in...
+                        </>
+                      ) : (
+                        "Log in"
+                      )}
+                    </button>
+                  </form>
+                </>
+              ) : (
+                <>
+                  <div className="mb-8 text-center">
+                    <h1 className="text-2xl font-bold text-gray-900">
+                      Two-factor authentication
+                    </h1>
+                    <p className="mt-2 text-sm text-gray-500">
+                      Enter the 6-digit code from your authenticator app.
+                    </p>
+                  </div>
+
+                  {loginError && (
+                    <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                      {loginError}
+                    </div>
+                  )}
+
+                  <form onSubmit={handleSubmitMfa(onMfaSubmit)} className="space-y-5">
+                    <div>
+                      <input
+                        {...registerMfa("code")}
+                        id="mfa-code"
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        maxLength={6}
+                        placeholder="000000"
+                        className={cn(
+                          "block w-full rounded-lg border bg-white px-4 py-3 text-center text-lg tracking-widest text-gray-900",
+                          "placeholder:text-gray-400 transition-colors duration-150",
+                          "focus:outline-none focus:ring-2 focus:ring-offset-0",
+                          mfaErrors.code
+                            ? "border-red-400 focus:border-red-500 focus:ring-red-500/20"
+                            : "border-gray-300"
+                        )}
+                        onFocus={(e) => {
+                          if (!mfaErrors.code) {
+                            e.currentTarget.style.borderColor = "#f48220";
+                          }
+                        }}
+                        onBlur={(e) => {
+                          if (!mfaErrors.code) {
+                            e.currentTarget.style.borderColor = "";
+                          }
+                        }}
+                      />
+                      {mfaErrors.code && (
+                        <p className="mt-1.5 text-xs text-red-600" role="alert">
+                          {mfaErrors.code.message}
+                        </p>
+                      )}
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isMfaSubmitting}
+                      className="flex w-full items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-semibold text-white transition-all duration-200 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60 active:scale-[0.98]"
+                      style={{ backgroundColor: "#111729" }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = "#1a2333";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = "#111729";
+                      }}
+                    >
+                      {isMfaSubmitting ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Verifying...
+                        </>
+                      ) : (
+                        "Verify"
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMfaToken(null);
+                        setLoginError(null);
+                      }}
+                      className="w-full text-center text-sm text-gray-500 hover:text-gray-700 transition-colors"
+                    >
+                      ← Back to sign in
+                    </button>
+                  </form>
+                </>
+              )}
+
+              <p className="mt-8 text-center text-xs text-gray-400">
+                Thelix Holdings Internal HRIS &copy; {new Date().getFullYear()}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Diagonal orange accent — bottom right */}
+        <div
+          className="pointer-events-none absolute bottom-0 right-0 h-64 w-64 lg:h-80 lg:w-80"
+          aria-hidden
+        >
+          <svg
+            viewBox="0 0 320 320"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-full w-full"
+          >
+            <polygon points="320,0 320,320 0,320" fill="#f48220" />
+          </svg>
         </div>
       </div>
     </div>
