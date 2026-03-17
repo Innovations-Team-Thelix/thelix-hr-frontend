@@ -250,7 +250,7 @@ export default function LoginPage() {
 
                     <div className="flex justify-end">
                       <a
-                        href="#"
+                        href="/forgot-password"
                         className="text-sm font-medium transition-colors"
                         style={{ color: "#C8622A" }}
                       >
