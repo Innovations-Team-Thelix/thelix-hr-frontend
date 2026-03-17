@@ -29,6 +29,7 @@ import {
   Package,
   Eye,
   EyeOff,
+  Target,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -108,6 +109,12 @@ const navItems: NavItem[] = [
     href: "/reports",
     icon: FileSpreadsheet,
     roles: ["Admin", "Finance", "SBUHead"],
+  },
+  {
+    label: "KPI & Performance",
+    href: "/kpi",
+    icon: Target,
+    roles: ["Admin", "SBUHead", "Finance", "Employee"],
   },
   {
     label: "Attendance Reports",

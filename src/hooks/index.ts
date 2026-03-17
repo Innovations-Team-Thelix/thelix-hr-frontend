@@ -789,3 +789,445 @@ export function useMyPayslips() {
 
 export * from './useAssets';
 export * from './useExitEmployee';
+
+// ─── KPI hooks ───────────────────────────────────────
+
+import type { Kpi, KpiUpdate, KpiReviewCycle, KpiReview, KpiDashboard, KpiFilters } from "@/types";
+
+export function useKpiDashboard() {
+  return useQuery<KpiDashboard>({
+    queryKey: ["kpi-dashboard"],
+    queryFn: async () => {
+      const res = await api.get<KpiDashboard>("/kpi/dashboard");
+      return res.data;
+    },
+  });
+}
+
+export function useKpis(filters: KpiFilters = {}) {
+  return useQuery<{ data: Kpi[]; pagination: PaginationMeta }>({
+    queryKey: ["kpis", filters],
+    queryFn: async () => {
+      const res = await api.get<Kpi[]>("/kpi", { params: buildParams(filters as Record<string, unknown>) });
+      return { data: res.data, pagination: res.pagination! };
+    },
+  });
+}
+
+export function useKpi(id: string) {
+  return useQuery<Kpi>({
+    queryKey: ["kpi", id],
+    queryFn: async () => {
+      const res = await api.get<Kpi>(`/kpi/${id}`);
+      return res.data;
+    },
+    enabled: !!id,
+  });
+}
+
+export function useCreateKpi() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: Partial<Kpi> & { assigneeIds?: string[] }) => {
+      const res = await api.post<Kpi>("/kpi", data);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["kpis"] });
+      queryClient.invalidateQueries({ queryKey: ["kpi-dashboard"] });
+    },
+  });
+}
+
+export function useUpdateKpi() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Partial<Kpi> }) => {
+      const res = await api.put<Kpi>(`/kpi/${id}`, data);
+      return res.data;
+    },
+    onSuccess: (_d, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["kpis"] });
+      queryClient.invalidateQueries({ queryKey: ["kpi", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["kpi-dashboard"] });
+    },
+  });
+}
+
+export function useDeleteKpi() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await api.delete(`/kpi/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["kpis"] });
+      queryClient.invalidateQueries({ queryKey: ["kpi-dashboard"] });
+    },
+  });
+}
+
+export function useAssignKpi() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, employeeIds }: { id: string; employeeIds: string[]; contributionWeight?: number }) => {
+      const res = await api.post<Kpi>(`/kpi/${id}/assign`, { employeeIds });
+      return res.data;
+    },
+    onSuccess: (_d, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["kpi", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["kpis"] });
+    },
+  });
+}
+
+export function useSubmitKpiUpdate() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: {
+      kpiId: string;
+      updatePeriod: string;
+      actualValue?: number;
+      percentComplete?: number;
+      narrative?: string;
+      blockerFlag?: boolean;
+      blockerDetail?: string;
+      confidenceLevel?: number;
+      nextSteps?: string;
+    }) => {
+      const res = await api.post<KpiUpdate>("/kpi-updates", data);
+      return res.data;
+    },
+    onSuccess: (_d, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["kpi", variables.kpiId] });
+      queryClient.invalidateQueries({ queryKey: ["kpis"] });
+      queryClient.invalidateQueries({ queryKey: ["kpi-dashboard"] });
+    },
+  });
+}
+
+export function useKpiUpdates(kpiId: string) {
+  return useQuery<KpiUpdate[]>({
+    queryKey: ["kpi-updates", kpiId],
+    queryFn: async () => {
+      const res = await api.get<KpiUpdate[]>(`/kpi/${kpiId}/updates`);
+      return res.data;
+    },
+    enabled: !!kpiId,
+  });
+}
+
+export function useMyKpiUpdates() {
+  return useQuery<KpiUpdate[]>({
+    queryKey: ["my-kpi-updates"],
+    queryFn: async () => {
+      const res = await api.get<KpiUpdate[]>("/kpi-updates/me");
+      return res.data;
+    },
+  });
+}
+
+export function useKpiReviewCycles() {
+  return useQuery<KpiReviewCycle[]>({
+    queryKey: ["kpi-review-cycles"],
+    queryFn: async () => {
+      const res = await api.get<KpiReviewCycle[]>("/kpi-review-cycles");
+      return res.data;
+    },
+  });
+}
+
+export function useCreateReviewCycle() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: Partial<KpiReviewCycle>) => {
+      const res = await api.post<KpiReviewCycle>("/kpi-review-cycles", data);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["kpi-review-cycles"] });
+    },
+  });
+}
+
+export function useKpiReviews(reviewCycleId?: string, employeeId?: string) {
+  return useQuery<KpiReview[]>({
+    queryKey: ["kpi-reviews", reviewCycleId, employeeId],
+    queryFn: async () => {
+      const params: Record<string, string> = {};
+      if (reviewCycleId) params.reviewCycleId = reviewCycleId;
+      if (employeeId) params.employeeId = employeeId;
+      const res = await api.get<KpiReview[]>("/kpi-reviews", { params });
+      return res.data;
+    },
+  });
+}
+
+export function useSubmitKpiReview() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: Partial<KpiReview>) => {
+      const res = await api.post<KpiReview>("/kpi-reviews", data);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["kpi-reviews"] });
+    },
+  });
+}
+
+// ─── OKR hooks ───────────────────────────────────────
+
+import type { OkrCycle, Objective, KeyResult, OkrComment, OkrDashboard } from "@/types";
+
+export function useOkrDashboard() {
+  return useQuery<OkrDashboard>({
+    queryKey: ["okr-dashboard"],
+    queryFn: async () => {
+      const res = await api.get<OkrDashboard>("/okr/dashboard");
+      return res.data;
+    },
+  });
+}
+
+export function useOkrCycles() {
+  return useQuery<OkrCycle[]>({
+    queryKey: ["okr-cycles"],
+    queryFn: async () => {
+      const res = await api.get<OkrCycle[]>("/okr/cycles");
+      return res.data;
+    },
+    staleTime: 2 * 60 * 1000,
+  });
+}
+
+export function useCreateOkrCycle() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: Partial<OkrCycle>) => {
+      const res = await api.post<OkrCycle>("/okr/cycles", data);
+      return res.data;
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["okr-cycles"] }); },
+  });
+}
+
+export function useUpdateOkrCycle() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Partial<OkrCycle> }) => {
+      const res = await api.put<OkrCycle>(`/okr/cycles/${id}`, data);
+      return res.data;
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["okr-cycles"] }); },
+  });
+}
+
+export function useDeleteOkrCycle() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => { await api.delete(`/okr/cycles/${id}`); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["okr-cycles"] }); },
+  });
+}
+
+export function useObjectives(params: { cycleId?: string; ownerId?: string; teamView?: string; page?: number; limit?: number } = {}) {
+  return useQuery<{ data: Objective[]; pagination: PaginationMeta }>({
+    queryKey: ["objectives", params],
+    queryFn: async () => {
+      const res = await api.get<Objective[]>("/okr/objectives", { params: buildParams(params as Record<string, unknown>) });
+      return { data: res.data, pagination: res.pagination! };
+    },
+  });
+}
+
+export function useObjective(id: string) {
+  return useQuery<Objective>({
+    queryKey: ["objective", id],
+    queryFn: async () => {
+      const res = await api.get<Objective>(`/okr/objectives/${id}`);
+      return res.data;
+    },
+    enabled: !!id,
+  });
+}
+
+export function useCreateObjective() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: { cycleId: string; title: string; description?: string; parentObjectiveId?: string; approverId?: string; keyResults: Array<{ title: string; metricType: string; targetValue: number; startValue?: number }> }) => {
+      const res = await api.post<Objective>("/okr/objectives", data);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["objectives"] });
+      queryClient.invalidateQueries({ queryKey: ["okr-dashboard"] });
+    },
+  });
+}
+
+export function useUpdateObjective() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: { title?: string; description?: string; parentObjectiveId?: string | null } }) => {
+      const res = await api.put<Objective>(`/okr/objectives/${id}`, data);
+      return res.data;
+    },
+    onSuccess: (_d, v) => {
+      queryClient.invalidateQueries({ queryKey: ["objectives"] });
+      queryClient.invalidateQueries({ queryKey: ["objective", v.id] });
+      queryClient.invalidateQueries({ queryKey: ["okr-dashboard"] });
+    },
+  });
+}
+
+export function useDeleteObjective() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => { await api.delete(`/okr/objectives/${id}`); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["objectives"] });
+      queryClient.invalidateQueries({ queryKey: ["okr-dashboard"] });
+    },
+  });
+}
+
+export function useApproveObjective() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, note }: { id: string; note?: string }) => {
+      const res = await api.post<Objective>(`/okr/objectives/${id}/approve`, { note });
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["objectives"] });
+      queryClient.invalidateQueries({ queryKey: ["okr-approvals"] });
+    },
+  });
+}
+
+export function useRejectObjective() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, note }: { id: string; note: string }) => {
+      const res = await api.post<Objective>(`/okr/objectives/${id}/reject`, { note });
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["objectives"] });
+      queryClient.invalidateQueries({ queryKey: ["okr-approvals"] });
+    },
+  });
+}
+
+export function useSubmitObjective() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, approverId }: { id: string; approverId: string }) => {
+      const res = await api.post<Objective>(`/okr/objectives/${id}/submit`, { approverId });
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["objectives"] });
+      queryClient.invalidateQueries({ queryKey: ["okr-dashboard"] });
+    },
+  });
+}
+
+export function usePendingOkrApprovals() {
+  return useQuery({
+    queryKey: ["okr-approvals"],
+    queryFn: async () => {
+      const res = await api.get<Objective[]>("/okr/approvals/pending");
+      return res.data;
+    },
+  });
+}
+
+export function useUpdateKeyResult() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ krId, data }: { krId: string; objectiveId: string; data: { newValue: number; healthStatus: string; note?: string } }) => {
+      const res = await api.put<KeyResult>(`/okr/key-results/${krId}`, data);
+      return res.data;
+    },
+    onSuccess: (_d, v) => {
+      queryClient.invalidateQueries({ queryKey: ["objective", v.objectiveId] });
+      queryClient.invalidateQueries({ queryKey: ["objectives"] });
+      queryClient.invalidateQueries({ queryKey: ["okr-dashboard"] });
+    },
+  });
+}
+
+export function useOkrComments(krId: string) {
+  return useQuery<OkrComment[]>({
+    queryKey: ["okr-comments", krId],
+    queryFn: async () => {
+      const res = await api.get<OkrComment[]>(`/okr/key-results/${krId}/comments`);
+      return res.data;
+    },
+    enabled: !!krId,
+  });
+}
+
+export function useAddOkrComment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ krId, body, mentions }: { krId: string; body: string; mentions?: string[] }) => {
+      const res = await api.post<OkrComment>(`/okr/key-results/${krId}/comments`, { body, mentions: mentions ?? [] });
+      return res.data;
+    },
+    onSuccess: (_d, v) => { queryClient.invalidateQueries({ queryKey: ["okr-comments", v.krId] }); },
+  });
+}
+
+// ─── HR KPI Review Approval Hooks ─────────────────────
+
+export function usePendingKpiReviews() {
+  return useQuery<KpiReview[]>({
+    queryKey: ["kpi-reviews-pending"],
+    queryFn: async () => {
+      const res = await api.get<KpiReview[]>("/kpi-reviews/pending");
+      return res.data;
+    },
+  });
+}
+
+export function useApproveKpiReview() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await api.post<KpiReview>(`/kpi-reviews/${id}/approve`);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["kpi-reviews-pending"] });
+      queryClient.invalidateQueries({ queryKey: ["kpi-reviews"] });
+    },
+  });
+}
+
+export function useRejectKpiReview() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await api.post<KpiReview>(`/kpi-reviews/${id}/reject`);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["kpi-reviews-pending"] });
+      queryClient.invalidateQueries({ queryKey: ["kpi-reviews"] });
+    },
+  });
+}
+
+export function useAllKpisForHR(filters: KpiFilters = {}) {
+  const params = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== undefined && v !== ""));
+  return useQuery({
+    queryKey: ["kpis-hr", params],
+    queryFn: async () => {
+      const res = await api.get<Kpi[]>("/kpi/hr/all", { params });
+      return res;
+    },
+  });
+}

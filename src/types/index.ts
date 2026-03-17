@@ -622,3 +622,226 @@ export interface UpdateAssetInput {
   notes?: string;
   isActive?: boolean;
 }
+
+// ─── KPI types ───────────────────────────────────────
+
+export type KpiCategory = 'Strategic' | 'Operational' | 'Financial' | 'Customer' | 'Compliance' | 'People' | 'Innovation';
+export type KpiLevel = 'Company' | 'SBU' | 'Department' | 'Team' | 'Individual';
+export type KpiTimeHorizon = 'Annual' | 'Quarterly' | 'Monthly';
+export type KpiTargetType = 'Numeric' | 'Percentage' | 'Milestone' | 'Binary' | 'Composite';
+export type KpiStatus = 'NotStarted' | 'InProgress' | 'OnTrack' | 'AtRisk' | 'OffTrack' | 'Completed' | 'Overdue' | 'OnHold' | 'Cancelled';
+export type KpiUpdateFrequency = 'Weekly' | 'Biweekly' | 'Monthly' | 'Manual';
+export type KpiRollupMethod = 'WeightedAverage' | 'Sum' | 'Manual';
+export type ReviewCycleType = 'Monthly' | 'Quarterly' | 'Annual';
+export type ReviewSignoffStatus = 'Pending' | 'SignedOff' | 'Rejected';
+
+export interface Kpi {
+  id: string;
+  title: string;
+  description?: string;
+  category: KpiCategory;
+  kpiLevel: KpiLevel;
+  timeHorizon: KpiTimeHorizon;
+  parentKpiId?: string;
+  sbuId?: string;
+  departmentId?: string;
+  startDate: string;
+  endDate: string;
+  targetType: KpiTargetType;
+  targetValue?: number;
+  unit?: string;
+  weight?: number;
+  rollupMethod: KpiRollupMethod;
+  updateFrequency: KpiUpdateFrequency;
+  status: KpiStatus;
+  evidenceRequired: boolean;
+  createdById: string;
+  approvedById?: string;
+  createdAt: string;
+  updatedAt: string;
+  sbu?: { id: string; name: string; code: string };
+  department?: { id: string; name: string; sbuId?: string };
+  createdBy?: { id: string; fullName: string };
+  parent?: { id: string; title: string; kpiLevel: KpiLevel };
+  assignments?: KpiAssignment[];
+  updates?: KpiUpdate[];
+  _count?: { children: number; assignments: number; updates: number };
+}
+
+export interface KpiAssignment {
+  id: string;
+  kpiId: string;
+  employeeId: string;
+  assignedById: string;
+  contributionWeight?: number;
+  isActive: boolean;
+  assignedAt: string;
+  employee?: { id: string; fullName: string; jobTitle: string; department?: { name: string } };
+  assignedBy?: { id: string; fullName: string };
+}
+
+export interface KpiUpdate {
+  id: string;
+  kpiId: string;
+  employeeId: string;
+  updatePeriod: string;
+  actualValue?: number;
+  percentComplete?: number;
+  narrative?: string;
+  blockerFlag: boolean;
+  blockerDetail?: string;
+  confidenceLevel?: number;
+  nextSteps?: string;
+  submittedAt: string;
+  reviewedById?: string;
+  reviewNote?: string;
+  employee?: { id: string; fullName: string };
+  kpi?: { id: string; title: string; status: KpiStatus };
+}
+
+export interface KpiReviewCycle {
+  id: string;
+  name: string;
+  cycleType: ReviewCycleType;
+  startDate: string;
+  endDate: string;
+  isActive: boolean;
+  calibrationRequired: boolean;
+  signoffRequired: boolean;
+  createdById: string;
+  createdAt: string;
+  createdBy?: { id: string; fullName: string };
+  _count?: { reviews: number };
+}
+
+export interface KpiReview {
+  id: string;
+  reviewCycleId: string;
+  kpiId: string;
+  employeeId: string;
+  managerId?: string;
+  selfRating?: number;
+  managerRating?: number;
+  finalRating?: number;
+  reviewComment?: string;
+  strengths?: string;
+  improvementAreas?: string;
+  signoffStatus: ReviewSignoffStatus;
+  signedOffAt?: string;
+  createdAt: string;
+  kpi?: { id: string; title: string; status: KpiStatus; kpiLevel?: KpiLevel; category?: KpiCategory; endDate?: string };
+  employee?: { id: string; fullName: string; jobTitle: string; department?: { name: string } };
+  manager?: { id: string; fullName: string };
+  reviewCycle?: { id: string; name: string; cycleType: ReviewCycleType };
+}
+
+export interface KpiDashboard {
+  totalKpis: number;
+  byStatus: Array<{ status: KpiStatus; count: number }>;
+  byLevel: Array<{ level: KpiLevel; count: number }>;
+  byCategory: Array<{ category: KpiCategory; count: number }>;
+  recentUpdates: KpiUpdate[];
+  myAssignments: Array<{ kpi: Kpi }>;
+}
+
+export interface KpiFilters {
+  sbuId?: string;
+  departmentId?: string;
+  kpiLevel?: KpiLevel;
+  timeHorizon?: KpiTimeHorizon;
+  category?: KpiCategory;
+  status?: KpiStatus;
+  assignedToMe?: string;
+  parentKpiId?: string;
+  page?: number;
+  limit?: number;
+}
+
+// ─── OKR types ───────────────────────────────────────
+
+export type OkrCycleStatus = 'Upcoming' | 'Active' | 'Closed';
+export type KeyResultType = 'Percentage' | 'Currency' | 'Number' | 'Boolean';
+export type OkrHealthStatus = 'OnTrack' | 'AtRisk' | 'Behind' | 'Completed';
+export type OkrApprovalStatus = 'Draft' | 'PendingApproval' | 'Approved' | 'Rejected';
+
+export interface OkrCycle {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  status: OkrCycleStatus;
+  isLocked: boolean;
+  createdById: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy?: { id: string; fullName: string };
+  _count?: { objectives: number };
+}
+
+export interface KeyResultUpdate {
+  id: string;
+  keyResultId: string;
+  updatedById: string;
+  previousValue: number;
+  newValue: number;
+  healthStatus: OkrHealthStatus;
+  note?: string;
+  createdAt: string;
+  updatedBy?: { id: string; fullName: string };
+}
+
+export interface OkrComment {
+  id: string;
+  keyResultId: string;
+  authorId: string;
+  body: string;
+  mentions: string[];
+  createdAt: string;
+  author?: { id: string; fullName: string };
+}
+
+export interface KeyResult {
+  id: string;
+  objectiveId: string;
+  title: string;
+  metricType: KeyResultType;
+  targetValue: number;
+  currentValue: number;
+  startValue: number;
+  healthStatus: OkrHealthStatus;
+  lastUpdatedAt?: string;
+  createdAt: string;
+  updates?: KeyResultUpdate[];
+  comments?: OkrComment[];
+}
+
+export interface Objective {
+  id: string;
+  cycleId: string;
+  ownerId: string;
+  title: string;
+  description?: string;
+  parentObjectiveId?: string;
+  completionPct: number;
+  approvalStatus: OkrApprovalStatus;
+  approverId?: string;
+  approvalNote?: string;
+  approvedAt?: string;
+  approver?: { id: string; fullName: string; jobTitle: string };
+  createdAt: string;
+  updatedAt: string;
+  cycle?: { id: string; name: string; status: OkrCycleStatus; isLocked: boolean };
+  owner?: { id: string; employeeId: string; fullName: string; jobTitle: string; department?: { name: string } };
+  parentObjective?: { id: string; title: string };
+  childObjectives?: Objective[];
+  keyResults?: KeyResult[];
+  _count?: { childObjectives: number; keyResults: number };
+}
+
+export interface OkrDashboard {
+  activeCycle: OkrCycle | null;
+  myObjectives: Objective[];
+  teamObjectives: Objective[];
+  directReports: Array<{ id: string; fullName: string; jobTitle: string }>;
+  staleKrCount: number;
+}
