@@ -70,7 +70,7 @@ export function AttendanceHistoryTab({ employeeId }: AttendanceHistoryTabProps) 
                   <th className="px-6 py-3">Status</th>
                   <th className="px-6 py-3">Clock In</th>
                   <th className="px-6 py-3">Clock Out</th>
-                  <th className="px-6 py-3">Location</th>
+                  <th className="px-6 py-3">Work Mode</th>
                 </tr>
               </thead>
               <tbody>

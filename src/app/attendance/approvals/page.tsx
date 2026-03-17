@@ -23,7 +23,7 @@ import {
   useApproveAttendance,
   useOverrideAttendance,
 } from "@/hooks/useAttendance";
-import { useAuthStore } from "@/hooks";
+import { useAuthStore, useEffectiveRole } from "@/hooks";
 import { ApprovalStatus, AttendanceRecord } from "@/types/attendance";
 import { Check, X, Clock, ShieldCheck } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
@@ -42,7 +42,8 @@ const STATUS_VARIANTS: Record<ApprovalStatus, "warning" | "success" | "danger" |
 
 export default function AttendanceApprovalsPage() {
   const { user } = useAuthStore();
-  const isAdmin = user?.role === "Admin";
+  const effectiveRole = useEffectiveRole();
+  const isAdmin = effectiveRole === "Admin";
 
   const [startDate, setStartDate] = useState(dayjs().startOf("month").format("YYYY-MM-DD"));
   const [endDate, setEndDate] = useState(dayjs().endOf("month").format("YYYY-MM-DD"));
@@ -201,7 +202,7 @@ export default function AttendanceApprovalsPage() {
                       <TableHead>Employee</TableHead>
                       <TableHead>Date</TableHead>
                       <TableHead>Time</TableHead>
-                      <TableHead>Location</TableHead>
+                      <TableHead>Work Mode</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Reason</TableHead>
                       <TableHead>Approval</TableHead>

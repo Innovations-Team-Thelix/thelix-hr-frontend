@@ -41,7 +41,7 @@ export function ClockInModal({ isOpen, onClose, isLate }: ClockInModalProps) {
     <Modal isOpen={isOpen} onClose={onClose} title="Clock In">
       <div className="space-y-4">
         <Select
-          label="Work Location"
+          label="Work Mode"
           options={[
             { label: 'Onsite', value: 'Onsite' },
             { label: 'Remote', value: 'Remote' },

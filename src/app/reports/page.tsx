@@ -18,7 +18,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/componen
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { useAuthStore, useSbus } from "@/hooks";
+import { useAuthStore, useSbus, useEffectiveRole } from "@/hooks";
 import api from "@/lib/api";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -100,12 +100,13 @@ const REPORTS: ReportConfig[] = [
 
 export default function ReportsPage() {
   const { user } = useAuthStore();
+  const effectiveRole = useEffectiveRole();
   const { data: sbus } = useSbus();
 
   const [filters, setFilters] = useState<Record<string, { sbuId: string; dateFrom: string; dateTo: string }>>({});
   const [downloading, setDownloading] = useState<Record<string, boolean>>({});
 
-  const userRole = user?.role || "Employee";
+  const userRole = (effectiveRole || "Employee") as string;
 
   const visibleReports = REPORTS.filter((r) =>
     r.roles.includes(userRole)

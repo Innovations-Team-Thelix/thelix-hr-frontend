@@ -120,7 +120,7 @@ export default function MyAttendancePage() {
                     <TableHead>Status</TableHead>
                     <TableHead>Clock In</TableHead>
                     <TableHead>Clock Out</TableHead>
-                    <TableHead>Location</TableHead>
+                    <TableHead>Work Mode</TableHead>
                     <TableHead>Approval</TableHead>
                   </TableRow>
                 </TableHeader>

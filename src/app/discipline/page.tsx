@@ -21,7 +21,7 @@ import {
   useDisciplinaryActions,
   useCreateDisciplinaryAction,
   useEmployees,
-  useAuthStore,
+  useAuthStore, useEffectiveRole,
 } from "@/hooks";
 import { formatDate } from "@/lib/utils";
 import type { ViolationType, DisciplinarySeverity, DisciplinaryActionFilters } from "@/types";
@@ -70,7 +70,8 @@ const SEVERITY_COLORS: Record<DisciplinarySeverity, string> = {
 
 export default function DisciplinePage() {
   const { user } = useAuthStore();
-  const isAdminOrSBUHead = user?.role === "Admin" || user?.role === "SBUHead";
+  const effectiveRole = useEffectiveRole();
+  const isAdminOrSBUHead = effectiveRole === "Admin" || effectiveRole === "SBUHead";
 
   const [modalOpen, setModalOpen] = useState(false);
   const [filters, setFilters] = useState<DisciplinaryActionFilters>({ page: 1 });

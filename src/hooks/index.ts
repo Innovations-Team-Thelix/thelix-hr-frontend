@@ -32,6 +32,7 @@ import type {
 
 export { useAuth, useAuth as useAuthStore } from "./useAuth";
 export { useSalaryHistory } from "./useEmployees";
+export { useEffectiveRole } from "./useEffectiveRole";
 
 // ─── Helpers ─────────────────────────────────────────
 
@@ -785,3 +786,6 @@ export function useMyPayslips() {
     },
   });
 }
+
+export * from './useAssets';
+export * from './useExitEmployee';

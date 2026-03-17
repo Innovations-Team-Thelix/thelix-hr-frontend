@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Tabs } from "@/components/ui/tabs";
-import { useCreateEmployee, useSbus, useDepartments, useAuth, useEmployees } from "@/hooks";
+import { useCreateEmployee, useSbus, useDepartments, useAuth, useEmployees, useEffectiveRole } from "@/hooks";
 
 const createEmployeeSchema = z.object({
   fullName: z.string().min(1, "Full name is required"),
@@ -74,6 +74,7 @@ const formTabs = [
 export default function CreateEmployeePage() {
   const router = useRouter();
   const { user } = useAuth();
+  const effectiveRole = useEffectiveRole();
   const [activeTab, setActiveTab] = useState("personal");
 
   const { data: sbus } = useSbus();
@@ -113,7 +114,7 @@ export default function CreateEmployeePage() {
 
   // Redirect non-admin users
   useEffect(() => {
-    if (user && user.role !== "Admin") {
+    if (user && effectiveRole !== "Admin") {
       router.push("/dashboard");
     }
   }, [user, router]);

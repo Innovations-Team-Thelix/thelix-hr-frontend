@@ -28,7 +28,7 @@ import {
   useApprovePayroll,
   useSendPayroll,
   useAllEmployees,
-  useAuthStore,
+  useAuthStore, useEffectiveRole,
 } from "@/hooks";
 import { formatDate } from "@/lib/utils";
 import type { PayrollStatus, Payslip } from "@/types";
@@ -60,7 +60,8 @@ export default function PayrollDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { user } = useAuthStore();
-  const isAdmin = user?.role === "Admin";
+  const effectiveRole = useEffectiveRole();
+  const isAdmin = effectiveRole === "Admin";
   const payrollRunId = params.id as string;
 
   const [addModalOpen, setAddModalOpen] = useState(false);

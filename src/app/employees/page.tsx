@@ -4,107 +4,35 @@ import React, { Suspense, useState, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Plus, Users, Upload, Download, X, FileSpreadsheet,
-  AlertCircle, CheckCircle2, Trash2, Search, ChevronDown,
-  SlidersHorizontal,
+  AlertCircle, CheckCircle2, Trash2, Search, SlidersHorizontal,
+  ChevronDown,
 } from "lucide-react";
 import { AppLayout } from "@/components/layout/app-layout";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { EmployeeTags } from "@/components/employees/employee-tags";
+import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 import { Pagination } from "@/components/ui/pagination";
 import { Skeleton } from "@/components/ui/loading";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Select } from "@/components/ui/select";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "@/components/ui/table";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import {
   useEmployees, useSbus, useDepartments, useAuth,
-  useDeleteEmployee, useBulkDeleteEmployees,
+  useDeleteEmployee, useBulkDeleteEmployees, useEffectiveRole,
 } from "@/hooks";
-import { formatDate } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 import api from "@/lib/api";
 import toast from "react-hot-toast";
 import type { EmployeeFilters } from "@/types";
-
-// ─── Brand tokens ──────────────────────────────────────
-const B = {
-  navy: "#111729",
-  navyLight: "#1a2333",
-  orange: "#f48220",
-  orangeBg: "#fef3e8",
-  orangeBorder: "#fcd9b0",
-};
-
-// ─── Small reusable primitives ─────────────────────────
-function NavyBtn({
-  children,
-  onClick,
-  disabled,
-  className = "",
-}: {
-  children: React.ReactNode;
-  onClick?: () => void;
-  disabled?: boolean;
-  className?: string;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white transition-colors disabled:opacity-60 ${className}`}
-      style={{ backgroundColor: B.navy }}
-      onMouseEnter={(e) => !disabled && (e.currentTarget.style.backgroundColor = B.navyLight)}
-      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = B.navy)}
-    >
-      {children}
-    </button>
-  );
-}
-
-function OrangeBtn({
-  children,
-  onClick,
-  disabled,
-  className = "",
-}: {
-  children: React.ReactNode;
-  onClick?: () => void;
-  disabled?: boolean;
-  className?: string;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white transition-colors disabled:opacity-60 ${className}`}
-      style={{ backgroundColor: B.orange }}
-      onMouseEnter={(e) => !disabled && (e.currentTarget.style.backgroundColor = "#e0731a")}
-      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = B.orange)}
-    >
-      {children}
-    </button>
-  );
-}
-
-function OutlineBtn({
-  children,
-  onClick,
-  disabled,
-  className = "",
-}: {
-  children: React.ReactNode;
-  onClick?: () => void;
-  disabled?: boolean;
-  className?: string;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:border-gray-300 hover:bg-gray-50 disabled:opacity-60 ${className}`}
-    >
-      {children}
-    </button>
-  );
-}
 
 export default function EmployeesPage() {
   return (
@@ -119,17 +47,23 @@ function EmployeesPageContent() {
   const searchParams = useSearchParams();
   const joinedParam = searchParams.get("joined") as "this_month" | "last_month" | "this_year" | null;
   const statusParam = searchParams.get("status") as EmployeeFilters["status"] | null;
+
   const { user } = useAuth();
-  const isAdmin = user?.role === "Admin";
+  const effectiveRole = useEffectiveRole();
+  const isAdmin = effectiveRole === "Admin";
+  const isSbuHead = effectiveRole === "SBUHead";
+  const sbuHeadScopeId = isSbuHead ? (user?.sbuScopeId ?? undefined) : undefined;
 
   const [filters, setFilters] = useState<EmployeeFilters>({
     page: 1,
     limit: 10,
     joined: joinedParam || undefined,
     status: statusParam || undefined,
+    sbuId: sbuHeadScopeId,
   });
 
-  // Bulk upload state
+  const [searchInput, setSearchInput] = useState(filters.search || "");
+  const [showFilters, setShowFilters] = useState(false);
   const [showBulkUpload, setShowBulkUpload] = useState(false);
   const [bulkFile, setBulkFile] = useState<File | null>(null);
   const [bulkUploading, setBulkUploading] = useState(false);
@@ -138,12 +72,9 @@ function EmployeesPageContent() {
     errors: Array<{ row: number; message: string }>;
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Export dropdown
-  const [exportOpen, setExportOpen] = useState(false);
+  const [showExport, setShowExport] = useState(false);
   const exportRef = useRef<HTMLDivElement>(null);
 
-  // Delete state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleteTarget, setDeleteTarget] = useState<
     { type: "single"; id: string; name: string } | { type: "bulk" } | null
@@ -152,36 +83,52 @@ function EmployeesPageContent() {
   const bulkDeleteEmployees = useBulkDeleteEmployees();
 
   const { data: sbus } = useSbus();
-  const { data: departments } = useDepartments(filters.sbuId);
+  const { data: departments } = useDepartments(sbuHeadScopeId ?? filters.sbuId);
   const { data: employeesData, isLoading, refetch } = useEmployees(filters);
 
   const employees = employeesData?.data || [];
   const pagination = employeesData?.pagination;
 
-  const handleFilterChange = useCallback(
-    (key: keyof EmployeeFilters, value: string) => {
-      setFilters((prev) => ({ ...prev, [key]: value || undefined, page: 1 }));
-      setSelectedIds(new Set());
-    },
-    []
-  );
+  // Derived "showing X–Y of Z"
+  const total = pagination?.total ?? 0;
+  const page = pagination?.page ?? 1;
+  const limit = filters.limit ?? 10;
+  const rangeFrom = total === 0 ? 0 : (page - 1) * limit + 1;
+  const rangeTo = Math.min(page * limit, total);
 
-  const clearFilters = useCallback(() => {
-    setFilters({ page: 1, limit: 10 });
+  const hasActiveFilters = !!(filters.search || filters.sbuId || filters.departmentId || filters.status);
+
+  // Search: fire on Enter or after debounce via blur
+  const applySearch = useCallback(() => {
+    setFilters((prev) => ({ ...prev, search: searchInput || undefined, page: 1 }));
+  }, [searchInput]);
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") applySearch();
+  };
+
+  const handleFilterSelect = useCallback((key: keyof EmployeeFilters, value: string) => {
+    setFilters((prev) => ({ ...prev, [key]: value || undefined, page: 1 }));
     setSelectedIds(new Set());
   }, []);
 
-  const hasActiveFilters = !!(
-    filters.search || filters.sbuId || filters.departmentId || filters.status
-  );
+  const clearFilters = useCallback(() => {
+    setSearchInput("");
+    setFilters({
+      page: 1,
+      limit: filters.limit,
+      sbuId: sbuHeadScopeId,
+    });
+    setSelectedIds(new Set());
+  }, [filters.limit, sbuHeadScopeId]);
 
-  const handlePageChange = useCallback((page: number) => {
-    setFilters((prev) => ({ ...prev, page }));
+  const handlePageChange = useCallback((p: number) => {
+    setFilters((prev) => ({ ...prev, page: p }));
     setSelectedIds(new Set());
   }, []);
 
   const handleExport = async (format: "csv" | "excel") => {
-    setExportOpen(false);
+    setShowExport(false);
     try {
       const fileFormat = format === "excel" ? "xlsx" : "csv";
       const res = await api.instance.get("/reports/employees", {
@@ -226,12 +173,10 @@ function EmployeesPageContent() {
       });
       setBulkResult(res.data.data);
       if (res.data.data.created > 0) {
-        toast.success(`${res.data.data.created} employees created`);
+        toast.success(`${res.data.data.created} employees created successfully`);
         refetch();
       }
-      if (res.data.data.errors.length > 0) {
-        toast.error(`${res.data.data.errors.length} rows had errors`);
-      }
+      if (res.data.data.errors.length > 0) toast.error(`${res.data.data.errors.length} rows had errors`);
     } catch (err: any) {
       toast.error(err?.response?.data?.message || "Bulk upload failed");
     } finally {
@@ -241,16 +186,8 @@ function EmployeesPageContent() {
     }
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) { setBulkFile(file); setBulkResult(null); }
-  };
-
-  // Selection helpers
   const selectableEmployees = employees.filter((emp) => emp.id !== user?.employeeId);
-  const allSelected =
-    selectableEmployees.length > 0 &&
-    selectableEmployees.every((emp) => selectedIds.has(emp.id));
+  const allSelected = selectableEmployees.length > 0 && selectableEmployees.every((emp) => selectedIds.has(emp.id));
 
   const toggleSelectAll = useCallback(() => {
     setSelectedIds((prev) =>
@@ -281,180 +218,84 @@ function EmployeesPageContent() {
 
   const sbuOptions = (sbus || []).map((s) => ({ label: s.name, value: s.id }));
   const departmentOptions = (departments || []).map((d) => ({ label: d.name, value: d.id }));
+  const statusOptions = [
+    { label: "Active", value: "Active" },
+    { label: "Suspended", value: "Suspended" },
+    { label: "Terminated", value: "Terminated" },
+    { label: "Resigned", value: "Resigned" },
+  ];
+
+  const colCount = isAdmin ? 10 : 8;
 
   return (
     <AppLayout pageTitle="Employees">
-      <div className="space-y-6">
+      <div className="space-y-5">
 
-        {/* ── Page header ── */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold" style={{ color: B.navy }}>
-              Employee Directory
-            </h1>
-            <p className="mt-0.5 text-sm text-gray-400">
-              {isLoading ? "Loading..." : `${pagination?.total ?? employees.length} employees total`}
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Export dropdown */}
-            <div ref={exportRef} className="relative">
-              <OutlineBtn onClick={() => setExportOpen(!exportOpen)}>
-                <Download className="h-4 w-4" />
-                Export
-                <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
-              </OutlineBtn>
-              {exportOpen && (
-                <div className="absolute right-0 top-full z-20 mt-1.5 w-44 rounded-xl border border-gray-100 bg-white py-1.5 shadow-lg">
-                  <button
-                    onClick={() => handleExport("csv")}
-                    className="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                  >
-                    Export as CSV
-                  </button>
-                  <button
-                    onClick={() => handleExport("excel")}
-                    className="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                  >
-                    Export as Excel
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {isAdmin && (
-              <OutlineBtn
-                onClick={() => {
-                  setShowBulkUpload(!showBulkUpload);
-                  setBulkResult(null);
-                  setBulkFile(null);
-                }}
-              >
-                <Upload className="h-4 w-4" />
-                Bulk Upload
-              </OutlineBtn>
-            )}
-
-            {isAdmin && (
-              <NavyBtn onClick={() => router.push("/employees/new")}>
-                <Plus className="h-4 w-4" />
-                Add Employee
-              </NavyBtn>
-            )}
-          </div>
-        </div>
-
-        {/* ── Bulk upload panel ── */}
+        {/* Bulk Upload Panel */}
         {isAdmin && showBulkUpload && (
-          <div className="rounded-2xl overflow-hidden border border-gray-100 bg-white shadow-sm">
-            {/* Panel header */}
-            <div
-              className="flex items-center justify-between px-6 py-4"
-              style={{ backgroundColor: B.navy }}
-            >
-              <div className="flex items-center gap-2.5">
-                <FileSpreadsheet className="h-5 w-5 text-white/70" />
-                <span className="font-semibold text-white">Bulk Upload Employees</span>
+          <div className="rounded-2xl border border-primary/20 bg-primary/5 p-5">
+            <div className="mb-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FileSpreadsheet className="h-5 w-5 text-primary" />
+                <h3 className="font-semibold text-gray-900">Bulk Upload Employees</h3>
               </div>
               <button
                 onClick={() => { setShowBulkUpload(false); setBulkResult(null); setBulkFile(null); }}
-                className="rounded-lg p-1 text-white/50 hover:text-white transition-colors"
+                className="rounded-lg p-1 text-gray-400 hover:bg-white hover:text-gray-700 transition-colors"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
-
-            <div className="p-6 space-y-5">
-              {/* Step 1 */}
-              <div className="flex items-center gap-4">
-                <div
-                  className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
-                  style={{ backgroundColor: B.orange }}
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">1</span>
+                <span className="text-sm text-gray-700">Download the template and fill in employee data</span>
+                <button
+                  onClick={handleDownloadTemplate}
+                  className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:text-primary-700"
                 >
-                  1
-                </div>
-                <div className="flex flex-1 items-center justify-between gap-4">
-                  <p className="text-sm text-gray-700">
-                    Download the template and fill in employee data
-                  </p>
-                  <button
-                    onClick={handleDownloadTemplate}
-                    className="flex items-center gap-1.5 text-sm font-semibold transition-colors flex-shrink-0"
-                    style={{ color: B.orange }}
-                    onMouseEnter={(e) => (e.currentTarget.style.color = "#e0731a")}
-                    onMouseLeave={(e) => (e.currentTarget.style.color = B.orange)}
-                  >
-                    <Download className="h-3.5 w-3.5" />
-                    Download Template
-                  </button>
-                </div>
+                  <Download className="h-3.5 w-3.5" />
+                  Download Template
+                </button>
               </div>
-
-              <div className="ml-3.5 h-px bg-gray-100" />
-
-              {/* Step 2 */}
-              <div className="flex items-start gap-4">
-                <div
-                  className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold text-white mt-0.5"
-                  style={{ backgroundColor: B.orange }}
-                >
-                  2
-                </div>
+              <div className="flex items-start gap-3">
+                <span className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">2</span>
                 <div className="flex-1">
-                  <p className="text-sm text-gray-700 mb-3">Upload the completed file</p>
-                  <div className="flex flex-wrap items-center gap-3">
-                    <label
-                      className="cursor-pointer rounded-xl border-2 border-dashed px-5 py-3 text-sm transition-colors"
-                      style={{
-                        borderColor: bulkFile ? B.orange : "#e5e7eb",
-                        backgroundColor: bulkFile ? B.orangeBg : "#f9fafb",
-                        color: bulkFile ? B.orange : "#6b7280",
-                      }}
-                    >
-                      {bulkFile ? (
-                        <span className="font-semibold">{bulkFile.name}</span>
-                      ) : (
-                        "Choose .xlsx or .csv file"
-                      )}
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept=".xlsx,.csv"
-                        onChange={handleFileSelect}
-                        className="hidden"
-                      />
+                  <span className="text-sm text-gray-700">Upload the completed file</span>
+                  <div className="mt-2 flex items-center gap-3">
+                    <label className="cursor-pointer rounded-xl border-2 border-dashed border-primary/30 bg-white px-4 py-2.5 text-sm text-gray-600 hover:border-primary/60 transition-colors">
+                      {bulkFile
+                        ? <span className="font-medium text-primary">{bulkFile.name}</span>
+                        : <span>Choose .xlsx or .csv file</span>
+                      }
+                      <input ref={fileInputRef} type="file" accept=".xlsx,.csv" onChange={(e) => { setBulkFile(e.target.files?.[0] || null); setBulkResult(null); }} className="hidden" />
                     </label>
-                    <OrangeBtn onClick={handleBulkUpload} disabled={!bulkFile || bulkUploading}>
-                      {bulkUploading ? "Uploading..." : "Upload Now"}
-                    </OrangeBtn>
+                    <Button onClick={handleBulkUpload} disabled={!bulkFile || bulkUploading} size="sm">
+                      {bulkUploading ? "Uploading..." : "Upload"}
+                    </Button>
                   </div>
                 </div>
               </div>
-
-              {/* Results */}
               {bulkResult && (
-                <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
-                  <div className="flex items-center gap-4 mb-2">
+                <div className="mt-2 rounded-xl border border-gray-200 bg-white p-4">
+                  <div className="mb-2 flex items-center gap-4">
                     {bulkResult.created > 0 && (
                       <div className="flex items-center gap-1.5 text-sm text-green-700">
                         <CheckCircle2 className="h-4 w-4" />
-                        <span className="font-semibold">{bulkResult.created} created</span>
+                        <span className="font-medium">{bulkResult.created} created</span>
                       </div>
                     )}
                     {bulkResult.errors.length > 0 && (
-                      <div className="flex items-center gap-1.5 text-sm text-red-600">
+                      <div className="flex items-center gap-1.5 text-sm text-red-700">
                         <AlertCircle className="h-4 w-4" />
-                        <span className="font-semibold">{bulkResult.errors.length} errors</span>
+                        <span className="font-medium">{bulkResult.errors.length} errors</span>
                       </div>
                     )}
                   </div>
                   {bulkResult.errors.length > 0 && (
-                    <div className="mt-2 max-h-36 overflow-y-auto space-y-0.5">
+                    <div className="max-h-40 overflow-y-auto">
                       {bulkResult.errors.map((err, i) => (
-                        <p key={i} className="text-xs text-red-600">
-                          Row {err.row}: {err.message}
-                        </p>
+                        <p key={i} className="py-0.5 text-xs text-red-600">Row {err.row}: {err.message}</p>
                       ))}
                     </div>
                   )}
@@ -464,295 +305,279 @@ function EmployeesPageContent() {
           </div>
         )}
 
-        {/* ── Filter bar ── */}
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Search */}
-          <div className="relative min-w-[240px] flex-1">
-            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search by name, email, ID..."
-              value={filters.search || ""}
-              onChange={(e) => handleFilterChange("search", e.target.value)}
-              className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-10 pr-4 text-sm text-gray-900 placeholder:text-gray-400 transition-colors focus:outline-none focus:ring-2"
-              style={{ "--tw-ring-color": `${B.orange}33` } as React.CSSProperties}
-              onFocus={(e) => (e.currentTarget.style.borderColor = B.orange)}
-              onBlur={(e) => (e.currentTarget.style.borderColor = "")}
-            />
-          </div>
+        {/* ── Main card ── */}
+        <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
 
-          {/* SBU */}
-          <select
-            value={filters.sbuId || ""}
-            onChange={(e) => handleFilterChange("sbuId", e.target.value)}
-            className="rounded-xl border border-gray-200 bg-white py-2.5 pl-3 pr-8 text-sm text-gray-700 focus:outline-none focus:ring-2 appearance-none"
-            style={{ "--tw-ring-color": `${B.orange}33` } as React.CSSProperties}
-          >
-            <option value="">All SBUs</option>
-            {sbuOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
+          {/* Card header */}
+          <div className="flex flex-col gap-3 border-b border-gray-100 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-base font-semibold text-gray-900">Employee List</h2>
+              <p className="mt-0.5 text-xs text-gray-400">{total} employees total</p>
+            </div>
 
-          {/* Department */}
-          <select
-            value={filters.departmentId || ""}
-            onChange={(e) => handleFilterChange("departmentId", e.target.value)}
-            className="rounded-xl border border-gray-200 bg-white py-2.5 pl-3 pr-8 text-sm text-gray-700 focus:outline-none focus:ring-2 appearance-none"
-            style={{ "--tw-ring-color": `${B.orange}33` } as React.CSSProperties}
-          >
-            <option value="">All Departments</option>
-            {departmentOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Inline search */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search employee..."
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  onKeyDown={handleSearchKeyDown}
+                  onBlur={applySearch}
+                  className="w-52 rounded-xl border border-gray-200 bg-gray-50 py-2 pl-8 pr-3 text-sm placeholder:text-gray-400 focus:border-primary focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
 
-          {/* Status */}
-          <select
-            value={filters.status || ""}
-            onChange={(e) => handleFilterChange("status", e.target.value)}
-            className="rounded-xl border border-gray-200 bg-white py-2.5 pl-3 pr-8 text-sm text-gray-700 focus:outline-none focus:ring-2 appearance-none"
-            style={{ "--tw-ring-color": `${B.orange}33` } as React.CSSProperties}
-          >
-            <option value="">All Statuses</option>
-            <option value="Active">Active</option>
-            <option value="Suspended">Suspended</option>
-            <option value="Terminated">Terminated</option>
-            <option value="Resigned">Resigned</option>
-          </select>
-
-          {hasActiveFilters && (
-            <button
-              onClick={clearFilters}
-              className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-500 hover:text-gray-700 transition-colors"
-            >
-              <X className="h-3.5 w-3.5" />
-              Clear
-            </button>
-          )}
-
-          {/* Filter count pill */}
-          {hasActiveFilters && (
-            <span
-              className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold"
-              style={{ backgroundColor: B.orangeBg, color: B.orange }}
-            >
-              <SlidersHorizontal className="h-3 w-3" />
-              Filtered
-            </span>
-          )}
-        </div>
-
-        {/* ── Bulk action bar ── */}
-        {isAdmin && selectedIds.size > 0 && (
-          <div
-            className="flex items-center gap-4 rounded-2xl px-5 py-3"
-            style={{ backgroundColor: B.navy }}
-          >
-            <span className="text-sm font-semibold text-white">
-              {selectedIds.size} employee{selectedIds.size > 1 ? "s" : ""} selected
-            </span>
-            <button
-              onClick={() => setSelectedIds(new Set())}
-              className="text-sm text-white/50 hover:text-white transition-colors underline"
-            >
-              Clear selection
-            </button>
-            <div className="ml-auto">
+              {/* Filter toggle */}
               <button
-                onClick={() => setDeleteTarget({ type: "bulk" })}
-                className="flex items-center gap-2 rounded-xl bg-red-500 px-4 py-2 text-sm font-semibold text-white hover:bg-red-600 transition-colors"
+                onClick={() => setShowFilters(!showFilters)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-medium transition-colors",
+                  showFilters || hasActiveFilters
+                    ? "border-primary bg-primary/5 text-primary"
+                    : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                )}
               >
-                <Trash2 className="h-4 w-4" />
-                Delete {selectedIds.size} selected
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+                Filter
+                {hasActiveFilters && (
+                  <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                )}
               </button>
+
+              {/* Export */}
+              <div ref={exportRef} className="relative">
+                <button
+                  onClick={() => setShowExport(!showExport)}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Export
+                  <ChevronDown className="h-3 w-3" />
+                </button>
+                {showExport && (
+                  <div className="absolute right-0 top-full z-20 mt-1 w-36 overflow-hidden rounded-xl border border-gray-100 bg-white shadow-lg">
+                    <button className="flex w-full items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => handleExport("csv")}>Export as CSV</button>
+                    <button className="flex w-full items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={() => handleExport("excel")}>Export as Excel</button>
+                  </div>
+                )}
+              </div>
+
+              {/* Bulk upload */}
+              {isAdmin && (
+                <button
+                  onClick={() => { setShowBulkUpload(!showBulkUpload); setBulkResult(null); setBulkFile(null); }}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
+                >
+                  <Upload className="h-3.5 w-3.5" />
+                  Bulk Upload
+                </button>
+              )}
+
+              {/* Add Employee — primary CTA */}
+              {isAdmin && (
+                <button
+                  onClick={() => router.push("/employees/new")}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-primary/30 transition-all hover:bg-primary-600 hover:shadow-md hover:shadow-primary/30 active:scale-[0.98]"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  New Employee
+                </button>
+              )}
             </div>
           </div>
-        )}
 
-        {/* ── Employee table ── */}
-        <div className="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+          {/* Expanded filter row */}
+          {showFilters && (
+            <div className="flex flex-wrap items-end gap-3 border-b border-gray-100 bg-gray-50/60 px-6 py-3">
+              {!isSbuHead && (
+                <div className="min-w-[160px]">
+                  <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-gray-400">SBU</label>
+                  <Select
+                    options={sbuOptions}
+                    placeholder="All SBUs"
+                    value={filters.sbuId || ""}
+                    onChange={(e) => handleFilterSelect("sbuId", e.target.value)}
+                  />
+                </div>
+              )}
+              <div className="min-w-[160px]">
+                <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-gray-400">Department</label>
+                <Select
+                  options={departmentOptions}
+                  placeholder="All Departments"
+                  value={filters.departmentId || ""}
+                  onChange={(e) => handleFilterSelect("departmentId", e.target.value)}
+                />
+              </div>
+              <div className="min-w-[140px]">
+                <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-gray-400">Status</label>
+                <Select
+                  options={statusOptions}
+                  placeholder="All Statuses"
+                  value={filters.status || ""}
+                  onChange={(e) => handleFilterSelect("status", e.target.value)}
+                />
+              </div>
+              {hasActiveFilters && (
+                <button
+                  onClick={clearFilters}
+                  className="inline-flex items-center gap-1 text-sm text-gray-400 hover:text-gray-700 transition-colors"
+                >
+                  <X className="h-3.5 w-3.5" />
+                  Clear filters
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Bulk action bar */}
+          {isAdmin && selectedIds.size > 0 && (
+            <div className="flex items-center gap-4 border-b border-red-100 bg-red-50 px-6 py-2.5">
+              <span className="text-sm font-medium text-gray-700">{selectedIds.size} selected</span>
+              <button onClick={() => setSelectedIds(new Set())} className="text-sm text-gray-400 underline hover:text-gray-700">
+                Clear
+              </button>
+              <div className="ml-auto">
+                <Button variant="danger" size="sm" onClick={() => setDeleteTarget({ type: "bulk" })}>
+                  <Trash2 className="h-4 w-4" />
+                  Delete selected
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Table */}
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr style={{ backgroundColor: "#f9fafb" }}>
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-gray-50/70">
                   {isAdmin && (
-                    <th className="w-12 px-4 py-3.5 text-left">
+                    <TableHead className="w-10">
                       <input
                         type="checkbox"
                         checked={allSelected}
                         onChange={toggleSelectAll}
-                        className="h-4 w-4 rounded border-gray-300"
-                        style={{ accentColor: B.orange }}
+                        className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
                         onClick={(e) => e.stopPropagation()}
                       />
-                    </th>
+                    </TableHead>
                   )}
-                  {["Employee ID", "Name", "SBU", "Department", "Job Title", "Status", "Type", "Date of Hire"].map((col) => (
-                    <th
-                      key={col}
-                      className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-400"
-                    >
-                      {col}
-                    </th>
-                  ))}
-                  {isAdmin && <th className="w-10 px-4 py-3.5" />}
-                </tr>
-              </thead>
-
-              <tbody className="divide-y divide-gray-50">
+                  <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Employee ID</TableHead>
+                  <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Name</TableHead>
+                  <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Job Title</TableHead>
+                  <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Department</TableHead>
+                  <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Type</TableHead>
+                  <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Date of Hire</TableHead>
+                  <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Status</TableHead>
+                  <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Tags</TableHead>
+                  {isAdmin && <TableHead className="w-10" />}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {isLoading ? (
                   Array.from({ length: 8 }).map((_, i) => (
-                    <tr key={i}>
-                      {Array.from({ length: isAdmin ? 10 : 8 }).map((_, j) => (
-                        <td key={j} className="px-4 py-4">
-                          <Skeleton className="h-4 w-3/4" variant="text" />
-                        </td>
+                    <TableRow key={`sk-${i}`}>
+                      {Array.from({ length: colCount }).map((_, j) => (
+                        <TableCell key={j}><Skeleton className="h-4 w-3/4" variant="text" /></TableCell>
                       ))}
-                    </tr>
+                    </TableRow>
                   ))
                 ) : employees.length === 0 ? (
-                  <tr>
-                    <td colSpan={isAdmin ? 10 : 8} className="p-0">
-                      <EmptyState
-                        icon={Users}
-                        title="No employees found"
-                        description="Try adjusting your search or filter criteria"
-                      />
-                    </td>
-                  </tr>
+                  <TableRow>
+                    <TableCell colSpan={colCount} className="p-0">
+                      <EmptyState icon={Users} title="No employees found" description="Try adjusting your search or filter criteria" />
+                    </TableCell>
+                  </TableRow>
                 ) : (
                   employees.map((emp) => {
                     const isSelf = emp.id === user?.employeeId;
-                    const isSelected = selectedIds.has(emp.id);
                     return (
-                      <tr
+                      <TableRow
                         key={emp.id}
+                        className="cursor-pointer hover:bg-gray-50/70 transition-colors"
                         onClick={() => router.push(`/employees/${emp.id}`)}
-                        className="cursor-pointer transition-colors"
-                        style={{
-                          backgroundColor: isSelected ? B.orangeBg : undefined,
-                        }}
-                        onMouseEnter={(e) => {
-                          if (!isSelected) e.currentTarget.style.backgroundColor = "#fafafa";
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.backgroundColor = isSelected ? B.orangeBg : "";
-                        }}
                       >
                         {isAdmin && (
-                          <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
+                          <TableCell onClick={(e) => e.stopPropagation()}>
                             {!isSelf && (
                               <input
                                 type="checkbox"
-                                checked={isSelected}
+                                checked={selectedIds.has(emp.id)}
                                 onChange={() => toggleSelect(emp.id)}
-                                className="h-4 w-4 rounded border-gray-300"
-                                style={{ accentColor: B.orange }}
+                                className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
                               />
                             )}
-                          </td>
+                          </TableCell>
                         )}
-
-                        {/* Employee ID */}
-                        <td className="px-4 py-4">
-                          <span
-                            className="rounded-md px-2 py-0.5 font-mono text-xs font-medium"
-                            style={{ backgroundColor: "#f3f4f6", color: "#6b7280" }}
-                          >
-                            {emp.employeeId}
-                          </span>
-                        </td>
-
-                        {/* Name + email */}
-                        <td className="px-4 py-4">
+                        <TableCell>
+                          <span className="font-mono text-xs text-gray-400">{emp.employeeId}</span>
+                        </TableCell>
+                        <TableCell>
                           <div className="flex items-center gap-3">
                             <Avatar name={emp.fullName} size="sm" />
-                            <div>
-                              <p className="text-sm font-semibold text-gray-900">
-                                {emp.fullName}
-                              </p>
-                              <p className="text-xs text-gray-400">{emp.workEmail}</p>
+                            <div className="min-w-0">
+                              <p className="truncate font-medium text-gray-900">{emp.fullName}</p>
+                              <p className="truncate text-xs text-gray-400">{emp.workEmail}</p>
                             </div>
                           </div>
-                        </td>
-
-                        {/* SBU */}
-                        <td className="px-4 py-4">
-                          {emp.sbu?.name ? (
-                            <span
-                              className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium"
-                              style={{ backgroundColor: B.orangeBg, color: B.orange }}
-                            >
-                              {emp.sbu.name}
-                            </span>
-                          ) : (
-                            <span className="text-sm text-gray-400">—</span>
-                          )}
-                        </td>
-
-                        {/* Department */}
-                        <td className="px-4 py-4 text-sm text-gray-600">
-                          {emp.department?.name || <span className="text-gray-300">—</span>}
-                        </td>
-
-                        {/* Job Title */}
-                        <td className="px-4 py-4 text-sm text-gray-700 max-w-[160px] truncate">
-                          {emp.jobTitle}
-                        </td>
-
-                        {/* Status + tags */}
-                        <td className="px-4 py-4">
-                          <div className="flex flex-col gap-1 items-start">
-                            <StatusBadge status={emp.employmentStatus} />
-                            <EmployeeTags tags={emp.tags} />
-                          </div>
-                        </td>
-
-                        {/* Employment type */}
-                        <td className="px-4 py-4">
-                          <StatusBadge status={emp.employmentType} />
-                        </td>
-
-                        {/* Date of hire */}
-                        <td className="px-4 py-4 text-sm text-gray-500">
-                          {formatDate(emp.dateOfHire)}
-                        </td>
-
-                        {/* Delete */}
+                        </TableCell>
+                        <TableCell className="text-sm text-gray-600">{emp.jobTitle || "—"}</TableCell>
+                        <TableCell className="text-sm text-gray-600">{emp.department?.name || "—"}</TableCell>
+                        <TableCell>
+                          <span className="inline-flex items-center rounded-full border border-gray-200 px-2.5 py-0.5 text-xs font-medium text-gray-600">
+                            {emp.employmentType || "—"}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-sm text-gray-500">{formatDate(emp.dateOfHire)}</TableCell>
+                        <TableCell>
+                          <StatusBadge status={emp.employmentStatus} />
+                        </TableCell>
+                        <TableCell>
+                          <EmployeeTags tags={emp.tags} />
+                        </TableCell>
                         {isAdmin && (
-                          <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
+                          <TableCell onClick={(e) => e.stopPropagation()}>
                             {!isSelf && (
                               <button
-                                onClick={() =>
-                                  setDeleteTarget({ type: "single", id: emp.id, name: emp.fullName })
-                                }
+                                onClick={() => setDeleteTarget({ type: "single", id: emp.id, name: emp.fullName })}
                                 className="rounded-lg p-1.5 text-gray-300 hover:bg-red-50 hover:text-red-500 transition-colors"
                                 title="Delete employee"
                               >
-                                <Trash2 className="h-4 w-4" />
+                                <Trash2 className="h-3.5 w-3.5" />
                               </button>
                             )}
-                          </td>
+                          </TableCell>
                         )}
-                      </tr>
+                      </TableRow>
                     );
                   })
                 )}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
 
-          {/* Pagination */}
-          {pagination && pagination.totalPages > 1 && (
-            <div className="border-t border-gray-100 px-6 py-4">
+          {/* Footer */}
+          <div className="flex items-center justify-between border-t border-gray-100 px-6 py-3">
+            <p className="text-sm text-gray-400">
+              {total === 0
+                ? "No results"
+                : `Showing ${rangeFrom}–${rangeTo} of ${total} results`}
+            </p>
+            {pagination && pagination.totalPages > 1 && (
               <Pagination
                 currentPage={pagination.page}
                 totalPages={pagination.totalPages}
                 onPageChange={handlePageChange}
               />
-            </div>
-          )}
+            )}
+          </div>
+
         </div>
       </div>
 
-      {/* Delete confirmation */}
       <ConfirmDialog
         isOpen={deleteTarget !== null}
         onClose={() => setDeleteTarget(null)}
@@ -764,11 +589,7 @@ function EmployeesPageContent() {
             ? `Are you sure you want to delete ${deleteTarget.name}? This action cannot be undone.`
             : `Are you sure you want to delete ${selectedIds.size} employee(s)? This action cannot be undone.`
         }
-        confirmLabel={
-          deleteTarget?.type === "single"
-            ? "Delete"
-            : `Delete ${selectedIds.size} employee(s)`
-        }
+        confirmLabel={deleteTarget?.type === "single" ? "Delete" : `Delete ${selectedIds.size} employee(s)`}
         loading={deleteEmployee.isPending || bulkDeleteEmployees.isPending}
       />
     </AppLayout>
