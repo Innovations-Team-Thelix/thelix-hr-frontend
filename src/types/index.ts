@@ -844,4 +844,10 @@ export interface OkrDashboard {
   teamObjectives: Objective[];
   directReports: Array<{ id: string; fullName: string; jobTitle: string }>;
   staleKrCount: number;
+  orgStats?: {
+    totalObjectives: number;
+    approvedCount: number;
+    pendingCount: number;
+    avgCompletion: number;
+  };
 }

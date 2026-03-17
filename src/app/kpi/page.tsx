@@ -30,7 +30,7 @@ import {
   useUpdateObjective, useDeleteObjective, useUpdateKeyResult, useOkrComments,
   useAddOkrComment, useObjective, useApproveObjective, useRejectObjective,
   useSubmitObjective, usePendingOkrApprovals, usePendingKpiReviews, useApproveKpiReview,
-  useRejectKpiReview, useAllKpisForHR,
+  useRejectKpiReview, useAllKpisForHR, useApprovers,
 } from "@/hooks";
 import { formatDate } from "@/lib/utils";
 import toast from "react-hot-toast";
@@ -504,6 +504,8 @@ const STATUS_BAR_COLOR: Partial<Record<KpiStatus, string>> = {
 function KpiDashboardView() {
   const { data: dashboard, isLoading } = useKpiDashboard();
   const { data: okrDash } = useOkrDashboard();
+  const effectiveRole = useEffectiveRole();
+  const isAdminOrSBUHead = effectiveRole === "Admin" || effectiveRole === "SBUHead";
 
   if (isLoading) {
     return (
@@ -657,7 +659,9 @@ function KpiDashboardView() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="h-2 w-2 rounded-full bg-violet-500" />
-                <CardTitle className="text-sm font-semibold text-gray-800">My OKR Progress</CardTitle>
+                <CardTitle className="text-sm font-semibold text-gray-800">
+                  {isAdminOrSBUHead ? "OKR Overview" : "My OKR Progress"}
+                </CardTitle>
               </div>
               {okrDash.activeCycle && (
                 <span className="text-xs font-medium text-violet-700 bg-violet-50 rounded-full px-2 py-0.5">
@@ -667,53 +671,104 @@ function KpiDashboardView() {
             </div>
           </CardHeader>
           <CardContent className="pt-0 space-y-4">
-            {/* Summary row */}
-            <div className="grid grid-cols-3 gap-3">
-              <div className="rounded-xl bg-gray-50 px-3 py-2.5 text-center">
-                <p className="text-2xl font-bold text-gray-900">{okrDash.myObjectives?.length ?? 0}</p>
-                <p className="text-xs text-gray-500 mt-0.5">My Objectives</p>
-              </div>
-              <div className="rounded-xl bg-gray-50 px-3 py-2.5 text-center">
-                <p className="text-2xl font-bold text-gray-900">
-                  {okrDash.myObjectives?.length
-                    ? Math.round(okrDash.myObjectives.reduce((sum: number, o: any) => sum + Number(o.completionPct ?? 0), 0) / okrDash.myObjectives.length)
-                    : 0}%
-                </p>
-                <p className="text-xs text-gray-500 mt-0.5">Avg. Completion</p>
-              </div>
-              <div className={`rounded-xl px-3 py-2.5 text-center ${okrDash.staleKrCount > 0 ? "bg-amber-50" : "bg-gray-50"}`}>
-                <p className={`text-2xl font-bold ${okrDash.staleKrCount > 0 ? "text-amber-600" : "text-gray-900"}`}>{okrDash.staleKrCount}</p>
-                <p className="text-xs text-gray-500 mt-0.5">Stale Key Results</p>
-              </div>
-            </div>
+            {/* Org-wide stats for Admin/SBUHead */}
+            {isAdminOrSBUHead && okrDash.orgStats ? (
+              <>
+                <div className="grid grid-cols-4 gap-3">
+                  <div className="rounded-xl bg-violet-50 px-3 py-2.5 text-center">
+                    <p className="text-2xl font-bold text-violet-700">{okrDash.orgStats.totalObjectives}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">Total Objectives</p>
+                  </div>
+                  <div className="rounded-xl bg-emerald-50 px-3 py-2.5 text-center">
+                    <p className="text-2xl font-bold text-emerald-700">{okrDash.orgStats.approvedCount}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">Approved</p>
+                  </div>
+                  <div className="rounded-xl bg-amber-50 px-3 py-2.5 text-center">
+                    <p className="text-2xl font-bold text-amber-600">{okrDash.orgStats.pendingCount}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">Pending Approval</p>
+                  </div>
+                  <div className="rounded-xl bg-gray-50 px-3 py-2.5 text-center">
+                    <p className="text-2xl font-bold text-gray-900">{okrDash.orgStats.avgCompletion}%</p>
+                    <p className="text-xs text-gray-500 mt-0.5">Avg. Completion</p>
+                  </div>
+                </div>
+                {/* Team objectives */}
+                {(okrDash.teamObjectives ?? []).length > 0 && (
+                  <div className="space-y-2.5">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Team Progress</p>
+                    {(okrDash.teamObjectives as any[]).slice(0, 5).map((obj: any) => {
+                      const pct = Math.min(100, Math.round(Number(obj.completionPct ?? 0)));
+                      const barColor = pct >= 75 ? "bg-emerald-500" : pct >= 40 ? "bg-violet-500" : "bg-amber-500";
+                      return (
+                        <div key={obj.id} className="space-y-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-xs font-medium text-gray-700 truncate flex-1">{obj.title}</p>
+                            <span className="text-xs text-gray-400 shrink-0">{obj.owner?.fullName}</span>
+                            <span className="text-xs font-semibold text-gray-500 shrink-0">{pct}%</span>
+                          </div>
+                          <div className="h-1.5 w-full rounded-full bg-gray-100 overflow-hidden">
+                            <div className={`h-1.5 rounded-full ${barColor} transition-all duration-500`} style={{ width: `${pct}%` }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {(okrDash.teamObjectives ?? []).length === 0 && (
+                  <p className="text-xs text-gray-400 text-center py-2">No objectives in the active cycle yet.</p>
+                )}
+              </>
+            ) : (
+              <>
+                {/* Personal stats for non-admin */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="rounded-xl bg-gray-50 px-3 py-2.5 text-center">
+                    <p className="text-2xl font-bold text-gray-900">{okrDash.myObjectives?.length ?? 0}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">My Objectives</p>
+                  </div>
+                  <div className="rounded-xl bg-gray-50 px-3 py-2.5 text-center">
+                    <p className="text-2xl font-bold text-gray-900">
+                      {okrDash.myObjectives?.length
+                        ? Math.round(okrDash.myObjectives.reduce((sum: number, o: any) => sum + Number(o.completionPct ?? 0), 0) / okrDash.myObjectives.length)
+                        : 0}%
+                    </p>
+                    <p className="text-xs text-gray-500 mt-0.5">Avg. Completion</p>
+                  </div>
+                  <div className={`rounded-xl px-3 py-2.5 text-center ${okrDash.staleKrCount > 0 ? "bg-amber-50" : "bg-gray-50"}`}>
+                    <p className={`text-2xl font-bold ${okrDash.staleKrCount > 0 ? "text-amber-600" : "text-gray-900"}`}>{okrDash.staleKrCount}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">Stale Key Results</p>
+                  </div>
+                </div>
 
-            {/* Objective progress bars */}
-            {(okrDash.myObjectives ?? []).length > 0 && (
-              <div className="space-y-2.5">
-                {(okrDash.myObjectives as any[]).slice(0, 5).map((obj: any) => {
-                  const pct = Math.min(100, Math.round(Number(obj.completionPct ?? 0)));
-                  const health = (obj.keyResults ?? []).reduce((worst: OkrHealthStatus, kr: any) => {
-                    const order: OkrHealthStatus[] = ["Completed", "OnTrack", "AtRisk", "Behind"];
-                    return order.indexOf(kr.healthStatus) < order.indexOf(worst) ? kr.healthStatus : worst;
-                  }, "Completed" as OkrHealthStatus);
-                  const barColor = health === "Behind" ? "bg-red-500" : health === "AtRisk" ? "bg-amber-500" : health === "Completed" ? "bg-emerald-500" : "bg-violet-500";
-                  return (
-                    <div key={obj.id} className="space-y-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-xs font-medium text-gray-700 truncate flex-1">{obj.title}</p>
-                        <span className="text-xs font-semibold text-gray-500 shrink-0">{pct}%</span>
-                      </div>
-                      <div className="h-1.5 w-full rounded-full bg-gray-100 overflow-hidden">
-                        <div className={`h-1.5 rounded-full ${barColor} transition-all duration-500`} style={{ width: `${pct}%` }} />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+                {/* Objective progress bars */}
+                {(okrDash.myObjectives ?? []).length > 0 && (
+                  <div className="space-y-2.5">
+                    {(okrDash.myObjectives as any[]).slice(0, 5).map((obj: any) => {
+                      const pct = Math.min(100, Math.round(Number(obj.completionPct ?? 0)));
+                      const health = (obj.keyResults ?? []).reduce((worst: OkrHealthStatus, kr: any) => {
+                        const order: OkrHealthStatus[] = ["Completed", "OnTrack", "AtRisk", "Behind"];
+                        return order.indexOf(kr.healthStatus) < order.indexOf(worst) ? kr.healthStatus : worst;
+                      }, "Completed" as OkrHealthStatus);
+                      const barColor = health === "Behind" ? "bg-red-500" : health === "AtRisk" ? "bg-amber-500" : health === "Completed" ? "bg-emerald-500" : "bg-violet-500";
+                      return (
+                        <div key={obj.id} className="space-y-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-xs font-medium text-gray-700 truncate flex-1">{obj.title}</p>
+                            <span className="text-xs font-semibold text-gray-500 shrink-0">{pct}%</span>
+                          </div>
+                          <div className="h-1.5 w-full rounded-full bg-gray-100 overflow-hidden">
+                            <div className={`h-1.5 rounded-full ${barColor} transition-all duration-500`} style={{ width: `${pct}%` }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
 
-            {(okrDash.myObjectives ?? []).length === 0 && (
-              <p className="text-xs text-gray-400 text-center py-2">No objectives in the active cycle yet.</p>
+                {(okrDash.myObjectives ?? []).length === 0 && (
+                  <p className="text-xs text-gray-400 text-center py-2">No objectives in the active cycle yet.</p>
+                )}
+              </>
             )}
           </CardContent>
         </Card>
@@ -746,9 +801,9 @@ function MyOkrsTab({ employeeId, canManage }: { employeeId: string; canManage: b
 
   const { data: okrDash } = useOkrDashboard();
 
-  // Load SBU Heads for approver selection
-  const { data: sbuHeadsData } = useEmployees({ limit: 200, status: "Active" });
-  const approverOptions = (sbuHeadsData?.data ?? []).filter((e) => e.userAccount?.role === "SBUHead" || e.userAccount?.role === "Admin");
+  // Load lead-role employees for approver selection
+  const { data: approversData = [] } = useApprovers();
+  const approverOptions = approversData;
 
   const createObjective = useCreateObjective();
   const updateObjective = useUpdateObjective();
@@ -991,7 +1046,7 @@ function MyOkrsTab({ employeeId, canManage }: { employeeId: string; canManage: b
               required
               options={[
                 { label: "Select an approver...", value: "", disabled: true },
-                ...approverOptions.map((e) => ({ label: `${e.fullName} · ${e.jobTitle ?? ""}`, value: e.id })),
+                ...approverOptions.map((e) => ({ label: `${e.fullName} · ${e.role}`, value: e.id })),
               ]}
               value={objForm.approverId}
               onChange={(ev) => setObjForm((f) => ({ ...f, approverId: ev.target.value }))}
@@ -1078,7 +1133,7 @@ function MyOkrsTab({ employeeId, canManage }: { employeeId: string; canManage: b
               required
               options={[
                 { label: "Select an approver...", value: "", disabled: true },
-                ...approverOptions.map((e) => ({ label: `${e.fullName} · ${e.jobTitle ?? ""}`, value: e.id })),
+                ...approverOptions.map((e) => ({ label: `${e.fullName} · ${e.role}`, value: e.id })),
               ]}
               value={submitApproverId}
               onChange={(e) => setSubmitApproverId(e.target.value)}
@@ -1645,6 +1700,8 @@ function HrKpiTab() {
   const kpis = (kpisResult?.data ?? []) as Kpi[];
   const pagination = kpisResult?.pagination;
 
+  const { data: okrDash } = useOkrDashboard();
+
   const { data: pendingReviews = [], isLoading: reviewsLoading } = usePendingKpiReviews();
   const approveReview = useApproveKpiReview();
   const rejectReview = useRejectKpiReview();
@@ -1666,6 +1723,52 @@ function HrKpiTab() {
 
   return (
     <div className="space-y-6">
+
+      {/* OKR Stats Summary */}
+      {okrDash?.orgStats && (
+        <div className="grid grid-cols-4 gap-3">
+          <div className="rounded-2xl bg-white border border-gray-200 shadow-sm px-4 py-3 flex items-center gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-100">
+              <Target className="h-4 w-4 text-violet-600" />
+            </div>
+            <div>
+              <p className="text-xl font-bold text-gray-900">{okrDash.orgStats.totalObjectives}</p>
+              <p className="text-xs text-gray-500">Total OKRs</p>
+            </div>
+          </div>
+          <div className="rounded-2xl bg-white border border-gray-200 shadow-sm px-4 py-3 flex items-center gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-100">
+              <ShieldCheck className="h-4 w-4 text-emerald-600" />
+            </div>
+            <div>
+              <p className="text-xl font-bold text-emerald-700">{okrDash.orgStats.approvedCount}</p>
+              <p className="text-xs text-gray-500">Approved</p>
+            </div>
+          </div>
+          <div className="rounded-2xl bg-white border border-amber-200 shadow-sm px-4 py-3 flex items-center gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-100">
+              <Hourglass className="h-4 w-4 text-amber-600" />
+            </div>
+            <div>
+              <p className="text-xl font-bold text-amber-600">{okrDash.orgStats.pendingCount}</p>
+              <p className="text-xs text-gray-500">Pending Approval</p>
+            </div>
+          </div>
+          <div className="rounded-2xl bg-white border border-gray-200 shadow-sm px-4 py-3 flex items-center gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-100">
+              <TrendingUp className="h-4 w-4 text-blue-600" />
+            </div>
+            <div>
+              <p className="text-xl font-bold text-gray-900">{okrDash.orgStats.avgCompletion}%</p>
+              <p className="text-xs text-gray-500">Avg. Completion</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pending OKR Approvals */}
+      <PendingApprovalsPanel />
+
       {/* Section 1: KPI Overview */}
       <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
         <div className="flex items-center justify-between gap-4 px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">

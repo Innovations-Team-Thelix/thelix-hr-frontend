@@ -122,7 +122,7 @@ export default function LoginPage() {
             <span className="text-base font-bold text-white">T</span>
           </div>
           <span className="text-lg font-semibold text-white tracking-tight">
-            Thelix HRIS
+            Thelix Holdings HRIS
           </span>
         </div>
 
@@ -141,20 +141,8 @@ export default function LoginPage() {
 
       {/* Main content */}
       <div className="relative flex flex-1 overflow-hidden">
-        {/* Left panel — brand messaging */}
-        <div className="hidden lg:flex lg:flex-1 flex-col justify-center px-16 xl:px-24">
-          <h2 className="font-display text-5xl xl:text-6xl font-bold text-white leading-tight max-w-md">
-            Your people,{" "}
-            <span style={{ color: "#C8622A" }}>all in one place.</span>
-          </h2>
-          <p className="mt-6 text-lg text-white/60 max-w-sm leading-relaxed">
-            From onboarding to payroll, Thelix HRIS keeps your workforce
-            running smoothly — every single day.
-          </p>
-        </div>
-
-        {/* Right panel — login card */}
-        <div className="flex flex-1 items-center justify-center px-6 py-12 lg:px-16 xl:px-24">
+        {/* Centered login card */}
+        <div className="flex flex-1 items-center justify-center px-6 py-12">
           <div className="w-full max-w-md">
             <div className="rounded-2xl bg-white px-8 py-10 shadow-2xl">
               {!mfaToken ? (
