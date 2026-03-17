@@ -980,6 +980,17 @@ export function useSubmitKpiReview() {
 
 import type { OkrCycle, Objective, KeyResult, OkrComment, OkrDashboard } from "@/types";
 
+export function useApprovers() {
+  return useQuery<Array<{ id: string; fullName: string; jobTitle: string | null; employeeId: string; role: string }>>({
+    queryKey: ["approvers"],
+    queryFn: async () => {
+      const res = await api.get<Array<{ id: string; fullName: string; jobTitle: string | null; employeeId: string; role: string }>>("/employees/approvers");
+      return res.data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 export function useOkrDashboard() {
   return useQuery<OkrDashboard>({
     queryKey: ["okr-dashboard"],
