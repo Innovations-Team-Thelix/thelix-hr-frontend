@@ -62,12 +62,14 @@ import { useQueryClient } from "@tanstack/react-query";
 
 // ─── Brand tokens ──────────────────────────────────────
 const B = {
-  navy: "#111729",
-  navyLight: "#1a2333",
-  orange: "#f48220",
-  orangeHover: "#e0731a",
-  orangeBg: "#fef3e8",
-  orangeBorder: "#fcd9b0",
+  navy: "#000000",        // Thelix Black
+  navyLight: "#1a1a1a",
+  orange: "#C8622A",      // Amber Flame
+  orangeHover: "#b45323",
+  orangeBg: "#fdf4ee",    // Amber Flame tint
+  orangeBorder: "#f6c9a7",
+  peach: "#F5DEB3",       // Peach Whisper
+  blue: "#5B8DB8",        // Medium Blue
 };
 
 // ─── Helpers ───────────────────────────────────────────
@@ -337,7 +339,7 @@ export default function DashboardPage() {
         {/* ── Welcome header ── */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">
+            <h1 className="font-display text-2xl font-bold text-gray-900">
               Welcome back, {firstName(profile?.fullName)} 👋
             </h1>
             <p className="mt-0.5 text-sm text-gray-400">
@@ -380,7 +382,7 @@ export default function DashboardPage() {
                   {workforceLoading ? (
                     <Skeleton className="mt-2 h-12 w-24" />
                   ) : (
-                    <p className="mt-1 text-6xl font-bold tracking-tight" style={{ color: B.navy }}>
+                    <p className="font-display mt-1 text-6xl font-bold tracking-tight" style={{ color: B.navy }}>
                       {workforce?.totalHeadcount ?? 0}
                     </p>
                   )}
@@ -438,7 +440,7 @@ export default function DashboardPage() {
                   <CalendarDays className="h-5 w-5 text-white/40" />
                 </div>
 
-                <p className="mt-5 text-3xl font-bold text-white">Next Payday</p>
+                <p className="font-display mt-5 text-3xl font-bold text-white">Next Payday</p>
                 {workforceLoading ? (
                   <Skeleton className="mt-2 h-5 w-40 bg-white/10" />
                 ) : (

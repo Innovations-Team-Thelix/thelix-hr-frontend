@@ -8,19 +8,20 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        // Thelix brand palette
         primary: {
-          DEFAULT: '#f48220',
-          50: '#fdf2e8',
-          100: '#fce5d2',
-          200: '#facca5',
-          300: '#f8b379',
-          400: '#f69b4c',
-          500: '#f48220',
-          600: '#df6d0b',
-          700: '#b85909',
-          800: '#904607',
-          900: '#693305',
-          950: '#412003',
+          DEFAULT: '#C8622A', // Amber Flame
+          50: '#fdf4ee',
+          100: '#fae5d3',
+          200: '#f6c9a7',
+          300: '#f0a571',
+          400: '#e87d3e',
+          500: '#C8622A',
+          600: '#b45323',
+          700: '#96431d',
+          800: '#79361a',
+          900: '#622c16',
+          950: '#3a180b',
         },
         secondary: {
           DEFAULT: '#000000',
@@ -35,6 +36,34 @@ const config: Config = {
           800: '#000000',
           900: '#000000',
           950: '#000000',
+        },
+        // Peach Whisper — warm cream
+        peach: {
+          DEFAULT: '#F5DEB3',
+          50: '#fdf8ee',
+          100: '#faf0d7',
+          200: '#F5DEB3',
+          300: '#edc880',
+          400: '#e4b14e',
+          500: '#d99a2a',
+          600: '#c07e1e',
+          700: '#9f6318',
+          800: '#7e4e16',
+          900: '#653e14',
+        },
+        // Medium Blue
+        blue: {
+          DEFAULT: '#5B8DB8',
+          50: '#eef4fb',
+          100: '#d8e9f5',
+          200: '#b3d3ec',
+          300: '#85b5de',
+          400: '#5B8DB8',
+          500: '#4778a3',
+          600: '#39608a',
+          700: '#2e4d70',
+          800: '#253d59',
+          900: '#1e3049',
         },
         accent: {
           50: '#fff8e1',
@@ -98,6 +127,13 @@ const config: Config = {
           'Roboto',
           'Helvetica Neue',
           'Arial',
+          'sans-serif',
+        ],
+        display: [
+          'Clash Display',
+          'Inter',
+          'ui-sans-serif',
+          'system-ui',
           'sans-serif',
         ],
       },

@@ -107,17 +107,17 @@ export default function LoginPage() {
   if (isAuthenticated && user) return null;
 
   return (
-    <div className="flex min-h-screen flex-col" style={{ backgroundColor: "#111729" }}>
+    <div className="flex min-h-screen flex-col" style={{ backgroundColor: "#000000" }}>
       {/* Top nav */}
       <header
         className="flex items-center justify-between px-8 py-5"
-        style={{ backgroundColor: "#111729" }}
+        style={{ backgroundColor: "#000000" }}
       >
         {/* Logo */}
         <div className="flex items-center gap-2.5">
           <div
             className="flex h-9 w-9 items-center justify-center rounded-lg"
-            style={{ backgroundColor: "#f48220" }}
+            style={{ backgroundColor: "#C8622A" }}
           >
             <span className="text-base font-bold text-white">T</span>
           </div>
@@ -132,7 +132,7 @@ export default function LoginPage() {
           <a
             href="mailto:support@thelixholdings.com"
             className="font-medium transition-colors"
-            style={{ color: "#f48220" }}
+            style={{ color: "#C8622A" }}
           >
             Get help →
           </a>
@@ -143,9 +143,9 @@ export default function LoginPage() {
       <div className="relative flex flex-1 overflow-hidden">
         {/* Left panel — brand messaging */}
         <div className="hidden lg:flex lg:flex-1 flex-col justify-center px-16 xl:px-24">
-          <h2 className="text-5xl xl:text-6xl font-bold text-white leading-tight max-w-md">
+          <h2 className="font-display text-5xl xl:text-6xl font-bold text-white leading-tight max-w-md">
             Your people,{" "}
-            <span style={{ color: "#f48220" }}>all in one place.</span>
+            <span style={{ color: "#C8622A" }}>all in one place.</span>
           </h2>
           <p className="mt-6 text-lg text-white/60 max-w-sm leading-relaxed">
             From onboarding to payroll, Thelix HRIS keeps your workforce
@@ -160,7 +160,7 @@ export default function LoginPage() {
               {!mfaToken ? (
                 <>
                   <div className="mb-8">
-                    <h1 className="text-3xl font-bold text-gray-900">
+                    <h1 className="font-display text-3xl font-bold text-gray-900">
                       Welcome back!
                     </h1>
                     <p className="mt-1 text-sm text-gray-500">
@@ -192,12 +192,12 @@ export default function LoginPage() {
                         )}
                         style={
                           !errors.email
-                            ? ({ "--tw-ring-color": "#f4822033" } as React.CSSProperties)
+                            ? ({ "--tw-ring-color": "#C8622A33" } as React.CSSProperties)
                             : undefined
                         }
                         onFocus={(e) => {
                           if (!errors.email) {
-                            e.currentTarget.style.borderColor = "#f48220";
+                            e.currentTarget.style.borderColor = "#C8622A";
                           }
                         }}
                         onBlur={(e) => {
@@ -231,7 +231,7 @@ export default function LoginPage() {
                           )}
                           onFocus={(e) => {
                             if (!errors.password) {
-                              e.currentTarget.style.borderColor = "#f48220";
+                              e.currentTarget.style.borderColor = "#C8622A";
                             }
                           }}
                           onBlur={(e) => {
@@ -264,7 +264,7 @@ export default function LoginPage() {
                       <a
                         href="#"
                         className="text-sm font-medium transition-colors"
-                        style={{ color: "#f48220" }}
+                        style={{ color: "#C8622A" }}
                       >
                         Forgot password?
                       </a>
@@ -274,12 +274,12 @@ export default function LoginPage() {
                       type="submit"
                       disabled={isSubmitting}
                       className="flex w-full items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-semibold text-white transition-all duration-200 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60 active:scale-[0.98]"
-                      style={{ backgroundColor: "#111729" }}
+                      style={{ backgroundColor: "#000000" }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = "#1a2333";
+                        e.currentTarget.style.backgroundColor = "#1a1a1a";
                       }}
                       onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = "#111729";
+                        e.currentTarget.style.backgroundColor = "#000000";
                       }}
                     >
                       {isSubmitting ? (
@@ -296,7 +296,7 @@ export default function LoginPage() {
               ) : (
                 <>
                   <div className="mb-8 text-center">
-                    <h1 className="text-2xl font-bold text-gray-900">
+                    <h1 className="font-display text-2xl font-bold text-gray-900">
                       Two-factor authentication
                     </h1>
                     <p className="mt-2 text-sm text-gray-500">
@@ -330,7 +330,7 @@ export default function LoginPage() {
                         )}
                         onFocus={(e) => {
                           if (!mfaErrors.code) {
-                            e.currentTarget.style.borderColor = "#f48220";
+                            e.currentTarget.style.borderColor = "#C8622A";
                           }
                         }}
                         onBlur={(e) => {
@@ -350,12 +350,12 @@ export default function LoginPage() {
                       type="submit"
                       disabled={isMfaSubmitting}
                       className="flex w-full items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-semibold text-white transition-all duration-200 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60 active:scale-[0.98]"
-                      style={{ backgroundColor: "#111729" }}
+                      style={{ backgroundColor: "#000000" }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = "#1a2333";
+                        e.currentTarget.style.backgroundColor = "#1a1a1a";
                       }}
                       onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = "#111729";
+                        e.currentTarget.style.backgroundColor = "#000000";
                       }}
                     >
                       {isMfaSubmitting ? (
@@ -400,7 +400,7 @@ export default function LoginPage() {
             xmlns="http://www.w3.org/2000/svg"
             className="h-full w-full"
           >
-            <polygon points="320,0 320,320 0,320" fill="#f48220" />
+            <polygon points="320,0 320,320 0,320" fill="#C8622A" />
           </svg>
         </div>
       </div>
