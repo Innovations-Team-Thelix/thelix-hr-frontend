@@ -664,6 +664,23 @@ export function useCreateDisciplinaryAction() {
   });
 }
 
+export function useReviewDisciplinaryAction() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...data }: {
+      id: string;
+      status: 'Approved' | 'Rejected';
+      reviewNote?: string;
+    }) => {
+      const res = await api.put<DisciplinaryAction>(`/discipline/${id}/review`, data);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["disciplinary-actions"] });
+    },
+  });
+}
+
 export * from "./usePolicies";
 
 export * from "./useOfferLetters";

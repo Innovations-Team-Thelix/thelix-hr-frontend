@@ -11,6 +11,7 @@ export type RosterDayType = 'Onsite' | 'Remote' | 'Leave';
 export type NotificationChannel = 'Email' | 'Slack' | 'InApp';
 export type ViolationType = 'LateComing' | 'Absenteeism' | 'Insubordination' | 'PolicyViolation' | 'Misconduct' | 'Other';
 export type DisciplinarySeverity = 'Warning' | 'Strike' | 'Suspension' | 'Termination';
+export type DisciplinaryStatus = 'Pending' | 'Approved' | 'Rejected';
 export type PayrollStatus = 'Draft' | 'Approved' | 'Sent';
 
 // ─── Entity interfaces ────────────────────────────────────
@@ -455,13 +456,18 @@ export interface DisciplinaryAction {
   issuedById: string;
   violationType: ViolationType;
   severity: DisciplinarySeverity;
+  status: DisciplinaryStatus;
   description: string;
+  reviewedById?: string | null;
+  reviewedAt?: string | null;
+  reviewNote?: string | null;
   date: string;
   createdAt: string;
   updatedAt: string;
 
   employee?: Pick<Employee, 'id' | 'employeeId' | 'fullName' | 'jobTitle' | 'workEmail'>;
   issuedBy?: Pick<Employee, 'id' | 'employeeId' | 'fullName'>;
+  reviewedBy?: Pick<Employee, 'id' | 'employeeId' | 'fullName'> | null;
 }
 
 export interface DisciplinaryActionFilters {

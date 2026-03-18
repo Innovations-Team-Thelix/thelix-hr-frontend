@@ -14,6 +14,7 @@ import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Tabs } from "@/components/ui/tabs";
 import { useCreateEmployee, useSbus, useDepartments, useAuth, useEmployees, useEffectiveRole } from "@/hooks";
+import { CurrencyInput } from "@/components/ui/currency-input";
 
 const createEmployeeSchema = z.object({
   fullName: z.string().min(1, "Full name is required"),
@@ -194,11 +195,27 @@ export default function CreateEmployeePage() {
         probationPeriod: data.probationPeriod ? parseInt(data.probationPeriod) : null,
         probationEndDate: data.probationEndDate || null,
         
-        // Compensation
+        // Compensation — send flat numeric fields as the backend expects
         monthlySalary: data.monthlySalary ? parseFloat(data.monthlySalary) : null,
         netPay: data.netPay
           ? parseFloat(data.netPay)
           : (data.simpleNetPay ? parseFloat(data.simpleNetPay) : null),
+        baseSalary: data.baseSalary ? parseFloat(data.baseSalary) : undefined,
+        grossPay: data.grossPay ? parseFloat(data.grossPay) : undefined,
+        pension: data.pension ? parseFloat(data.pension) : undefined,
+        tax: data.tax ? parseFloat(data.tax) : undefined,
+        allowances: data.allowances.length > 0
+          ? data.allowances.map((a) => ({
+              name: a.name,
+              amount: parseFloat(a.amount || "0"),
+            }))
+          : undefined,
+        deductions: data.deductions.length > 0
+          ? data.deductions.map((d) => ({
+              name: d.name,
+              amount: parseFloat(d.amount || "0"),
+            }))
+          : undefined,
         salaryBand: data.salaryBand || null,
         accountName: data.accountName || null,
         accountNumber: data.accountNumber || null,
@@ -207,34 +224,8 @@ export default function CreateEmployeePage() {
         currency: data.currency || "NGN",
       };
 
-      // Construct salaryBreakdown if any salary fields are present
-      if (data.baseSalary || data.grossPay || data.allowances.length > 0 || data.deductions.length > 0) {
-        payload.salaryBreakdown = {
-          baseSalary: parseFloat(data.baseSalary || "0"),
-          grossPay: parseFloat(data.grossPay || "0"),
-          netPay: parseFloat(data.netPay || "0"),
-          pension: parseFloat(data.pension || "0"),
-          tax: parseFloat(data.tax || "0"),
-          allowances: data.allowances.map((a) => ({
-            name: a.name,
-            amount: parseFloat(a.amount || "0"),
-          })),
-          deductions: data.deductions.map((d) => ({
-            name: d.name,
-            amount: parseFloat(d.amount || "0"),
-          })),
-          effectiveDate: data.salaryEffectiveDate || new Date().toISOString(),
-        };
-      }
-
-      // Remove helper fields that are not part of the Employee entity
+      // Remove form-only field not in the backend schema
       delete payload.simpleNetPay;
-      delete payload.baseSalary;
-      delete payload.grossPay;
-      delete payload.allowances;
-      delete payload.deductions;
-      delete payload.pension;
-      delete payload.tax;
 
       // Remove any remaining empty strings (just in case)
       Object.keys(payload).forEach((key) => {
@@ -482,17 +473,19 @@ export default function CreateEmployeePage() {
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    <Input
+                    <CurrencyInput
+                      control={control}
+                      name="monthlySalary"
                       label="Gross Pay"
-                      type="number"
+                      currencyCode={watch("currency")}
                       error={errors.monthlySalary?.message}
-                      {...register("monthlySalary")}
                     />
-                    <Input
+                    <CurrencyInput
+                      control={control}
+                      name="simpleNetPay"
                       label="Net Pay"
-                      type="number"
+                      currencyCode={watch("currency")}
                       error={errors.simpleNetPay?.message}
-                      {...register("simpleNetPay")}
                     />
                     <Input
                       label="Salary Band"
@@ -542,35 +535,40 @@ export default function CreateEmployeePage() {
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    <Input
+                    <CurrencyInput
+                      control={control}
+                      name="baseSalary"
                       label="Base Salary"
-                      type="number"
+                      currencyCode={watch("currency")}
                       error={errors.baseSalary?.message}
-                      {...register("baseSalary")}
                     />
-                    <Input
+                    <CurrencyInput
+                      control={control}
+                      name="grossPay"
                       label="Gross Pay"
-                      type="number"
+                      currencyCode={watch("currency")}
                       error={errors.grossPay?.message}
-                      {...register("grossPay")}
                     />
-                    <Input
+                    <CurrencyInput
+                      control={control}
+                      name="netPay"
                       label="Net Pay"
-                      type="number"
+                      currencyCode={watch("currency")}
                       error={errors.netPay?.message}
-                      {...register("netPay")}
                     />
-                    <Input
+                    <CurrencyInput
+                      control={control}
+                      name="pension"
                       label="Pension"
-                      type="number"
+                      currencyCode={watch("currency")}
                       error={errors.pension?.message}
-                      {...register("pension")}
                     />
-                    <Input
+                    <CurrencyInput
+                      control={control}
+                      name="tax"
                       label="Tax"
-                      type="number"
+                      currencyCode={watch("currency")}
                       error={errors.tax?.message}
-                      {...register("tax")}
                     />
                   </div>
                 </CardContent>
@@ -596,15 +594,15 @@ export default function CreateEmployeePage() {
                               {...register(`allowances.${index}.name`)}
                             />
                           </div>
-                          <div className="w-32">
-                            <Input
+                          <div className="w-40">
+                            <CurrencyInput
+                              control={control}
+                              name={`allowances.${index}.amount`}
                               label={index === 0 ? "Amount" : undefined}
-                              type="number"
-                              placeholder="0.00"
+                              currencyCode={watch("currency")}
                               error={
                                 errors.allowances?.[index]?.amount?.message
                               }
-                              {...register(`allowances.${index}.amount`)}
                             />
                           </div>
                           <div className={index === 0 ? "mt-8" : "mt-1"}>
@@ -654,15 +652,15 @@ export default function CreateEmployeePage() {
                               {...register(`deductions.${index}.name`)}
                             />
                           </div>
-                          <div className="w-32">
-                            <Input
+                          <div className="w-40">
+                            <CurrencyInput
+                              control={control}
+                              name={`deductions.${index}.amount`}
                               label={index === 0 ? "Amount" : undefined}
-                              type="number"
-                              placeholder="0.00"
+                              currencyCode={watch("currency")}
                               error={
                                 errors.deductions?.[index]?.amount?.message
                               }
-                              {...register(`deductions.${index}.amount`)}
                             />
                           </div>
                           <div className={index === 0 ? "mt-8" : "mt-1"}>

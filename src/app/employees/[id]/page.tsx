@@ -36,6 +36,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/ui/modal";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/loading";
@@ -241,6 +242,10 @@ export default function EmployeeProfilePage() {
 
   const editForm = useForm<EditEmployeeFormData>({
     resolver: zodResolver(editEmployeeSchema),
+    defaultValues: {
+      allowances: [],
+      deductions: [],
+    },
   });
 
   const { fields: allowanceFields, append: appendAllowance, remove: removeAllowance } = useFieldArray({
@@ -258,6 +263,11 @@ export default function EmployeeProfilePage() {
 
   React.useEffect(() => {
     if (employee && editModalOpen) {
+      // Use salaryBreakdown from employee, or fallback to active record from salary history
+      const breakdown = employee.salaryBreakdown
+        ?? salaryHistory?.find((r) => r.isActive);
+
+
       editForm.reset({
         fullName: employee.fullName,
         dateOfBirth: employee.dateOfBirth ? new Date(employee.dateOfBirth).toISOString().split('T')[0] : undefined,
@@ -289,19 +299,23 @@ export default function EmployeeProfilePage() {
 
         monthlySalary: employee.monthlySalary?.toString() || undefined,
         simpleNetPay: employee.netPay?.toString() || undefined,
-        baseSalary: employee.salaryBreakdown?.baseSalary?.toString() || undefined,
-        grossPay: employee.salaryBreakdown?.grossPay?.toString() || undefined,
-        netPay: employee.salaryBreakdown?.netPay?.toString() || undefined,
-        pension: employee.salaryBreakdown?.pension?.toString() || undefined,
-        tax: employee.salaryBreakdown?.tax?.toString() || undefined,
-        allowances: employee.salaryBreakdown?.allowances?.map(a => ({
-          name: a.name,
-          amount: a.amount.toString()
-        })) || [],
-        deductions: employee.salaryBreakdown?.deductions?.map(d => ({
-          name: d.name,
-          amount: d.amount.toString()
-        })) || [],
+        baseSalary: breakdown?.baseSalary?.toString() || undefined,
+        grossPay: breakdown?.grossPay?.toString() || undefined,
+        netPay: breakdown?.netPay?.toString() || undefined,
+        pension: breakdown?.pension?.toString() || undefined,
+        tax: breakdown?.tax?.toString() || undefined,
+        allowances: (Array.isArray(breakdown?.allowances) ? breakdown.allowances : []).map(
+          (a) => ({
+            name: String(a.name ?? ""),
+            amount: String(a.amount ?? "0"),
+          })
+        ),
+        deductions: (Array.isArray(breakdown?.deductions) ? breakdown.deductions : []).map(
+          (d) => ({
+            name: String(d.name ?? ""),
+            amount: String(d.amount ?? "0"),
+          })
+        ),
         salaryBand: employee.salaryBand || undefined,
         accountName: employee.accountName || undefined,
         accountNumber: employee.accountNumber || undefined,
@@ -310,39 +324,39 @@ export default function EmployeeProfilePage() {
         salaryEffectiveDate: employee.salaryEffectiveDate ? new Date(employee.salaryEffectiveDate).toISOString().split('T')[0] : undefined,
       });
     }
-  }, [employee, editModalOpen, editForm]);
+  }, [employee, editModalOpen, editForm, salaryHistory]);
 
   const handleEditSubmit = async (data: EditEmployeeFormData) => {
     try {
+      // Remove form-only fields that the backend doesn't expect
+      const { simpleNetPay, ...rest } = data;
+
       const payload: Record<string, unknown> = {
-        ...data,
+        ...rest,
+        // Parse numeric fields from strings to numbers
         monthlySalary: data.monthlySalary ? parseFloat(data.monthlySalary) : undefined,
         netPay: data.netPay
           ? parseFloat(data.netPay)
-          : (data.simpleNetPay ? parseFloat(data.simpleNetPay) : undefined),
+          : (simpleNetPay ? parseFloat(simpleNetPay) : undefined),
+        baseSalary: data.baseSalary ? parseFloat(data.baseSalary) : undefined,
+        grossPay: data.grossPay ? parseFloat(data.grossPay) : undefined,
+        pension: data.pension ? parseFloat(data.pension) : undefined,
+        tax: data.tax ? parseFloat(data.tax) : undefined,
+        allowances: data.allowances.length > 0
+          ? data.allowances.map((a) => ({
+              name: a.name,
+              amount: parseFloat(a.amount || "0"),
+            }))
+          : undefined,
+        deductions: data.deductions.length > 0
+          ? data.deductions.map((d) => ({
+              name: d.name,
+              amount: parseFloat(d.amount || "0"),
+            }))
+          : undefined,
       };
 
-      // Construct salaryBreakdown if fields are present
-      if (data.baseSalary || data.grossPay || data.allowances.length > 0 || data.deductions.length > 0) {
-        payload.salaryBreakdown = {
-          baseSalary: parseFloat(data.baseSalary || "0"),
-          grossPay: parseFloat(data.grossPay || "0"),
-          netPay: parseFloat(data.netPay || "0"),
-          pension: parseFloat(data.pension || "0"),
-          tax: parseFloat(data.tax || "0"),
-          allowances: data.allowances.map((a) => ({
-            name: a.name,
-            amount: parseFloat(a.amount || "0"),
-          })),
-          deductions: data.deductions.map((d) => ({
-            name: d.name,
-            amount: parseFloat(d.amount || "0"),
-          })),
-          effectiveDate: data.salaryEffectiveDate || new Date().toISOString(),
-        };
-      }
-
-      // Remove empty strings
+      // Remove empty strings and undefined values
       Object.keys(payload).forEach((key) => {
         if (payload[key] === "" || payload[key] === undefined) {
           delete payload[key];
@@ -955,6 +969,7 @@ export default function EmployeeProfilePage() {
                         <th className="px-4 py-3">Description</th>
                         <th className="px-4 py-3">Date</th>
                         <th className="px-4 py-3">Issued By</th>
+                        <th className="px-4 py-3">Status</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -984,6 +999,19 @@ export default function EmployeeProfilePage() {
                           </td>
                           <td className="px-4 py-3 text-gray-500">
                             {action.issuedBy?.fullName}
+                          </td>
+                          <td className="px-4 py-3">
+                            <Badge
+                              variant={
+                                action.status === "Approved"
+                                  ? "success"
+                                  : action.status === "Rejected"
+                                    ? "danger"
+                                    : "warning"
+                              }
+                            >
+                              {action.status}
+                            </Badge>
                           </td>
                         </tr>
                       ))}
@@ -1618,17 +1646,19 @@ export default function EmployeeProfilePage() {
             {editActiveTab === "compensation" && (
               <div className="space-y-6">
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <Input
+                  <CurrencyInput
+                    control={editForm.control}
+                    name="monthlySalary"
                     label="Gross Pay"
-                    type="number"
+                    currencyCode={editForm.watch("currency")}
                     error={editForm.formState.errors.monthlySalary?.message}
-                    {...editForm.register("monthlySalary")}
                   />
-                  <Input
+                  <CurrencyInput
+                    control={editForm.control}
+                    name="simpleNetPay"
                     label="Net Pay"
-                    type="number"
+                    currencyCode={editForm.watch("currency")}
                     error={editForm.formState.errors.simpleNetPay?.message}
-                    {...editForm.register("simpleNetPay")}
                   />
                   <Input
                     label="Salary Effective Date"
@@ -1636,35 +1666,40 @@ export default function EmployeeProfilePage() {
                     error={editForm.formState.errors.salaryEffectiveDate?.message}
                     {...editForm.register("salaryEffectiveDate")}
                   />
-                  <Input
+                  <CurrencyInput
+                    control={editForm.control}
+                    name="baseSalary"
                     label="Base Salary (Breakdown)"
-                    type="number"
+                    currencyCode={editForm.watch("currency")}
                     error={editForm.formState.errors.baseSalary?.message}
-                    {...editForm.register("baseSalary")}
                   />
-                  <Input
+                  <CurrencyInput
+                    control={editForm.control}
+                    name="grossPay"
                     label="Gross Pay (Breakdown)"
-                    type="number"
+                    currencyCode={editForm.watch("currency")}
                     error={editForm.formState.errors.grossPay?.message}
-                    {...editForm.register("grossPay")}
                   />
-                  <Input
+                  <CurrencyInput
+                    control={editForm.control}
+                    name="netPay"
                     label="Net Pay (Breakdown)"
-                    type="number"
+                    currencyCode={editForm.watch("currency")}
                     error={editForm.formState.errors.netPay?.message}
-                    {...editForm.register("netPay")}
                   />
-                  <Input
+                  <CurrencyInput
+                    control={editForm.control}
+                    name="pension"
                     label="Pension"
-                    type="number"
+                    currencyCode={editForm.watch("currency")}
                     error={editForm.formState.errors.pension?.message}
-                    {...editForm.register("pension")}
                   />
-                  <Input
+                  <CurrencyInput
+                    control={editForm.control}
+                    name="tax"
                     label="Tax"
-                    type="number"
+                    currencyCode={editForm.watch("currency")}
                     error={editForm.formState.errors.tax?.message}
-                    {...editForm.register("tax")}
                   />
                 </div>
 
@@ -1691,11 +1726,11 @@ export default function EmployeeProfilePage() {
                         />
                       </div>
                       <div className="flex-1">
-                        <Input
-                          placeholder="Amount"
-                          type="number"
+                        <CurrencyInput
+                          control={editForm.control}
+                          name={`allowances.${index}.amount`}
+                          currencyCode={editForm.watch("currency")}
                           error={editForm.formState.errors.allowances?.[index]?.amount?.message}
-                          {...editForm.register(`allowances.${index}.amount`)}
                         />
                       </div>
                       <Button
@@ -1734,11 +1769,11 @@ export default function EmployeeProfilePage() {
                         />
                       </div>
                       <div className="flex-1">
-                        <Input
-                          placeholder="Amount"
-                          type="number"
+                        <CurrencyInput
+                          control={editForm.control}
+                          name={`deductions.${index}.amount`}
+                          currencyCode={editForm.watch("currency")}
                           error={editForm.formState.errors.deductions?.[index]?.amount?.message}
-                          {...editForm.register(`deductions.${index}.amount`)}
                         />
                       </div>
                       <Button

@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import toast from "react-hot-toast";
-import { ShieldAlert, Plus } from "lucide-react";
+import { ShieldAlert, Plus, CheckCircle, XCircle } from "lucide-react";
 import { AppLayout } from "@/components/layout/app-layout";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,15 +16,22 @@ import { Textarea } from "@/components/ui/textarea";
 import { Modal } from "@/components/ui/modal";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/loading";
-import { StatusBadge } from "@/components/shared/status-badge";
 import {
   useDisciplinaryActions,
   useCreateDisciplinaryAction,
+  useReviewDisciplinaryAction,
   useEmployees,
-  useAuthStore, useEffectiveRole,
+  useAuthStore,
+  useEffectiveRole,
 } from "@/hooks";
 import { formatDate } from "@/lib/utils";
-import type { ViolationType, DisciplinarySeverity, DisciplinaryActionFilters } from "@/types";
+import type {
+  ViolationType,
+  DisciplinarySeverity,
+  DisciplinaryStatus,
+  DisciplinaryActionFilters,
+  DisciplinaryAction,
+} from "@/types";
 
 const createSchema = z.object({
   employeeId: z.string().min(1, "Employee is required"),
@@ -68,23 +75,34 @@ const SEVERITY_COLORS: Record<DisciplinarySeverity, string> = {
   Termination: "bg-red-200 text-red-900",
 };
 
+const STATUS_COLORS: Record<DisciplinaryStatus, string> = {
+  Pending: "bg-amber-100 text-amber-800",
+  Approved: "bg-green-100 text-green-800",
+  Rejected: "bg-red-100 text-red-800",
+};
+
 export default function DisciplinePage() {
   const { user } = useAuthStore();
   const effectiveRole = useEffectiveRole();
-  const isAdminOrSBUHead = effectiveRole === "Admin" || effectiveRole === "SBUHead";
+  const isAdmin = effectiveRole === "Admin";
+  const isAdminOrSBUHead = isAdmin || effectiveRole === "SBUHead";
 
   const [modalOpen, setModalOpen] = useState(false);
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [selectedAction, setSelectedAction] = useState<DisciplinaryAction | null>(null);
+  const [reviewNote, setReviewNote] = useState("");
   const [filters, setFilters] = useState<DisciplinaryActionFilters>({ page: 1 });
   const [employeeSearch, setEmployeeSearch] = useState("");
   const [selectedEmployee, setSelectedEmployee] = useState<SearchableSelectOption | null>(null);
 
   const { data: result, isLoading } = useDisciplinaryActions(filters);
-  const { data: employeesData, isLoading: isSearching } = useEmployees({ 
+  const { data: employeesData, isLoading: isSearching } = useEmployees({
     search: employeeSearch,
-    limit: 20
+    limit: 20,
   });
   const searchResults = employeesData?.data || [];
   const createAction = useCreateDisciplinaryAction();
+  const reviewAction = useReviewDisciplinaryAction();
 
   const form = useForm<CreateFormData>({
     resolver: zodResolver(createSchema),
@@ -93,12 +111,37 @@ export default function DisciplinePage() {
   const handleCreate = async (data: CreateFormData) => {
     try {
       await createAction.mutateAsync(data);
-      toast.success("Disciplinary action created successfully");
+      toast.success("Disciplinary action submitted for HR review");
       setModalOpen(false);
       form.reset();
+      setEmployeeSearch("");
+      setSelectedEmployee(null);
     } catch {
       toast.error("Failed to create disciplinary action");
     }
+  };
+
+  const handleReview = async (status: "Approved" | "Rejected") => {
+    if (!selectedAction) return;
+    try {
+      await reviewAction.mutateAsync({
+        id: selectedAction.id,
+        status,
+        reviewNote: reviewNote || undefined,
+      });
+      toast.success(`Disciplinary action ${status.toLowerCase()}`);
+      setReviewModalOpen(false);
+      setSelectedAction(null);
+      setReviewNote("");
+    } catch {
+      toast.error("Failed to review disciplinary action");
+    }
+  };
+
+  const openReviewModal = (action: DisciplinaryAction) => {
+    setSelectedAction(action);
+    setReviewNote("");
+    setReviewModalOpen(true);
   };
 
   return (
@@ -182,6 +225,8 @@ export default function DisciplinePage() {
                       <th className="px-4 py-3">Description</th>
                       <th className="px-4 py-3">Date</th>
                       <th className="px-4 py-3">Issued By</th>
+                      <th className="px-4 py-3">Status</th>
+                      {isAdmin && <th className="px-4 py-3">Actions</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -198,8 +243,7 @@ export default function DisciplinePage() {
                           </div>
                         </td>
                         <td className="px-4 py-3">
-                          {VIOLATION_LABELS[action.violationType] ||
-                            action.violationType}
+                          {VIOLATION_LABELS[action.violationType] || action.violationType}
                         </td>
                         <td className="px-4 py-3">
                           <span
@@ -219,6 +263,32 @@ export default function DisciplinePage() {
                         <td className="px-4 py-3 text-gray-500">
                           {action.issuedBy?.fullName}
                         </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                              STATUS_COLORS[action.status] || ""
+                            }`}
+                          >
+                            {action.status}
+                          </span>
+                        </td>
+                        {isAdmin && (
+                          <td className="px-4 py-3">
+                            {action.status === "Pending" ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => openReviewModal(action)}
+                              >
+                                Review
+                              </Button>
+                            ) : (
+                              <span className="text-xs text-gray-400">
+                                {action.reviewedBy?.fullName && `by ${action.reviewedBy.fullName}`}
+                              </span>
+                            )}
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -288,7 +358,7 @@ export default function DisciplinePage() {
                 onClick={form.handleSubmit(handleCreate)}
                 loading={createAction.isPending}
               >
-                Issue Action
+                Submit for Review
               </Button>
             </div>
           }
@@ -298,20 +368,22 @@ export default function DisciplinePage() {
               label="Employee"
               required
               placeholder="Search employee by name..."
-              options={searchResults?.map(emp => ({
-                label: emp.fullName,
-                value: emp.id,
-                subLabel: emp.employeeId
-              })) || []}
+              options={
+                searchResults?.map((emp) => ({
+                  label: emp.fullName,
+                  value: emp.id,
+                  subLabel: emp.employeeId,
+                })) || []
+              }
               value={form.watch("employeeId")}
               onChange={(val) => {
                 form.setValue("employeeId", val, { shouldValidate: true });
-                const emp = searchResults?.find(e => e.id === val);
+                const emp = searchResults?.find((e) => e.id === val);
                 if (emp) {
                   setSelectedEmployee({
                     label: emp.fullName,
                     value: emp.id,
-                    subLabel: emp.employeeId
+                    subLabel: emp.employeeId,
                   });
                 }
               }}
@@ -356,6 +428,97 @@ export default function DisciplinePage() {
               {...form.register("description")}
             />
           </div>
+        </Modal>
+
+        {/* Review Modal */}
+        <Modal
+          isOpen={reviewModalOpen}
+          onClose={() => {
+            setReviewModalOpen(false);
+            setSelectedAction(null);
+            setReviewNote("");
+          }}
+          title="Review Disciplinary Action"
+          size="lg"
+          footer={
+            <div className="flex justify-end gap-3">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setReviewModalOpen(false);
+                  setSelectedAction(null);
+                  setReviewNote("");
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="outline"
+                className="border-red-300 text-red-700 hover:bg-red-50"
+                onClick={() => handleReview("Rejected")}
+                loading={reviewAction.isPending}
+              >
+                <XCircle className="mr-2 h-4 w-4" />
+                Reject
+              </Button>
+              <Button
+                onClick={() => handleReview("Approved")}
+                loading={reviewAction.isPending}
+              >
+                <CheckCircle className="mr-2 h-4 w-4" />
+                Approve
+              </Button>
+            </div>
+          }
+        >
+          {selectedAction && (
+            <div className="space-y-4">
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3">
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 uppercase">Employee</p>
+                    <p className="mt-0.5 text-gray-900">{selectedAction.employee?.fullName}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 uppercase">Issued By</p>
+                    <p className="mt-0.5 text-gray-900">{selectedAction.issuedBy?.fullName}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 uppercase">Violation</p>
+                    <p className="mt-0.5 text-gray-900">
+                      {VIOLATION_LABELS[selectedAction.violationType] || selectedAction.violationType}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 uppercase">Severity</p>
+                    <span
+                      className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                        SEVERITY_COLORS[selectedAction.severity] || ""
+                      }`}
+                    >
+                      {selectedAction.severity}
+                    </span>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 uppercase">Date</p>
+                    <p className="mt-0.5 text-gray-900">{formatDate(selectedAction.date)}</p>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-gray-500 uppercase">Description</p>
+                  <p className="mt-0.5 text-sm text-gray-900">{selectedAction.description}</p>
+                </div>
+              </div>
+
+              <Textarea
+                label="Review Note (optional)"
+                rows={3}
+                placeholder="Add a note about your decision..."
+                value={reviewNote}
+                onChange={(e) => setReviewNote(e.target.value)}
+              />
+            </div>
+          )}
         </Modal>
       </div>
     </AppLayout>

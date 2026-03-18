@@ -11,6 +11,8 @@ import {
   Save,
   X,
   Shield,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { AppLayout } from "@/components/layout/app-layout";
 import { Card, CardContent } from "@/components/ui/card";
@@ -248,7 +250,8 @@ function UserManagement() {
   const [showForm, setShowForm] = useState(false);
   const [fullName, setFullName] = useState("");
   const [workEmail, setWorkEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [password, setPassword] = useState("Welcome@123");
+  const [showPassword, setShowPassword] = useState(false);
   const [role, setRole] = useState("Admin");
   const [sbuId, setSbuId] = useState("");
   const [deptId, setDeptId] = useState("");
@@ -266,7 +269,8 @@ function UserManagement() {
     setSelectedEmployeeId(null);
     setFullName("");
     setWorkEmail("");
-    setPassword("");
+    setPassword("Welcome@123");
+    setShowPassword(false);
     setRole("Admin");
     setSbuId("");
     setDeptId("");
@@ -384,7 +388,24 @@ function UserManagement() {
                 />
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Input label="Password" type="password" placeholder="Min 8 characters" value={password} onChange={(e) => setPassword(e.target.value)} required />
+                <div className="relative">
+                  <Input
+                    label="Password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Min 8 characters"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="absolute right-3 top-[34px] text-gray-400 hover:text-gray-600"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    tabIndex={-1}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
                 <Select label="Role" options={ROLE_OPTIONS} value={role} onChange={(e) => setRole(e.target.value)} />
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
