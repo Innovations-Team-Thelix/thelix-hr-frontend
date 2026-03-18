@@ -62,6 +62,20 @@ export function formatCurrency(
 }
 
 /**
+ * Return the symbol for a currency code.
+ * @example currencySymbol('NGN') // => '₦'
+ */
+export function currencySymbol(currency: string = 'NGN'): string {
+  const symbols: Record<string, string> = {
+    NGN: '₦',
+    USD: '$',
+    GBP: '£',
+    EUR: '€',
+  };
+  return symbols[currency] || currency;
+}
+
+/**
  * Format a date as a human-readable string.
  *
  * @example
