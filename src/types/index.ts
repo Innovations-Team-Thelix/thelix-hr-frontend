@@ -1,6 +1,6 @@
 // ─── Type unions ────────────────────────────────────────────
 
-export type UserRole = 'Admin' | 'SBUHead' | 'Finance' | 'Employee';
+export type UserRole = 'Admin' | 'SBUHead' | 'Director' | 'Manager' | 'Finance' | 'Employee';
 export type Gender = 'Male' | 'Female' | 'NonBinary' | 'PreferNotToSay';
 export type EmploymentType = 'FullTime' | 'Contract' | 'Intern';
 export type WorkArrangement = 'Remote' | 'Hybrid' | 'Onsite';
@@ -661,6 +661,12 @@ export interface Kpi {
   updateFrequency: KpiUpdateFrequency;
   status: KpiStatus;
   evidenceRequired: boolean;
+  // §21 — Reviewer
+  reviewerId?: string;
+  // §25 — KPI Definition Template
+  businessObjective?: string;
+  calculationFormula?: string;
+  dataSource?: string;
   createdById: string;
   approvedById?: string;
   createdAt: string;
@@ -668,6 +674,7 @@ export interface Kpi {
   sbu?: { id: string; name: string; code: string };
   department?: { id: string; name: string; sbuId?: string };
   createdBy?: { id: string; fullName: string };
+  reviewer?: { id: string; fullName: string; jobTitle: string };
   parent?: { id: string; title: string; kpiLevel: KpiLevel };
   assignments?: KpiAssignment[];
   updates?: KpiUpdate[];
@@ -712,11 +719,16 @@ export interface KpiReviewCycle {
   startDate: string;
   endDate: string;
   isActive: boolean;
+  isLocked: boolean;
+  lockedAt?: string;
   calibrationRequired: boolean;
   signoffRequired: boolean;
+  kpiWeight: number;
+  behavioralWeight: number;
   createdById: string;
   createdAt: string;
   createdBy?: { id: string; fullName: string };
+  lockedBy?: { id: string; fullName: string };
   _count?: { reviews: number };
 }
 
@@ -728,12 +740,17 @@ export interface KpiReview {
   managerId?: string;
   selfRating?: number;
   managerRating?: number;
+  behavioralScore?: number;
   finalRating?: number;
   reviewComment?: string;
   strengths?: string;
   improvementAreas?: string;
+  developmentActions?: string;
+  calibrationNote?: string | null;
+  approvalStatus?: string;
   signoffStatus: ReviewSignoffStatus;
   signedOffAt?: string;
+  updatedAt?: string;
   createdAt: string;
   kpi?: { id: string; title: string; status: KpiStatus; kpiLevel?: KpiLevel; category?: KpiCategory; endDate?: string };
   employee?: { id: string; fullName: string; jobTitle: string; department?: { name: string } };

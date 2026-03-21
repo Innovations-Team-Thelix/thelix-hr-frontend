@@ -10,10 +10,12 @@ import {
   LogOut,
   UserCircle,
   Settings,
+  Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { getInitials as getNameInitials } from "@/lib/utils";
+import { useUnreadNotificationCount, useNotifications, useMarkNotificationRead } from "@/hooks";
 
 interface HeaderProps {
   onMobileMenuToggle: () => void;
@@ -77,20 +79,26 @@ export function Header({ onMobileMenuToggle, pageTitle }: HeaderProps) {
   const displayEmail = profile?.workEmail || "";
   const displayRole = user?.role || "";
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [unreadCount] = useState(3); // Placeholder for notification count
+  const [showNotifications, setShowNotifications] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const notifRef = useRef<HTMLDivElement>(null);
+
+  const { data: unreadCount = 0 } = useUnreadNotificationCount();
+  const { data: notifData } = useNotifications(1, 8);
+  const recentNotifs = notifData?.data ?? [];
+  const markRead = useMarkNotificationRead();
 
   const title = pageTitle || getPageTitle(pathname);
   const breadcrumbs = getBreadcrumbs(pathname);
 
-  // Close dropdown when clicking outside
+  // Close dropdowns when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (
-        userMenuRef.current &&
-        !userMenuRef.current.contains(event.target as Node)
-      ) {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
         setShowUserMenu(false);
+      }
+      if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
+        setShowNotifications(false);
       }
     }
 
@@ -150,18 +158,71 @@ export function Header({ onMobileMenuToggle, pageTitle }: HeaderProps) {
       {/* Right side actions */}
       <div className="flex items-center gap-2">
         {/* Notification Bell */}
-        <Link
-          href="/notifications"
-          className="relative rounded-lg p-2 text-gray-500 hover:bg-gray-100 transition-colors"
-          aria-label="Notifications"
-        >
-          <Bell className="h-5 w-5" />
-          {unreadCount > 0 && (
-            <span className="absolute right-1 top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-danger-500 px-1 text-[10px] font-bold text-white">
-              {unreadCount > 99 ? "99+" : unreadCount}
-            </span>
+        <div className="relative" ref={notifRef}>
+          <button
+            onClick={() => setShowNotifications(!showNotifications)}
+            className="relative rounded-lg p-2 text-gray-500 hover:bg-gray-100 transition-colors"
+            aria-label="Notifications"
+          >
+            <Bell className="h-5 w-5" />
+            {unreadCount > 0 && (
+              <span className="absolute right-1 top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-danger-500 px-1 text-[10px] font-bold text-white">
+                {unreadCount > 99 ? "99+" : unreadCount}
+              </span>
+            )}
+          </button>
+
+          {showNotifications && (
+            <div className="absolute right-0 top-full mt-1 w-80 rounded-xl border border-gray-200 bg-white shadow-lg z-50 animate-fade-in">
+              <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+                <p className="text-sm font-semibold text-gray-900">Notifications</p>
+                <Link
+                  href="/notifications"
+                  onClick={() => setShowNotifications(false)}
+                  className="text-xs text-primary-600 hover:underline"
+                >
+                  View all
+                </Link>
+              </div>
+              <div className="max-h-72 overflow-y-auto">
+                {recentNotifs.length === 0 ? (
+                  <p className="px-4 py-6 text-center text-sm text-gray-500">No notifications</p>
+                ) : (
+                  recentNotifs.map((n) => (
+                    <div
+                      key={n.id}
+                      className={cn(
+                        "flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors",
+                        !n.sentAt && "bg-primary-50"
+                      )}
+                    >
+                      <div className="flex-1 min-w-0">
+                        {n.title && (
+                          <p className="text-xs font-medium text-gray-900 truncate">{n.title}</p>
+                        )}
+                        {n.message && (
+                          <p className="text-xs text-gray-500 line-clamp-2">{n.message}</p>
+                        )}
+                        <p className="mt-0.5 text-[10px] text-gray-400">
+                          {new Date(n.createdAt).toLocaleString()}
+                        </p>
+                      </div>
+                      {!n.sentAt && (
+                        <button
+                          onClick={() => markRead.mutate(n.id)}
+                          className="shrink-0 rounded p-1 text-gray-400 hover:text-primary-600 hover:bg-primary-100 transition-colors"
+                          title="Mark as read"
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
           )}
-        </Link>
+        </div>
 
         {/* User Avatar Dropdown */}
         {user && (

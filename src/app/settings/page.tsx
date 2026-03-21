@@ -224,10 +224,12 @@ function DepartmentManagement() {
 // ─── User Management ─────────────────────────────────
 
 const ROLE_OPTIONS = [
-  { label: "Admin", value: "Admin" },
-  { label: "SBU Head", value: "SBUHead" },
-  { label: "Finance", value: "Finance" },
-  { label: "Employee", value: "Employee" },
+  { label: "System Admin (8.6)", value: "Admin" },
+  { label: "VP / Executive (8.1)", value: "SBUHead" },
+  { label: "Director (8.2)", value: "Director" },
+  { label: "Manager (8.3)", value: "Manager" },
+  { label: "HR / Performance Admin (8.5)", value: "Finance" },
+  { label: "Team Member (8.4)", value: "Employee" },
 ];
 
 function UserManagement() {
@@ -335,6 +337,8 @@ function UserManagement() {
         password,
         role,
         ...(role === "SBUHead" && sbuId ? { sbuScopeId: sbuId } : {}),
+        ...(role === "Director" && deptId ? { departmentScopeId: deptId } : {}),
+        ...(role === "Manager" && deptId ? { departmentScopeId: deptId } : {}),
       });
 
       toast.success(`${role} user ${selectedEmployeeId ? "assigned" : "created"} successfully`);

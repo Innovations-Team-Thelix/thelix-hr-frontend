@@ -1259,3 +1259,512 @@ export function useAllKpisForHR(filters: KpiFilters = {}) {
     },
   });
 }
+
+// ─── KPI Comments ────────────────────────────────────
+
+export interface KpiComment {
+  id: string; kpiId: string; authorId: string; body: string;
+  createdAt: string; updatedAt: string;
+  author?: { id: string; fullName: string; jobTitle: string };
+}
+
+export function useKpiComments(kpiId: string | null) {
+  return useQuery<KpiComment[]>({
+    queryKey: ["kpi-comments", kpiId],
+    queryFn: async () => {
+      const res = await api.get<KpiComment[]>(`/kpi/${kpiId}/comments`);
+      return res.data;
+    },
+    enabled: !!kpiId,
+  });
+}
+
+export function useAddKpiComment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ kpiId, body }: { kpiId: string; body: string }) => {
+      const res = await api.post<KpiComment>(`/kpi/${kpiId}/comments`, { body });
+      return res.data;
+    },
+    onSuccess: (_d, vars) => { queryClient.invalidateQueries({ queryKey: ["kpi-comments", vars.kpiId] }); },
+  });
+}
+
+// ─── KPI Evidence ─────────────────────────────────────
+
+export interface KpiEvidence {
+  id: string; kpiId: string; updateId?: string; fileKey?: string; fileName?: string;
+  fileType?: string; note?: string; uploadedById: string; uploadedAt: string;
+  uploadedBy?: { id: string; fullName: string };
+}
+
+export function useKpiEvidence(kpiId: string | null) {
+  return useQuery<KpiEvidence[]>({
+    queryKey: ["kpi-evidence", kpiId],
+    queryFn: async () => {
+      const res = await api.get<KpiEvidence[]>(`/kpi/${kpiId}/evidence`);
+      return res.data;
+    },
+    enabled: !!kpiId,
+  });
+}
+
+export function useUploadKpiEvidence() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ kpiId, file, note }: { kpiId: string; file: File; note?: string }) => {
+      const form = new FormData();
+      form.append("file", file);
+      if (note) form.append("note", note);
+      const res = await api.post<KpiEvidence>(`/kpi/${kpiId}/evidence`, form, {
+        headers: { "Content-Type": undefined },
+      });
+      return res.data;
+    },
+    onSuccess: (_d, vars) => { queryClient.invalidateQueries({ queryKey: ["kpi-evidence", vars.kpiId] }); },
+  });
+}
+
+// ─── KPI Cascade ──────────────────────────────────────
+
+export function useKpiCascade() {
+  return useQuery<Kpi[]>({
+    queryKey: ["kpi-cascade"],
+    queryFn: async () => {
+      const res = await api.get<Kpi[]>("/kpi/cascade");
+      return res.data;
+    },
+    staleTime: 2 * 60 * 1000,
+  });
+}
+
+// ─── Rollup Override ──────────────────────────────────
+
+export function useSetProgressOverride() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ kpiId, override, reason }: { kpiId: string; override: number | null; reason?: string }) => {
+      const res = await api.post<unknown>(`/kpi/${kpiId}/rollup-override`, { override, reason });
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["kpi-cascade"] });
+      queryClient.invalidateQueries({ queryKey: ["kpis"] });
+    },
+  });
+}
+
+// ─── §16 Version History ──────────────────────────────
+
+export interface KpiVersion {
+  id: string;
+  kpiId: string;
+  changedById: string;
+  snapshot: Record<string, unknown>;
+  fieldChanges: Record<string, { before: unknown; after: unknown }> | null;
+  changeNote: string | null;
+  createdAt: string;
+  changedBy?: { id: string; fullName: string };
+}
+
+export function useKpiVersionHistory(kpiId: string | null) {
+  return useQuery<KpiVersion[]>({
+    queryKey: ["kpi-versions", kpiId],
+    queryFn: async () => {
+      const res = await api.get<KpiVersion[]>(`/kpi/${kpiId}/versions`);
+      return res.data;
+    },
+    enabled: !!kpiId,
+    staleTime: 60 * 1000,
+  });
+}
+
+// ─── Self-Assessment ──────────────────────────────────
+
+export function useSubmitSelfAssessment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: { reviewCycleId: string; kpiId: string; selfRating?: number; reviewComment?: string; strengths?: string; improvementAreas?: string; developmentActions?: string }) => {
+      const res = await api.post<KpiReview>("/kpi-reviews/self-assess", data);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["kpi-reviews"] });
+      queryClient.invalidateQueries({ queryKey: ["kpis"] });
+    },
+  });
+}
+
+// ─── Weekly Summary ───────────────────────────────────
+
+export interface KpiWeeklySummary {
+  weekStart: string;
+  weekEnd: string;
+  updatesThisWeek: Array<{ id: string; kpi: { id: string; title: string; status: string }; employee: { id: string; fullName: string }; percentComplete: number | null; actualValue: number | null; blockerFlag: boolean; submittedAt: string }>;
+  overdueCount: number;
+  atRiskCount: number;
+  recentlyCompleted: number;
+  blockers: Array<{ id: string; kpi: { id: string; title: string }; employee: { id: string; fullName: string }; blockerDetail: string | null; submittedAt: string }>;
+}
+
+export function useKpiWeeklySummary() {
+  return useQuery<KpiWeeklySummary>({
+    queryKey: ["kpi-weekly-summary"],
+    queryFn: async () => {
+      const res = await api.get<KpiWeeklySummary>("/kpi/weekly-summary");
+      return res.data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+// ─── Report Downloads ─────────────────────────────────
+
+export function useDownloadKpiReport() {
+  return useMutation({
+    mutationFn: async (params: { format: "csv" | "xlsx"; sbuId?: string; departmentId?: string; employeeId?: string; reviewCycleId?: string; status?: string; dateFrom?: string; dateTo?: string }) => {
+      const query = new URLSearchParams({
+        format: params.format,
+        ...(params.sbuId ? { sbuId: params.sbuId } : {}),
+        ...(params.departmentId ? { departmentId: params.departmentId } : {}),
+        ...(params.employeeId ? { employeeId: params.employeeId } : {}),
+        ...(params.reviewCycleId ? { reviewCycleId: params.reviewCycleId } : {}),
+        ...(params.status ? { status: params.status } : {}),
+        ...(params.dateFrom ? { dateFrom: params.dateFrom } : {}),
+        ...(params.dateTo ? { dateTo: params.dateTo } : {}),
+      });
+      const BASE = (api as any).defaults?.baseURL ?? "/api/v1";
+      const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+      const res = await fetch(`${BASE}/reports/kpi?${query}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `kpi_report_${new Date().toISOString().split("T")[0]}.${params.format}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    },
+  });
+}
+
+export function useDownloadOkrReport() {
+  return useMutation({
+    mutationFn: async (params: { format: "csv" | "xlsx"; dateFrom?: string; dateTo?: string }) => {
+      const query = new URLSearchParams({ format: params.format, ...(params.dateFrom ? { dateFrom: params.dateFrom } : {}), ...(params.dateTo ? { dateTo: params.dateTo } : {}) });
+      const BASE = (api as any).defaults?.baseURL ?? "/api/v1";
+      const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+      const res = await fetch(`${BASE}/reports/okr?${query}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `okr_report_${new Date().toISOString().split("T")[0]}.${params.format}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    },
+  });
+}
+
+// ─── Section 9: KPI Approval Workflow ─────────────────
+
+export function useSubmitKpiForApproval() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (kpiId: string) => {
+      const res = await api.post<unknown>(`/kpi/${kpiId}/submit-approval`);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["kpis"] });
+      queryClient.invalidateQueries({ queryKey: ["kpi-pending-approvals"] });
+    },
+  });
+}
+
+export function useApproveKpi() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ kpiId, note }: { kpiId: string; note?: string }) => {
+      const res = await api.post<unknown>(`/kpi/${kpiId}/approve`, { note });
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["kpis"] });
+      queryClient.invalidateQueries({ queryKey: ["kpi-pending-approvals"] });
+    },
+  });
+}
+
+export function useRejectKpi() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ kpiId, note }: { kpiId: string; note?: string }) => {
+      const res = await api.post<unknown>(`/kpi/${kpiId}/reject`, { note });
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["kpis"] });
+      queryClient.invalidateQueries({ queryKey: ["kpi-pending-approvals"] });
+    },
+  });
+}
+
+export interface PendingKpiApproval {
+  id: string;
+  title: string;
+  description: string | null;
+  approvalStatus: string;
+  approvalNote: string | null;
+  createdAt: string;
+  creator: { id: string; fullName: string } | null;
+  sbu: { id: string; name: string } | null;
+  department: { id: string; name: string } | null;
+}
+
+export function usePendingKpiApprovals() {
+  return useQuery<PendingKpiApproval[]>({
+    queryKey: ["kpi-pending-approvals"],
+    queryFn: async () => {
+      const res = await api.get<PendingKpiApproval[]>("/kpi/pending-approvals");
+      return res.data;
+    },
+    staleTime: 30 * 1000,
+  });
+}
+
+export function useAcknowledgeKpi() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (kpiId: string) => {
+      const res = await api.post<unknown>(`/kpi/${kpiId}/acknowledge`);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["kpis"] });
+    },
+  });
+}
+
+// ─── Section 9.2: Manager Update Review ───────────────
+
+export function useReviewKpiUpdate() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ updateId, reviewNote }: { updateId: string; reviewNote?: string }) => {
+      const res = await api.post<unknown>(`/kpi-updates/${updateId}/review`, { reviewNote });
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["kpi-updates"] });
+      queryClient.invalidateQueries({ queryKey: ["kpis"] });
+    },
+  });
+}
+
+// ─── Section 9.3: Director Calibration ────────────────
+
+export function useCalibrateKpiReview() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ reviewId, finalRating, calibrationNote }: { reviewId: string; finalRating: number; calibrationNote?: string }) => {
+      const res = await api.post<unknown>(`/kpi-reviews/${reviewId}/calibrate`, { finalRating, calibrationNote });
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["kpi-reviews"] });
+      queryClient.invalidateQueries({ queryKey: ["kpis"] });
+    },
+  });
+}
+
+// ─── Section 9.4: Weekly Report ───────────────────────
+
+export interface KpiWeeklyReport {
+  weekStart: string;
+  weekEnd: string;
+  updates: Array<{
+    id: string;
+    kpi: { id: string; title: string; status: string };
+    employee: { id: string; fullName: string };
+    percentComplete: number | null;
+    actualValue: number | null;
+    blockerFlag: boolean;
+    reviewNote: string | null;
+    submittedAt: string;
+  }>;
+  overdueCount: number;
+  atRiskCount: number;
+  recentlyCompleted: number;
+  blockers: Array<{ id: string; kpi: { id: string; title: string }; employee: { id: string; fullName: string }; blockerDetail: string | null; submittedAt: string }>;
+  pendingAcknowledgments: number;
+}
+
+export function useWeeklyReport() {
+  return useQuery<KpiWeeklyReport>({
+    queryKey: ["kpi-weekly-report"],
+    queryFn: async () => {
+      const res = await api.get<KpiWeeklyReport>("/kpi/weekly-report");
+      return res.data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useLockReviewCycle() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (cycleId: string) => {
+      const res = await api.post<KpiReviewCycle>(`/kpi-review-cycles/${cycleId}/lock`, {});
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["kpi-review-cycles"] });
+    },
+  });
+}
+
+export function useDownloadWeeklyReport() {
+  return useMutation({
+    mutationFn: async () => {
+      const BASE = (api as any).defaults?.baseURL ?? "/api/v1";
+      const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+      const res = await fetch(`${BASE}/kpi/weekly-report?download=1`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `kpi_weekly_report_${new Date().toISOString().split("T")[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    },
+  });
+}
+
+// ─── §15 Notifications ────────────────────────────────
+
+export interface InAppNotification {
+  id: string;
+  recipientId: string;
+  type: string;
+  title: string | null;
+  message: string | null;
+  payload: Record<string, unknown>;
+  sentAt: string | null;
+  createdAt: string;
+}
+
+export function useNotifications(page = 1, limit = 20) {
+  return useQuery<{ data: InAppNotification[]; pagination: { total: number; page: number; limit: number; totalPages: number } }>({
+    queryKey: ["notifications", page, limit],
+    queryFn: async () => {
+      const res = await api.get<InAppNotification[]>("/notifications", { params: { page, limit } });
+      return { data: res.data, pagination: res.pagination as any };
+    },
+    refetchInterval: 30 * 1000,
+  });
+}
+
+export function useUnreadNotificationCount() {
+  return useQuery<number>({
+    queryKey: ["notifications-unread-count"],
+    queryFn: async () => {
+      const res = await api.get<InAppNotification[]>("/notifications", { params: { page: 1, limit: 50 } });
+      return res.data.filter((n) => !n.sentAt).length;
+    },
+    refetchInterval: 30 * 1000,
+  });
+}
+
+export function useMarkNotificationRead() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (notificationId: string) => {
+      const res = await api.patch<unknown>(`/notifications/${notificationId}/read`);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["notifications-unread-count"] });
+    },
+  });
+}
+
+// ─── §14 Standard KPI Report Downloads ───────────────
+
+type KpiReportFormat = "csv" | "xlsx" | "pdf";
+
+interface KpiReportParams {
+  format?: KpiReportFormat;
+  sbuId?: string;
+  departmentId?: string;
+  employeeId?: string;
+  reviewCycleId?: string;
+  status?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+function buildKpiReportUrl(endpoint: string, params: KpiReportParams): string {
+  const BASE = (api as any).defaults?.baseURL ?? "/api/v1";
+  const q = new URLSearchParams({ format: params.format ?? "xlsx" });
+  if (params.sbuId) q.set("sbuId", params.sbuId);
+  if (params.departmentId) q.set("departmentId", params.departmentId);
+  if (params.employeeId) q.set("employeeId", params.employeeId);
+  if (params.reviewCycleId) q.set("reviewCycleId", params.reviewCycleId);
+  if (params.status) q.set("status", params.status);
+  if (params.dateFrom) q.set("dateFrom", params.dateFrom);
+  if (params.dateTo) q.set("dateTo", params.dateTo);
+  return `${BASE}${endpoint}?${q}`;
+}
+
+async function downloadKpiReport(endpoint: string, filename: string, params: KpiReportParams) {
+  const url = buildKpiReportUrl(endpoint, params);
+  const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+  const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  const blob = await res.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = objectUrl;
+  const ext = params.format ?? "xlsx";
+  a.download = `${filename}_${new Date().toISOString().split("T")[0]}.${ext}`;
+  a.click();
+  URL.revokeObjectURL(objectUrl);
+}
+
+export function useDownloadKpiRegister() {
+  return useMutation({ mutationFn: (p: KpiReportParams) => downloadKpiReport("/reports/kpi/register", "kpi_register", p) });
+}
+
+export function useDownloadKpiProgressByDepartment() {
+  return useMutation({ mutationFn: (p: KpiReportParams) => downloadKpiReport("/reports/kpi/progress-by-department", "kpi_progress_dept", p) });
+}
+
+export function useDownloadIndividualKpiReport() {
+  return useMutation({ mutationFn: (p: KpiReportParams) => downloadKpiReport("/reports/kpi/individual", "kpi_individual", p) });
+}
+
+export function useDownloadMonthlyReviewSummary() {
+  return useMutation({ mutationFn: (p: KpiReportParams) => downloadKpiReport("/reports/kpi/monthly-review", "kpi_monthly_review", p) });
+}
+
+export function useDownloadQuarterlyReviewAnalysis() {
+  return useMutation({ mutationFn: (p: KpiReportParams) => downloadKpiReport("/reports/kpi/quarterly-review", "kpi_quarterly_review", p) });
+}
+
+export function useDownloadAnnualPerformanceSummary() {
+  return useMutation({ mutationFn: (p: KpiReportParams) => downloadKpiReport("/reports/kpi/annual-summary", "kpi_annual_summary", p) });
+}
+
+export function useDownloadOverdueAtRiskReport() {
+  return useMutation({ mutationFn: (p: KpiReportParams) => downloadKpiReport("/reports/kpi/overdue-at-risk", "kpi_overdue_atrisk", p) });
+}
+
+export function useDownloadSharedKpiContributions() {
+  return useMutation({ mutationFn: (p: KpiReportParams) => downloadKpiReport("/reports/kpi/shared-contributions", "kpi_shared", p) });
+}
+
+export function useDownloadWeeklyWrapReport() {
+  return useMutation({ mutationFn: (p: KpiReportParams) => downloadKpiReport("/reports/kpi/weekly-wrap", "kpi_weekly_wrap", p) });
+}
