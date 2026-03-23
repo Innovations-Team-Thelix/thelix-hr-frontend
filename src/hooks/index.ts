@@ -845,7 +845,7 @@ export function useKpi(id: string) {
 export function useCreateKpi() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: Partial<Kpi> & { assigneeIds?: string[] }) => {
+    mutationFn: async (data: Partial<Kpi> & { assigneeIds?: string[]; assignees?: KpiAssignee[] }) => {
       const res = await api.post<Kpi>("/kpi", data);
       return res.data;
     },
@@ -884,11 +884,17 @@ export function useDeleteKpi() {
   });
 }
 
+export interface KpiAssignee {
+  employeeId: string;
+  taskDescription?: string;
+  contributionWeight?: number;
+}
+
 export function useAssignKpi() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, employeeIds }: { id: string; employeeIds: string[]; contributionWeight?: number }) => {
-      const res = await api.post<Kpi>(`/kpi/${id}/assign`, { employeeIds });
+    mutationFn: async ({ id, assignees }: { id: string; assignees: KpiAssignee[] }) => {
+      const res = await api.post<Kpi>(`/kpi/${id}/assign`, { assignees });
       return res.data;
     },
     onSuccess: (_d, variables) => {

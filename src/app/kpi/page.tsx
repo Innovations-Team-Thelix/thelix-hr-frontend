@@ -1,13 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import {
   Target, Plus, TrendingUp, TrendingDown, AlertTriangle,
   CheckCircle2, Clock, XCircle, BarChart3, Users, RefreshCw,
-  Pencil, Trash2, Upload, MessageSquare, ChevronDown, ChevronRight as ChevronRightIcon,
+  Pencil, Trash2, Upload, MessageSquare, ChevronDown, ChevronLeft, ChevronRight as ChevronRightIcon,
   Zap, Lock, Unlock, CalendarDays, ShieldCheck, ShieldX, Hourglass, FileEdit,
-  Briefcase, Search, Filter, ThumbsUp, ThumbsDown, Eye, PenLine,
+  Briefcase, Search, Filter, ThumbsUp, ThumbsDown, Eye, PenLine, GitBranch,
+  Building2, User as UserIcon, ClipboardCheck as ClipboardCheckIcon,
 } from "lucide-react";
 import { AppLayout } from "@/components/layout/app-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -300,12 +302,23 @@ function KrProgress({ kr }: { kr: KeyResult }) {
     ? (kr.currentValue >= 1 ? 100 : 0)
     : kr.targetValue > 0 ? Math.min(100, (kr.currentValue / kr.targetValue) * 100) : 0;
   const symbol = METRIC_LABELS[kr.metricType];
+  const healthColor = kr.healthStatus === "Behind" ? "bg-red-400" : kr.healthStatus === "AtRisk" ? "bg-amber-400" : kr.healthStatus === "Completed" ? "bg-green-500" : "bg-emerald-500";
   return (
-    <div className="text-xs text-gray-600">
-      {kr.metricType === "Boolean"
-        ? <span>{kr.currentValue >= 1 ? "✓ Done" : "✗ Not done"}</span>
-        : <span>{kr.currentValue}{symbol} / {kr.targetValue}{symbol}</span>
-      }
+    <div className="mt-1 space-y-1">
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-gray-500">
+          {kr.metricType === "Boolean"
+            ? (kr.currentValue >= 1 ? "✓ Done" : "✗ Not done")
+            : <>{kr.currentValue}{symbol} <span className="text-gray-300">/</span> {kr.targetValue}{symbol}</>
+          }
+        </span>
+        <span className="text-xs text-gray-400">{Math.round(pct)}%</span>
+      </div>
+      {kr.metricType !== "Boolean" && (
+        <div className="w-28 bg-gray-200 rounded-full h-1">
+          <div className={`h-1 rounded-full ${healthColor} transition-all`} style={{ width: `${pct}%` }} />
+        </div>
+      )}
     </div>
   );
 }
@@ -319,6 +332,7 @@ function ObjectiveCard({
   onEdit,
   onSubmitDraft,
   onDelete,
+  onDiscuss,
 }: {
   objective: Objective;
   canEdit: boolean;
@@ -326,6 +340,7 @@ function ObjectiveCard({
   onEdit?: (obj: Objective) => void;
   onSubmitDraft?: (obj: Objective) => void;
   onDelete?: (id: string) => void;
+  onDiscuss?: (krId: string, krTitle: string) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
   const pct = Number(objective.completionPct ?? 0);
@@ -418,22 +433,36 @@ function ObjectiveCard({
               </div>
             )}
             {(objective.keyResults ?? []).map((kr) => (
-              <div key={kr.id} className="flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50/70 px-3 py-2.5">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-800 truncate">{kr.title}</p>
-                  <KrProgress kr={kr} />
+              <div key={kr.id} className="rounded-xl border border-gray-100 bg-gray-50/70 px-3 py-2.5">
+                <div className="flex items-start gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-800 truncate">{kr.title}</p>
+                    <KrProgress kr={kr} />
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <HealthBadge health={kr.healthStatus} />
+                    {canEdit && objective.approvalStatus === 'Approved' && !objective.cycle?.isLocked && (
+                      <button
+                        onClick={() => onUpdateKr(kr, objective.id)}
+                        className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-white bg-primary hover:bg-primary/90 transition-colors"
+                        title="Log progress"
+                      >
+                        <PenLine className="h-3 w-3" />
+                        Update
+                      </button>
+                    )}
+                    {onDiscuss && (
+                      <button
+                        onClick={() => onDiscuss(kr.id, kr.title)}
+                        className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-gray-500 hover:bg-blue-50 hover:text-blue-600 border border-gray-200 transition-colors"
+                        title="Discuss"
+                      >
+                        <MessageSquare className="h-3 w-3" />
+                        Discuss
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <HealthBadge health={kr.healthStatus} />
-                {canEdit && objective.approvalStatus === 'Approved' && !objective.cycle?.isLocked && (
-                  <button
-                    onClick={() => onUpdateKr(kr, objective.id)}
-                    className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-white bg-primary hover:bg-primary/90 transition-colors shrink-0"
-                    title="Log progress"
-                  >
-                    <PenLine className="h-3 w-3" />
-                    Update
-                  </button>
-                )}
               </div>
             ))}
           </div>
@@ -1351,10 +1380,13 @@ function MyOkrsTab({ employeeId, canManage }: { employeeId: string; canManage: b
   const { data: cycles = [] } = useOkrCycles();
   const activeCycle = cycles.find((c) => c.status === "Active");
   const [selectedCycleId, setSelectedCycleId] = useState<string>("");
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 8;
 
   const effectiveCycleId = selectedCycleId || activeCycle?.id || "";
-  const { data: objData, isLoading } = useObjectives({ cycleId: effectiveCycleId || undefined, limit: 50 });
+  const { data: objData, isLoading } = useObjectives({ cycleId: effectiveCycleId || undefined, page, limit: PAGE_SIZE });
   const objectives = objData?.data ?? [];
+  const pagination = objData?.pagination;
 
   const { data: okrDash } = useOkrDashboard();
 
@@ -1478,27 +1510,66 @@ function MyOkrsTab({ employeeId, canManage }: { employeeId: string; canManage: b
       {/* Pending Approvals Panel (visible to SBU Heads / Admins) */}
       <PendingApprovalsPanel />
 
+      {/* Stats row */}
+      {okrDash && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="rounded-xl border border-gray-200 bg-white px-4 py-3">
+            <p className="text-xs text-gray-500">My Objectives</p>
+            <p className="text-xl font-bold text-gray-900 mt-0.5">{pagination?.total ?? okrDash.myObjectives.length}</p>
+          </div>
+          <div className="rounded-xl border border-gray-200 bg-white px-4 py-3">
+            <p className="text-xs text-gray-500">Avg Completion</p>
+            <p className="text-xl font-bold text-emerald-600 mt-0.5">
+              {okrDash.myObjectives.length > 0
+                ? Math.round(okrDash.myObjectives.reduce((s, o) => s + Number(o.completionPct ?? 0), 0) / okrDash.myObjectives.length)
+                : 0}%
+            </p>
+          </div>
+          <div className="rounded-xl border border-gray-200 bg-white px-4 py-3">
+            <p className="text-xs text-gray-500">Approved</p>
+            <p className="text-xl font-bold text-gray-900 mt-0.5">
+              {okrDash.myObjectives.filter((o) => o.approvalStatus === "Approved").length}
+            </p>
+          </div>
+          <div className={`rounded-xl border px-4 py-3 ${okrDash.staleKrCount > 0 ? "border-amber-200 bg-amber-50" : "border-gray-200 bg-white"}`}>
+            <p className={`text-xs ${okrDash.staleKrCount > 0 ? "text-amber-600" : "text-gray-500"}`}>Stale KRs</p>
+            <p className={`text-xl font-bold mt-0.5 ${okrDash.staleKrCount > 0 ? "text-amber-700" : "text-gray-900"}`}>{okrDash.staleKrCount}</p>
+          </div>
+        </div>
+      )}
+
       {/* Stale warning */}
       {okrDash && okrDash.staleKrCount > 0 && (
         <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
           <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
           <p className="text-sm text-amber-800">
-            You have <strong>{okrDash.staleKrCount}</strong> Key Result{okrDash.staleKrCount > 1 ? "s" : ""} that haven&apos;t been updated in 14+ days. Please log your progress.
+            <strong>{okrDash.staleKrCount}</strong> Key Result{okrDash.staleKrCount > 1 ? "s" : ""} haven&apos;t been updated in 14+ days — please log your progress.
           </p>
         </div>
       )}
 
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-3">
-        <div className="w-48">
+        <div className="flex items-center gap-2">
           <Select
             placeholder="Filter by cycle"
             options={[{ label: "All cycles", value: "" }, ...cycles.map((c) => ({ label: c.name, value: c.id }))]}
             value={selectedCycleId}
-            onChange={(e) => setSelectedCycleId(e.target.value)}
+            onChange={(e) => { setSelectedCycleId(e.target.value); setPage(1); }}
           />
+          {activeCycle && !selectedCycleId && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              {activeCycle.name}
+            </span>
+          )}
         </div>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-3">
+          {pagination && pagination.total > 0 && (
+            <span className="text-xs text-gray-400 hidden sm:block">
+              {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, pagination.total)} of {pagination.total}
+            </span>
+          )}
           <Button onClick={openCreate} disabled={!effectiveCycleId}>
             <Plus className="h-4 w-4" />
             New Objective
@@ -1525,32 +1596,53 @@ function MyOkrsTab({ employeeId, canManage }: { employeeId: string; canManage: b
         </Card>
       ) : (
         objectives.map((obj) => (
-          <div key={obj.id}>
-            <ObjectiveCard
-              objective={obj}
-              canEdit={true}
-              onUpdateKr={(kr, objectiveId) => { setKrModal({ kr, objectiveId }); setKrUpdateForm({ newValue: String(kr.currentValue), healthStatus: kr.healthStatus, note: "" }); }}
-              onEdit={openEdit}
-              onSubmitDraft={(o) => { setSubmitModal(o); setSubmitApproverId(""); }}
-              onDelete={(id) => setDeleteObjConfirm(id)}
-            />
-            {/* Comments link per KR */}
-            {(obj.keyResults ?? []).length > 0 && (
-              <div className="pl-10 mt-1 flex gap-3 flex-wrap">
-                {(obj.keyResults ?? []).map((kr) => (
-                  <button
-                    key={kr.id}
-                    onClick={() => setCommentModal({ krId: kr.id, krTitle: kr.title })}
-                    className="flex items-center gap-1 text-xs text-gray-400 hover:text-blue-600 transition-colors"
-                  >
-                    <MessageSquare className="h-3 w-3" />
-                    Discuss
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          <ObjectiveCard
+            key={obj.id}
+            objective={obj}
+            canEdit={true}
+            onUpdateKr={(kr, objectiveId) => { setKrModal({ kr, objectiveId }); setKrUpdateForm({ newValue: String(kr.currentValue), healthStatus: kr.healthStatus, note: "" }); }}
+            onEdit={openEdit}
+            onSubmitDraft={(o) => { setSubmitModal(o); setSubmitApproverId(""); }}
+            onDelete={(id) => setDeleteObjConfirm(id)}
+            onDiscuss={(krId, krTitle) => setCommentModal({ krId, krTitle })}
+          />
         ))
+      )}
+
+      {/* Pagination */}
+      {pagination && pagination.totalPages > 1 && (
+        <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-3">
+          <span className="text-xs text-gray-500">
+            Page {pagination.page} of {pagination.totalPages} &nbsp;·&nbsp; {pagination.total} objective{pagination.total !== 1 ? "s" : ""}
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={!pagination.hasPrevPage}
+              className="flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" /> Prev
+            </button>
+            {Array.from({ length: pagination.totalPages }, (_, i) => i + 1)
+              .filter((n) => Math.abs(n - page) <= 2)
+              .map((n) => (
+                <button
+                  key={n}
+                  onClick={() => setPage(n)}
+                  className={`w-7 h-7 rounded-lg text-xs font-medium transition-colors ${n === page ? "bg-primary text-white" : "text-gray-600 hover:bg-gray-100"}`}
+                >
+                  {n}
+                </button>
+              ))}
+            <button
+              onClick={() => setPage((p) => Math.min(pagination.totalPages, p + 1))}
+              disabled={!pagination.hasNextPage}
+              className="flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Next <ChevronRightIcon className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Create Objective Modal */}
@@ -1807,6 +1899,7 @@ function TeamOkrsTab() {
   const { data: okrDash, isLoading } = useOkrDashboard();
   const { data: cycles = [] } = useOkrCycles();
   const activeCycle = cycles.find((c) => c.status === "Active");
+  const effectiveRole = useEffectiveRole();
 
   const [selectedCycleId, setSelectedCycleId] = useState<string>("");
   const effectiveCycleId = selectedCycleId || activeCycle?.id || "";
@@ -1818,6 +1911,9 @@ function TeamOkrsTab() {
   });
   const teamObjectives = teamData?.data ?? [];
 
+  const directReportCount = okrDash?.directReports?.length ?? 0;
+  const isAdminOrBroad = effectiveRole === "Admin" || effectiveRole === "SBUHead" || effectiveRole === "Finance";
+
   // Group by owner
   const byOwner = teamObjectives.reduce<Record<string, { owner: Objective["owner"]; objectives: Objective[] }>>((acc, obj) => {
     const ownerId = obj.ownerId;
@@ -1825,6 +1921,14 @@ function TeamOkrsTab() {
     acc[ownerId].objectives.push(obj);
     return acc;
   }, {});
+
+  const scopeLabel = isAdminOrBroad
+    ? "organisation"
+    : effectiveRole === "Director"
+    ? "department"
+    : directReportCount > 0
+    ? `${directReportCount} direct report${directReportCount !== 1 ? "s" : ""}`
+    : "team";
 
   return (
     <div className="space-y-4">
@@ -1837,9 +1941,12 @@ function TeamOkrsTab() {
             onChange={(e) => setSelectedCycleId(e.target.value)}
           />
         </div>
-        {okrDash?.directReports && okrDash.directReports.length > 0 && (
-          <p className="text-sm text-gray-500">{okrDash.directReports.length} direct report(s)</p>
-        )}
+        <p className="text-sm text-gray-500">
+          {isLoading ? "" : `Showing OKRs for ${scopeLabel}`}
+          {!isAdminOrBroad && directReportCount === 0 && !isLoading && (
+            <span className="ml-2 text-xs text-amber-600 bg-amber-50 rounded px-1.5 py-0.5">No direct reports assigned — showing your own OKRs</span>
+          )}
+        </p>
       </div>
 
       {teamLoading ? (
@@ -1850,8 +1957,12 @@ function TeamOkrsTab() {
         <Card>
           <CardContent className="py-16 text-center">
             <Users className="h-8 w-8 text-gray-300 mx-auto mb-3" />
-            <p className="text-sm text-gray-500">No team OKRs found for this cycle.</p>
-            <p className="text-xs text-gray-400 mt-1">Your direct reports haven&apos;t created any objectives yet.</p>
+            <p className="text-sm text-gray-500">No OKRs found{effectiveCycleId ? " for this cycle" : ""}.</p>
+            <p className="text-xs text-gray-400 mt-1">
+              {directReportCount === 0 && !isAdminOrBroad
+                ? "No direct reports are linked to you. Check that employees have their supervisor set in HR records."
+                : "No objectives have been created yet for the selected scope."}
+            </p>
           </CardContent>
         </Card>
       ) : (
@@ -1955,64 +2066,257 @@ function CyclesTab() {
     } catch { toast.error("Failed."); }
   };
 
-  return (
-    <div className="space-y-4">
-      <div className="flex justify-end">
-        <Button onClick={openCreate}><Plus className="h-4 w-4" />New Cycle</Button>
-      </div>
+  // Summary counts
+  const activeCycles = cycles.filter((c) => c.status === "Active").length;
+  const upcomingCycles = cycles.filter((c) => c.status === "Upcoming").length;
+  const closedCycles = cycles.filter((c) => c.status === "Closed").length;
+  const activeReviewCycles = (reviewCycles as KpiReviewCycle[]).filter((r) => r.isActive).length;
 
-      {isLoading ? (
-        <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <Card key={i}><CardContent className="p-4"><Skeleton className="h-16 w-full" /></CardContent></Card>)}</div>
-      ) : cycles.length === 0 ? (
-        <Card><CardContent className="py-16 text-center"><CalendarDays className="h-8 w-8 text-gray-300 mx-auto mb-3" /><p className="text-sm text-gray-500">No cycles yet. Create your first OKR cycle.</p></CardContent></Card>
-      ) : (
-        <div className="space-y-3">
-          {cycles.map((cycle) => {
-            const cfg = CYCLE_STATUS_CONFIG[cycle.status];
-            return (
-              <Card key={cycle.id}>
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                      <CalendarDays className="h-5 w-5 text-gray-400 shrink-0" />
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <p className="font-semibold text-gray-900">{cycle.name}</p>
-                          <span className={`text-xs rounded-full px-2 py-0.5 font-medium ${cfg.bg} ${cfg.text}`}>{cfg.label}</span>
-                          {cycle.isLocked && <span className="text-xs rounded-full px-2 py-0.5 font-medium bg-gray-100 text-gray-600 flex items-center gap-1"><Lock className="h-3 w-3" />Locked</span>}
-                        </div>
-                        <p className="text-xs text-gray-500 mt-0.5">{formatDate(cycle.startDate)} – {formatDate(cycle.endDate)} · {cycle._count?.objectives ?? 0} objectives</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <Select
-                        options={[
-                          { label: "Upcoming", value: "Upcoming" },
-                          { label: "Active", value: "Active" },
-                          { label: "Closed", value: "Closed" },
-                        ]}
-                        value={cycle.status}
-                        onChange={(e) => updateCycle.mutateAsync({ id: cycle.id, data: { status: e.target.value as OkrCycleStatus } }).catch(() => toast.error("Update failed."))}
-                      />
-                      <button
-                        onClick={() => handleToggleLock(cycle)}
-                        className={`rounded p-1.5 transition-colors ${cycle.isLocked ? "text-amber-600 hover:bg-amber-50" : "text-gray-400 hover:bg-gray-100"}`}
-                        title={cycle.isLocked ? "Unlock cycle" : "Lock cycle"}
-                      >
-                        {cycle.isLocked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
-                      </button>
-                      <button onClick={() => openEdit(cycle)} className="rounded p-1.5 text-gray-400 hover:bg-blue-50 hover:text-blue-600 transition-colors" title="Edit"><Pencil className="h-4 w-4" /></button>
-                      <button onClick={() => setDeleteCycleConfirm(cycle.id)} className="rounded p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors" title="Delete"><Trash2 className="h-4 w-4" /></button>
+  const CYCLE_STATUS_ACCENT: Record<string, string> = {
+    Active:   "border-l-emerald-400",
+    Upcoming: "border-l-blue-400",
+    Closed:   "border-l-gray-300",
+  };
+
+  return (
+    <div className="space-y-6">
+
+      {/* ── OKR Cycles Section ── */}
+      <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+        {/* Section header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10">
+              <CalendarDays className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-900">OKR Cycles</p>
+              <p className="text-xs text-gray-400">Planning periods for objectives &amp; key results</p>
+            </div>
+          </div>
+          {/* Quick stats */}
+          <div className="hidden sm:flex items-center gap-4 mr-4">
+            <div className="text-center">
+              <p className="text-lg font-bold text-emerald-600">{activeCycles}</p>
+              <p className="text-xs text-gray-400">Active</p>
+            </div>
+            <div className="h-8 w-px bg-gray-100" />
+            <div className="text-center">
+              <p className="text-lg font-bold text-blue-500">{upcomingCycles}</p>
+              <p className="text-xs text-gray-400">Upcoming</p>
+            </div>
+            <div className="h-8 w-px bg-gray-100" />
+            <div className="text-center">
+              <p className="text-lg font-bold text-gray-400">{closedCycles}</p>
+              <p className="text-xs text-gray-400">Closed</p>
+            </div>
+          </div>
+          <Button onClick={openCreate}><Plus className="h-4 w-4" />New Cycle</Button>
+        </div>
+
+        {/* Cycle list */}
+        <div className="divide-y divide-gray-50">
+          {isLoading ? (
+            Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-4 px-6 py-4">
+                <Skeleton className="h-10 w-10 rounded-xl shrink-0" />
+                <div className="flex-1 space-y-2"><Skeleton className="h-4 w-1/3" /><Skeleton className="h-3 w-1/2" /></div>
+                <Skeleton className="h-8 w-28 rounded-lg" />
+              </div>
+            ))
+          ) : cycles.length === 0 ? (
+            <div className="py-16 text-center">
+              <CalendarDays className="h-10 w-10 text-gray-200 mx-auto mb-3" />
+              <p className="text-sm font-medium text-gray-500">No cycles yet</p>
+              <p className="text-xs text-gray-400 mt-1">Create your first OKR cycle to start planning objectives.</p>
+              <Button onClick={openCreate} variant="outline" className="mt-4"><Plus className="h-4 w-4" />New Cycle</Button>
+            </div>
+          ) : (
+            cycles.map((cycle) => {
+              const cfg = CYCLE_STATUS_CONFIG[cycle.status];
+              const objCount = cycle._count?.objectives ?? 0;
+              const daysLeft = Math.ceil((new Date(cycle.endDate).getTime() - Date.now()) / 86400000);
+              const isRunning = cycle.status === "Active";
+              return (
+                <div key={cycle.id} className={`group flex items-center gap-4 px-6 py-4 border-l-4 hover:bg-gray-50/60 transition-colors ${CYCLE_STATUS_ACCENT[cycle.status] ?? "border-l-transparent"}`}>
+                  {/* Date block */}
+                  <div className="shrink-0 w-16 text-center">
+                    <div className={`rounded-xl px-2 py-2 ${cfg.bg}`}>
+                      <p className={`text-xs font-semibold uppercase tracking-wide ${cfg.text}`}>{new Date(cycle.startDate).toLocaleString("default", { month: "short" })}</p>
+                      <p className={`text-lg font-bold leading-none mt-0.5 ${cfg.text}`}>{new Date(cycle.startDate).getFullYear()}</p>
                     </div>
                   </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-      )}
 
-      <Modal isOpen={modal} onClose={() => setModal(false)} title={editingId ? "Edit Cycle" : "New Cycle"} size="sm">
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-semibold text-gray-900">{cycle.name}</p>
+                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${cfg.bg} ${cfg.text}`}>{cfg.label}</span>
+                      {cycle.isLocked && (
+                        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium bg-amber-50 text-amber-700">
+                          <Lock className="h-3 w-3" />Locked
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 mt-1">
+                      <p className="text-xs text-gray-400">{formatDate(cycle.startDate)} – {formatDate(cycle.endDate)}</p>
+                      <span className="text-gray-200">·</span>
+                      <p className="text-xs font-medium text-gray-600">{objCount} objective{objCount !== 1 ? "s" : ""}</p>
+                      {isRunning && daysLeft > 0 && (
+                        <><span className="text-gray-200">·</span><p className="text-xs text-emerald-600 font-medium">{daysLeft}d remaining</p></>
+                      )}
+                      {isRunning && daysLeft <= 0 && (
+                        <><span className="text-gray-200">·</span><p className="text-xs text-red-500 font-medium">Ended {Math.abs(daysLeft)}d ago</p></>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {/* Status quick-change */}
+                    <div className="relative">
+                      <select
+                        value={cycle.status}
+                        onChange={(e) => updateCycle.mutateAsync({ id: cycle.id, data: { status: e.target.value as OkrCycleStatus } }).catch(() => toast.error("Update failed."))}
+                        className="appearance-none rounded-lg border border-gray-200 bg-white pl-3 pr-7 py-1.5 text-xs font-medium text-gray-600 focus:outline-none focus:ring-2 focus:ring-primary/30 hover:border-gray-300 transition-colors cursor-pointer"
+                      >
+                        <option value="Upcoming">Upcoming</option>
+                        <option value="Active">Active</option>
+                        <option value="Closed">Closed</option>
+                      </select>
+                      <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 pointer-events-none" />
+                    </div>
+                    <button
+                      onClick={() => handleToggleLock(cycle)}
+                      className={`rounded-lg p-1.5 transition-colors ${cycle.isLocked ? "text-amber-500 bg-amber-50 hover:bg-amber-100" : "text-gray-400 hover:bg-gray-100 hover:text-gray-600"}`}
+                      title={cycle.isLocked ? "Unlock cycle" : "Lock cycle"}
+                    >
+                      {cycle.isLocked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+                    </button>
+                    <button onClick={() => openEdit(cycle)} className="rounded-lg p-1.5 text-gray-400 hover:bg-blue-50 hover:text-blue-600 transition-colors" title="Edit"><Pencil className="h-4 w-4" /></button>
+                    <button onClick={() => setDeleteCycleConfirm(cycle.id)} className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors" title="Delete"><Trash2 className="h-4 w-4" /></button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+
+      {/* ── KPI Review Cycles Section ── */}
+      <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+        {/* Section header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-100">
+              <ClipboardCheckIcon className="h-5 w-5 text-violet-600" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-900">KPI Review Cycles</p>
+              <p className="text-xs text-gray-400">Performance reviews with self-assessments &amp; manager ratings</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            {activeReviewCycles > 0 && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 px-3 py-1 text-xs font-semibold">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />{activeReviewCycles} active
+              </span>
+            )}
+            <Button onClick={() => { setReviewForm(emptyReviewForm); setReviewModal(true); }}><Plus className="h-4 w-4" />New Review Cycle</Button>
+          </div>
+        </div>
+
+        {/* Review cycle list */}
+        <div className="divide-y divide-gray-50">
+          {reviewCyclesLoading ? (
+            Array.from({ length: 2 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-4 px-6 py-4">
+                <Skeleton className="h-10 w-10 rounded-xl shrink-0" />
+                <div className="flex-1 space-y-2"><Skeleton className="h-4 w-1/3" /><Skeleton className="h-3 w-1/2" /></div>
+              </div>
+            ))
+          ) : (reviewCycles as KpiReviewCycle[]).length === 0 ? (
+            <div className="py-14 text-center">
+              <ClipboardCheckIcon className="h-10 w-10 text-gray-200 mx-auto mb-3" />
+              <p className="text-sm font-medium text-gray-500">No KPI review cycles yet</p>
+              <p className="text-xs text-gray-400 mt-1">Create a review cycle so employees can submit self-assessments.</p>
+              <Button onClick={() => { setReviewForm(emptyReviewForm); setReviewModal(true); }} variant="outline" className="mt-4"><Plus className="h-4 w-4" />New Review Cycle</Button>
+            </div>
+          ) : (
+            (reviewCycles as KpiReviewCycle[]).map((rc) => {
+              const reviewCount = rc._count?.reviews ?? 0;
+              return (
+                <div key={rc.id} className={`group flex items-center gap-4 px-6 py-4 border-l-4 hover:bg-gray-50/60 transition-colors ${rc.isLocked ? "border-l-red-300" : rc.isActive ? "border-l-emerald-400" : "border-l-gray-200"}`}>
+                  {/* Icon */}
+                  <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${rc.isActive ? "bg-violet-100" : "bg-gray-100"}`}>
+                    <CalendarDays className={`h-5 w-5 ${rc.isActive ? "text-violet-600" : "text-gray-400"}`} />
+                  </div>
+
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-semibold text-gray-900 text-sm">{rc.name}</p>
+                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${rc.isActive ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-500"}`}>
+                        {rc.isActive ? "Active" : "Inactive"}
+                      </span>
+                      <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-violet-50 text-violet-600">{rc.cycleType}</span>
+                      {rc.isLocked && (
+                        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium bg-red-50 text-red-600">
+                          <Lock className="h-3 w-3" />Locked
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 mt-1">
+                      <p className="text-xs text-gray-400">{formatDate(rc.startDate)} – {formatDate(rc.endDate)}</p>
+                      <span className="text-gray-200">·</span>
+                      <p className="text-xs font-medium text-gray-600">{reviewCount} review{reviewCount !== 1 ? "s" : ""}</p>
+                      {rc.isLocked && rc.lockedAt && <><span className="text-gray-200">·</span><p className="text-xs text-red-400">Locked {formatDate(rc.lockedAt)}</p></>}
+                    </div>
+                    {/* Weight bars */}
+                    {(rc as any).kpiWeight != null && (
+                      <div className="flex items-center gap-3 mt-2">
+                        <div className="flex items-center gap-1.5 text-xs text-gray-400">
+                          <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary" />
+                          KPI {Math.round(((rc as any).kpiWeight ?? 0.7) * 100)}%
+                        </div>
+                        <div className="flex items-center gap-1.5 text-xs text-gray-400">
+                          <span className="inline-block h-1.5 w-1.5 rounded-full bg-violet-400" />
+                          Behavioral {Math.round(((rc as any).behavioralWeight ?? 0.3) * 100)}%
+                        </div>
+                        <div className="flex-1 max-w-[120px] h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                          <div className="h-1.5 bg-primary rounded-l-full" style={{ width: `${Math.round(((rc as any).kpiWeight ?? 0.7) * 100)}%` }} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Lock action */}
+                  {!rc.isLocked ? (
+                    <button
+                      onClick={async () => {
+                        if (!confirm(`Lock "${rc.name}"? No further submissions will be accepted.`)) return;
+                        try { await lockCycle.mutateAsync(rc.id); toast.success("Review cycle locked."); }
+                        catch { toast.error("Failed to lock cycle."); }
+                      }}
+                      disabled={lockCycle.isPending}
+                      className="flex items-center gap-1.5 shrink-0 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700 transition-colors disabled:opacity-50"
+                    >
+                      <Lock className="h-3.5 w-3.5" />Lock Cycle
+                    </button>
+                  ) : (
+                    <span className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-red-50 border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600">
+                      <Lock className="h-3.5 w-3.5" />Locked
+                    </span>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+
+      {/* Modals (unchanged) */}
+      <Modal isOpen={modal} onClose={() => setModal(false)} title={editingId ? "Edit Cycle" : "New OKR Cycle"} size="sm">
         <div className="space-y-4">
           <Input label="Cycle Name" required placeholder="e.g. Q2 2026" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
           <div className="grid grid-cols-2 gap-4">
@@ -2022,7 +2326,7 @@ function CyclesTab() {
           <Select label="Status" options={[{ label: "Upcoming", value: "Upcoming" }, { label: "Active", value: "Active" }, { label: "Closed", value: "Closed" }]} value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as OkrCycleStatus }))} />
           <div className="flex justify-end gap-3 pt-2">
             <Button variant="outline" onClick={() => setModal(false)}>Cancel</Button>
-            <Button loading={createCycle.isPending || updateCycle.isPending} onClick={handleSave}>{editingId ? "Save" : "Create"}</Button>
+            <Button loading={createCycle.isPending || updateCycle.isPending} onClick={handleSave}>{editingId ? "Save Changes" : "Create Cycle"}</Button>
           </div>
         </div>
       </Modal>
@@ -2036,69 +2340,6 @@ function CyclesTab() {
         loading={deleteCycle.isPending}
       />
 
-      {/* ── KPI Review Cycles ── */}
-      <div className="pt-4 border-t border-gray-200 space-y-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-semibold text-gray-800">KPI Review Cycles</p>
-            <p className="text-xs text-gray-500 mt-0.5">Manage performance review cycles for KPI self-assessments</p>
-          </div>
-          <Button onClick={() => { setReviewForm(emptyReviewForm); setReviewModal(true); }}><Plus className="h-4 w-4" />New Review Cycle</Button>
-        </div>
-
-        {reviewCyclesLoading ? (
-          <div className="space-y-3">{Array.from({ length: 2 }).map((_, i) => <Card key={i}><CardContent className="p-4"><Skeleton className="h-12 w-full" /></CardContent></Card>)}</div>
-        ) : (reviewCycles as KpiReviewCycle[]).length === 0 ? (
-          <Card><CardContent className="py-10 text-center"><CalendarDays className="h-7 w-7 text-gray-300 mx-auto mb-2" /><p className="text-sm text-gray-500">No KPI review cycles yet. Create one so employees can submit self-assessments.</p></CardContent></Card>
-        ) : (
-          <div className="space-y-3">
-            {(reviewCycles as KpiReviewCycle[]).map((rc) => (
-              <Card key={rc.id}>
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-50">
-                        <CalendarDays className="h-4 w-4 text-violet-500" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <p className="font-semibold text-gray-900 text-sm">{rc.name}</p>
-                          <span className={`text-xs rounded-full px-2 py-0.5 font-medium ${rc.isActive ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-500"}`}>
-                            {rc.isActive ? "Active" : "Inactive"}
-                          </span>
-                          <span className="text-xs rounded-full px-2 py-0.5 font-medium bg-blue-50 text-blue-600">{rc.cycleType}</span>
-                          {rc.isLocked && (
-                            <span className="flex items-center gap-1 text-xs rounded-full px-2 py-0.5 font-medium bg-red-50 text-red-600">
-                              <Lock className="h-3 w-3" /> Locked
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-gray-500 mt-0.5">{formatDate(rc.startDate)} – {formatDate(rc.endDate)} · {rc._count?.reviews ?? 0} reviews{rc.isLocked && rc.lockedAt ? ` · Locked ${formatDate(rc.lockedAt)}` : ""}</p>
-                      </div>
-                    </div>
-                    {!rc.isLocked && (
-                      <button
-                        onClick={async () => {
-                          if (!confirm(`Lock "${rc.name}"? No further submissions will be accepted.`)) return;
-                          try { await lockCycle.mutateAsync(rc.id); toast.success("Review cycle locked."); }
-                          catch { toast.error("Failed to lock cycle."); }
-                        }}
-                        disabled={lockCycle.isPending}
-                        className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50 shrink-0"
-                        title="Lock cycle — prevents further edits"
-                      >
-                        <Lock className="h-3.5 w-3.5" /> Lock Cycle
-                      </button>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Create Review Cycle Modal */}
       <Modal isOpen={reviewModal} onClose={() => setReviewModal(false)} title="New KPI Review Cycle" size="sm">
         <div className="space-y-4">
           <Input label="Cycle Name" required placeholder="e.g. Q1 2026 Performance Review" value={reviewForm.name} onChange={(e) => setReviewForm((f) => ({ ...f, name: e.target.value }))} />
@@ -2107,30 +2348,38 @@ function CyclesTab() {
             <Input label="Start Date" type="date" required value={reviewForm.startDate} onChange={(e) => setReviewForm((f) => ({ ...f, startDate: e.target.value }))} />
             <Input label="End Date" type="date" required value={reviewForm.endDate} onChange={(e) => setReviewForm((f) => ({ ...f, endDate: e.target.value }))} />
           </div>
-          <div>
-            <p className="text-xs font-medium text-gray-700 mb-1.5">Final Rating Formula Weights</p>
-            <p className="text-xs text-gray-400 mb-2">KPI achievement + behavioral/competency score (must total 1.0)</p>
-            <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-xl bg-gray-50 border border-gray-100 px-4 py-3 space-y-2">
+            <p className="text-xs font-semibold text-gray-700">Final Rating Formula Weights</p>
+            <p className="text-xs text-gray-400">KPI achievement + behavioral score — must total 1.0</p>
+            <div className="grid grid-cols-2 gap-3 mt-2">
               <div>
-                <label className="block text-xs text-gray-600 mb-1">KPI Weight (e.g. 0.7 = 70%)</label>
-                <input type="number" min="0" max="1" step="0.1" value={reviewForm.kpiWeight} onChange={(e) => setReviewForm((f) => ({ ...f, kpiWeight: parseFloat(e.target.value) || 0.7 }))} className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                <label className="block text-xs text-gray-600 mb-1">KPI Weight</label>
+                <input type="number" min="0" max="1" step="0.05" value={reviewForm.kpiWeight} onChange={(e) => setReviewForm((f) => ({ ...f, kpiWeight: parseFloat(e.target.value) || 0.7 }))} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
               </div>
               <div>
-                <label className="block text-xs text-gray-600 mb-1">Behavioral Weight (e.g. 0.3 = 30%)</label>
-                <input type="number" min="0" max="1" step="0.1" value={reviewForm.behavioralWeight} onChange={(e) => setReviewForm((f) => ({ ...f, behavioralWeight: parseFloat(e.target.value) || 0.3 }))} className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                <label className="block text-xs text-gray-600 mb-1">Behavioral Weight</label>
+                <input type="number" min="0" max="1" step="0.05" value={reviewForm.behavioralWeight} onChange={(e) => setReviewForm((f) => ({ ...f, behavioralWeight: parseFloat(e.target.value) || 0.3 }))} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
               </div>
             </div>
+            {/* Weight visual */}
+            <div className="h-2 w-full rounded-full bg-gray-200 overflow-hidden mt-1">
+              <div className="h-2 bg-primary rounded-l-full transition-all" style={{ width: `${Math.round(reviewForm.kpiWeight * 100)}%` }} />
+            </div>
+            <div className="flex items-center justify-between text-xs text-gray-400">
+              <span className="flex items-center gap-1"><span className="inline-block h-1.5 w-1.5 rounded-full bg-primary" />KPI {Math.round(reviewForm.kpiWeight * 100)}%</span>
+              <span className="flex items-center gap-1"><span className="inline-block h-1.5 w-1.5 rounded-full bg-gray-300" />Behavioral {Math.round(reviewForm.behavioralWeight * 100)}%</span>
+            </div>
             {Math.abs((reviewForm.kpiWeight + reviewForm.behavioralWeight) - 1) > 0.01 && (
-              <p className="text-xs text-amber-600 mt-1">Weights should sum to 1.0 (currently {(reviewForm.kpiWeight + reviewForm.behavioralWeight).toFixed(1)})</p>
+              <p className="text-xs text-amber-600">Weights should sum to 1.0 (currently {(reviewForm.kpiWeight + reviewForm.behavioralWeight).toFixed(2)})</p>
             )}
           </div>
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" className="rounded border-gray-300 text-primary" checked={reviewForm.isActive} onChange={(e) => setReviewForm((f) => ({ ...f, isActive: e.target.checked }))} />
-            <span className="text-sm text-gray-700">Set as active cycle</span>
+            <span className="text-sm text-gray-700">Set as active cycle immediately</span>
           </label>
           <div className="flex justify-end gap-3 pt-2">
             <Button variant="outline" onClick={() => setReviewModal(false)}>Cancel</Button>
-            <Button loading={createReviewCycle.isPending} onClick={handleSaveReviewCycle}>Create</Button>
+            <Button loading={createReviewCycle.isPending} onClick={handleSaveReviewCycle}>Create Review Cycle</Button>
           </div>
         </div>
       </Modal>
@@ -2164,6 +2413,7 @@ function KpiListTab({ canManage, canAssign, isAdmin, employeeId }: { canManage: 
     endDate: new Date(new Date().setMonth(new Date().getMonth() + 3)).toISOString().split("T")[0],
     sbuId: "", departmentId: "", parentKpiId: "", updateFrequency: "Monthly", rollupMethod: "WeightedAverage",
     weight: "1", evidenceRequired: false, assigneeIds: [] as string[],
+    assignees: [] as Array<{ employeeId: string; taskDescription: string }>,
     reviewerId: "",
     businessObjective: "", calculationFormula: "", dataSource: "",
   };
@@ -2187,14 +2437,14 @@ function KpiListTab({ canManage, canAssign, isAdmin, employeeId }: { canManage: 
   const openCreate = () => { setEditingId(null); setForm(emptyForm); setAssigneeSearch(""); setModalOpen(true); };
   const openEdit = (kpi: Kpi) => {
     setEditingId(kpi.id);
-    setForm({ title: kpi.title, description: kpi.description ?? "", category: kpi.category, kpiLevel: kpi.kpiLevel, timeHorizon: kpi.timeHorizon, targetType: kpi.targetType, targetValue: kpi.targetValue?.toString() ?? "", unit: kpi.unit ?? "", startDate: kpi.startDate.split("T")[0], endDate: kpi.endDate.split("T")[0], sbuId: kpi.sbuId ?? kpi.department?.sbuId ?? "", departmentId: kpi.departmentId ?? "", parentKpiId: kpi.parentKpiId ?? "", updateFrequency: kpi.updateFrequency, rollupMethod: kpi.rollupMethod, weight: (kpi as any).weight?.toString() ?? "1", evidenceRequired: kpi.evidenceRequired, assigneeIds: [], reviewerId: kpi.reviewerId ?? "", businessObjective: kpi.businessObjective ?? "", calculationFormula: kpi.calculationFormula ?? "", dataSource: kpi.dataSource ?? "" } as any);
+    setForm({ title: kpi.title, description: kpi.description ?? "", category: kpi.category, kpiLevel: kpi.kpiLevel, timeHorizon: kpi.timeHorizon, targetType: kpi.targetType, targetValue: kpi.targetValue?.toString() ?? "", unit: kpi.unit ?? "", startDate: kpi.startDate.split("T")[0], endDate: kpi.endDate.split("T")[0], sbuId: kpi.sbuId ?? kpi.department?.sbuId ?? "", departmentId: kpi.departmentId ?? "", parentKpiId: kpi.parentKpiId ?? "", updateFrequency: kpi.updateFrequency, rollupMethod: kpi.rollupMethod, weight: (kpi as any).weight?.toString() ?? "1", evidenceRequired: kpi.evidenceRequired, assigneeIds: [], assignees: [], reviewerId: kpi.reviewerId ?? "", businessObjective: kpi.businessObjective ?? "", calculationFormula: kpi.calculationFormula ?? "", dataSource: kpi.dataSource ?? "" } as any);
     setModalOpen(true);
   };
   const openUpdate = (kpiId: string) => { setUpdateKpiId(kpiId); setUpdateForm(emptyUpdateForm); setUpdateModalOpen(true); };
 
   const handleSaveKpi = async () => {
     if (!form.title || !form.startDate || !form.endDate) { toast.error("Title and dates required."); return; }
-    const payload: any = { title: form.title, description: form.description || undefined, category: form.category, kpiLevel: form.kpiLevel, timeHorizon: form.timeHorizon, targetType: form.targetType, targetValue: form.targetValue ? parseFloat(form.targetValue) : undefined, unit: form.unit || undefined, startDate: form.startDate, endDate: form.endDate, sbuId: form.sbuId || undefined, departmentId: form.departmentId || undefined, parentKpiId: form.parentKpiId || undefined, updateFrequency: form.updateFrequency, rollupMethod: form.rollupMethod, weight: (form as any).weight ? parseFloat((form as any).weight) : 1, evidenceRequired: form.evidenceRequired, assigneeIds: form.assigneeIds.length > 0 ? form.assigneeIds : undefined, reviewerId: (form as any).reviewerId || undefined, businessObjective: (form as any).businessObjective || undefined, calculationFormula: (form as any).calculationFormula || undefined, dataSource: (form as any).dataSource || undefined };
+    const payload: any = { title: form.title, description: form.description || undefined, category: form.category, kpiLevel: form.kpiLevel, timeHorizon: form.timeHorizon, targetType: form.targetType, targetValue: form.targetValue ? parseFloat(form.targetValue) : undefined, unit: form.unit || undefined, startDate: form.startDate, endDate: form.endDate, sbuId: form.sbuId || undefined, departmentId: form.departmentId || undefined, parentKpiId: form.parentKpiId || undefined, updateFrequency: form.updateFrequency, rollupMethod: form.rollupMethod, weight: (form as any).weight ? parseFloat((form as any).weight) : 1, evidenceRequired: form.evidenceRequired, assignees: (form as any).assignees?.length > 0 ? (form as any).assignees : undefined, reviewerId: (form as any).reviewerId || undefined, businessObjective: (form as any).businessObjective || undefined, calculationFormula: (form as any).calculationFormula || undefined, dataSource: (form as any).dataSource || undefined };
     try {
       if (editingId) { await updateKpi.mutateAsync({ id: editingId, data: payload }); toast.success("KPI updated."); }
       else { await createKpi.mutateAsync(payload); toast.success("KPI created."); }
@@ -2215,87 +2465,190 @@ function KpiListTab({ canManage, canAssign, isAdmin, employeeId }: { canManage: 
     } catch { toast.error("Failed."); }
   };
 
+  // local search (client-side title filter)
+  const [search, setSearch] = useState("");
+  const displayedKpis = search.trim()
+    ? kpis.filter((k) => k.title.toLowerCase().includes(search.toLowerCase()))
+    : kpis;
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="w-40"><Select placeholder="All Levels" options={[{ label: "All Levels", value: "" }, ...["Company","SBU","Department","Team","Individual"].map((v) => ({ label: v, value: v }))]} value={filters.kpiLevel ?? ""} onChange={(e) => setFilters((f) => ({ ...f, kpiLevel: (e.target.value as any) || undefined, page: 1 }))} /></div>
-        <div className="w-40"><Select placeholder="All Statuses" options={[{ label: "All Statuses", value: "" }, ...Object.entries(STATUS_CONFIG).map(([v, c]) => ({ label: c.label, value: v }))]} value={filters.status ?? ""} onChange={(e) => setFilters((f) => ({ ...f, status: (e.target.value as any) || undefined, page: 1 }))} /></div>
-        <div className="w-44"><Select placeholder="All Categories" options={[{ label: "All Categories", value: "" }, ...Object.entries(CATEGORY_LABELS).map(([v, label]) => ({ label, value: v }))]} value={filters.category ?? ""} onChange={(e) => setFilters((f) => ({ ...f, category: (e.target.value as any) || undefined, page: 1 }))} /></div>
-        <div className="w-36"><Select placeholder="All Horizons" options={[{ label: "All Horizons", value: "" }, ...["Annual","Quarterly","Monthly"].map((v) => ({ label: v, value: v }))]} value={filters.timeHorizon ?? ""} onChange={(e) => setFilters((f) => ({ ...f, timeHorizon: (e.target.value as any) || undefined, page: 1 }))} /></div>
-        {canManage && <div className="ml-auto"><Button onClick={openCreate}><Plus className="h-4 w-4" />Create KPI</Button></div>}
-        <button onClick={() => setFilters({ page: 1, limit: 20 })} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 px-2 py-1.5 rounded hover:bg-gray-100 transition-colors"><RefreshCw className="h-3.5 w-3.5" />Reset</button>
-      </div>
-      <Card>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>KPI Title</TableHead><TableHead>Level</TableHead><TableHead>Category</TableHead><TableHead>Horizon</TableHead><TableHead>Target</TableHead><TableHead>End Date</TableHead><TableHead>Status</TableHead><TableHead>Approval</TableHead><TableHead>Assignees</TableHead><TableHead className="w-28" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {kpisLoading ? Array.from({ length: 5 }).map((_, i) => <TableRow key={i}>{Array.from({ length: 8 }).map((_, j) => <TableCell key={j}><Skeleton className="h-4 w-3/4" /></TableCell>)}</TableRow>)
-                  : kpis.length === 0 ? <TableRow><TableCell colSpan={8} className="py-16 text-center text-sm text-gray-500">No KPIs found</TableCell></TableRow>
-                  : kpis.map((kpi) => (
-                    <TableRow key={kpi.id}>
-                      <TableCell><div><p className="font-medium text-sm text-gray-900">{kpi.title}</p>{kpi.parent && <p className="text-xs text-gray-400">↳ {kpi.parent.title}</p>}</div></TableCell>
-                      <TableCell><span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${LEVEL_COLORS[kpi.kpiLevel] ?? "bg-gray-100 text-gray-600"}`}>{kpi.kpiLevel}</span></TableCell>
-                      <TableCell className="text-xs text-gray-500">{CATEGORY_LABELS[kpi.category] ?? kpi.category}</TableCell>
-                      <TableCell className="text-sm text-gray-600">{kpi.timeHorizon}</TableCell>
-                      <TableCell className="text-sm">
-                        {kpi.targetType === "Binary" ? <span className="text-xs text-gray-500 italic">Done/Not Done</span>
-                          : kpi.targetType === "Milestone" ? <span className="text-xs text-gray-500 italic">Milestone</span>
-                          : kpi.targetValue != null ? `${kpi.targetValue}${kpi.targetType === "Percentage" ? "%" : kpi.unit ? ` ${kpi.unit}` : ""}` : "—"}
-                      </TableCell>
-                      <TableCell className="text-sm text-gray-600">{formatDate(kpi.endDate)}</TableCell>
-                      <TableCell><StatusBadge status={kpi.status} /></TableCell>
-                      <TableCell>
-                        {(() => {
-                          const aStatus = (kpi as any).approvalStatus as string | undefined;
-                          const cfg = aStatus ? APPROVAL_STATUS_CONFIG[aStatus] : null;
-                          return cfg ? (
-                            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${cfg.bg} ${cfg.text}`}>{cfg.label}</span>
-                          ) : <span className="text-xs text-gray-400">—</span>;
-                        })()}
-                      </TableCell>
-                      <TableCell>{kpi.assignments && kpi.assignments.length > 0 ? <div className="flex -space-x-1">{kpi.assignments.slice(0, 3).map((a) => <Avatar key={a.id} name={a.employee?.fullName ?? "?"} size="sm" />)}{kpi.assignments.length > 3 && <span className="flex h-6 w-6 items-center justify-center rounded-full bg-gray-200 text-xs border border-white">+{kpi.assignments.length - 3}</span>}</div> : <span className="text-xs text-gray-400">—</span>}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <button onClick={() => setDrawerKpiId(kpi.id)} className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors" title="View details"><Eye className="h-4 w-4" /></button>
-                          <button onClick={() => openUpdate(kpi.id)} className="rounded p-1 text-gray-400 hover:bg-green-50 hover:text-green-600 transition-colors" title="Submit update"><Upload className="h-4 w-4" /></button>
-                          {canManage && (kpi as any).approvalStatus === "Draft" && (
-                            <button
-                              onClick={async () => { try { await submitForApproval.mutateAsync(kpi.id); toast.success("Submitted for approval."); } catch { toast.error("Failed."); } }}
-                              disabled={submitForApproval.isPending}
-                              className="rounded p-1 text-gray-400 hover:bg-amber-50 hover:text-amber-600 transition-colors disabled:opacity-50"
-                              title="Submit for approval"
-                            >
-                              <ShieldCheck className="h-4 w-4" />
-                            </button>
-                          )}
-                          {!canManage && kpi.assignments?.some((a: any) => a.employeeId === employeeId && !a.acknowledgedAt) && (
-                            <button
-                              onClick={async () => { try { await acknowledgeKpi.mutateAsync(kpi.id); toast.success("KPI acknowledged."); } catch { toast.error("Failed."); } }}
-                              disabled={acknowledgeKpi.isPending}
-                              className="rounded p-1 text-gray-400 hover:bg-emerald-50 hover:text-emerald-600 transition-colors disabled:opacity-50"
-                              title="Acknowledge assignment"
-                            >
-                              <CheckCircle2 className="h-4 w-4" />
-                            </button>
-                          )}
-                          {canManage && <button onClick={() => openEdit(kpi)} className="rounded p-1 text-gray-400 hover:bg-blue-50 hover:text-blue-600 transition-colors" title="Edit"><Pencil className="h-4 w-4" /></button>}
-                          {isAdmin && <button onClick={() => setDeleteKpiConfirm(kpi.id)} className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors" title="Delete"><Trash2 className="h-4 w-4" /></button>}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-              </TableBody>
-            </Table>
+      {/* ── Filter bar ── */}
+      <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-[180px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search KPIs..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full rounded-lg border border-gray-200 bg-gray-50 pl-9 pr-3 py-2 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary focus:bg-white transition-colors"
+            />
           </div>
-          {pagination && pagination.totalPages > 1 && <div className="border-t border-gray-100 px-4 py-3"><Pagination currentPage={pagination.page} totalPages={pagination.totalPages} onPageChange={(page) => setFilters((f) => ({ ...f, page }))} /></div>}
-        </CardContent>
-      </Card>
+          <div className="w-36"><Select placeholder="All Levels" options={[{ label: "All Levels", value: "" }, ...["Company","SBU","Department","Team","Individual"].map((v) => ({ label: v, value: v }))]} value={filters.kpiLevel ?? ""} onChange={(e) => setFilters((f) => ({ ...f, kpiLevel: (e.target.value as any) || undefined, page: 1 }))} /></div>
+          <div className="w-36"><Select placeholder="All Statuses" options={[{ label: "All Statuses", value: "" }, ...Object.entries(STATUS_CONFIG).map(([v, c]) => ({ label: c.label, value: v }))]} value={filters.status ?? ""} onChange={(e) => setFilters((f) => ({ ...f, status: (e.target.value as any) || undefined, page: 1 }))} /></div>
+          <div className="w-40"><Select placeholder="All Categories" options={[{ label: "All Categories", value: "" }, ...Object.entries(CATEGORY_LABELS).map(([v, label]) => ({ label, value: v }))]} value={filters.category ?? ""} onChange={(e) => setFilters((f) => ({ ...f, category: (e.target.value as any) || undefined, page: 1 }))} /></div>
+          <div className="w-32"><Select placeholder="Horizon" options={[{ label: "All Horizons", value: "" }, ...["Annual","Quarterly","Monthly"].map((v) => ({ label: v, value: v }))]} value={filters.timeHorizon ?? ""} onChange={(e) => setFilters((f) => ({ ...f, timeHorizon: (e.target.value as any) || undefined, page: 1 }))} /></div>
+          <button onClick={() => { setFilters({ page: 1, limit: 20 }); setSearch(""); }} className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors" title="Reset filters"><RefreshCw className="h-4 w-4" /></button>
+          {canManage && <Button onClick={openCreate} className="ml-auto shrink-0"><Plus className="h-4 w-4" />Create KPI</Button>}
+        </div>
+        {(filters.kpiLevel || filters.status || filters.category || filters.timeHorizon || search) && (
+          <div className="flex flex-wrap gap-1.5 mt-2.5 pt-2.5 border-t border-gray-100">
+            {search && <span className="inline-flex items-center gap-1 rounded-full bg-primary-50 text-primary-700 px-2.5 py-0.5 text-xs font-medium">Search: {search}<button onClick={() => setSearch("")} className="ml-0.5 hover:text-primary-900">×</button></span>}
+            {filters.kpiLevel && <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 text-gray-600 px-2.5 py-0.5 text-xs font-medium">{filters.kpiLevel}<button onClick={() => setFilters((f) => ({ ...f, kpiLevel: undefined }))} className="ml-0.5 hover:text-gray-900">×</button></span>}
+            {filters.status && <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 text-gray-600 px-2.5 py-0.5 text-xs font-medium">{STATUS_CONFIG[filters.status]?.label ?? filters.status}<button onClick={() => setFilters((f) => ({ ...f, status: undefined }))} className="ml-0.5 hover:text-gray-900">×</button></span>}
+            {filters.category && <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 text-gray-600 px-2.5 py-0.5 text-xs font-medium">{CATEGORY_LABELS[filters.category] ?? filters.category}<button onClick={() => setFilters((f) => ({ ...f, category: undefined }))} className="ml-0.5 hover:text-gray-900">×</button></span>}
+            {filters.timeHorizon && <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 text-gray-600 px-2.5 py-0.5 text-xs font-medium">{filters.timeHorizon}<button onClick={() => setFilters((f) => ({ ...f, timeHorizon: undefined }))} className="ml-0.5 hover:text-gray-900">×</button></span>}
+          </div>
+        )}
+      </div>
+
+      {!kpisLoading && (
+        <p className="text-xs text-gray-400 px-0.5">
+          {displayedKpis.length} KPI{displayedKpis.length !== 1 ? "s" : ""}{pagination?.total ? ` of ${pagination.total}` : ""}
+        </p>
+      )}
+
+      {/* ── KPI Cards ── */}
+      <div className="space-y-2.5">
+        {kpisLoading ? (
+          Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+              <div className="flex items-start gap-4">
+                <Skeleton className="h-10 w-10 rounded-lg shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-2/5" />
+                  <Skeleton className="h-3 w-3/5" />
+                  <Skeleton className="h-2 w-full rounded-full mt-3" />
+                </div>
+              </div>
+            </div>
+          ))
+        ) : displayedKpis.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-gray-200 bg-white py-20 text-center">
+            <Target className="mx-auto h-10 w-10 text-gray-300 mb-3" />
+            <p className="text-sm font-medium text-gray-500">No KPIs found</p>
+            <p className="text-xs text-gray-400 mt-1">Try adjusting your filters or create a new KPI.</p>
+            {canManage && <Button onClick={openCreate} className="mt-4" variant="outline"><Plus className="h-4 w-4" />Create KPI</Button>}
+          </div>
+        ) : (
+          displayedKpis.map((kpi) => {
+            const StatusIcon = STATUS_CONFIG[kpi.status]?.icon ?? Clock;
+            const statusCfg = STATUS_CONFIG[kpi.status];
+            const aStatus = (kpi as any).approvalStatus as string | undefined;
+            const approvalCfg = aStatus ? APPROVAL_STATUS_CONFIG[aStatus] : null;
+            const lastUpdate = kpi.updates?.[0];
+            const pct = lastUpdate?.percentComplete ?? (kpi.targetValue && lastUpdate?.actualValue != null ? Math.min(100, Math.round((lastUpdate.actualValue / kpi.targetValue) * 100)) : null);
+            const progressBarColor =
+              kpi.status === "OnTrack" || kpi.status === "Completed" ? "bg-emerald-500"
+              : kpi.status === "AtRisk" ? "bg-amber-400"
+              : kpi.status === "OffTrack" || kpi.status === "Overdue" ? "bg-red-500"
+              : "bg-primary";
+            const daysLeft = Math.ceil((new Date(kpi.endDate).getTime() - Date.now()) / 86400000);
+            const dueSoon = daysLeft >= 0 && daysLeft <= 14;
+            const overdue = daysLeft < 0 && kpi.status !== "Completed";
+            const needsAck = kpi.assignments?.some((a: any) => a.employeeId === employeeId && !a.acknowledgedAt);
+
+            return (
+              <div key={kpi.id} className="group relative rounded-xl border border-gray-200 bg-white shadow-sm hover:shadow-md hover:border-gray-300 transition-all duration-150 overflow-hidden">
+                <div className={`absolute inset-y-0 left-0 w-1 ${progressBarColor}`} />
+                <div className="pl-5 pr-4 py-4">
+                  <div className="flex items-start gap-4">
+                    <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${statusCfg?.bg ?? "bg-gray-100"}`}>
+                      <StatusIcon className={`h-5 w-5 ${statusCfg?.text ?? "text-gray-500"}`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <button onClick={() => setDrawerKpiId(kpi.id)} className="text-sm font-semibold text-gray-900 hover:text-primary text-left leading-snug block max-w-xl transition-colors">
+                            {kpi.title}
+                          </button>
+                          {kpi.parent && (
+                            <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
+                              <ChevronRightIcon className="h-3 w-3" />{kpi.parent.title}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                          <button onClick={() => setDrawerKpiId(kpi.id)} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors" title="View details"><Eye className="h-4 w-4" /></button>
+                          <button onClick={() => openUpdate(kpi.id)} className="rounded-lg p-1.5 text-gray-400 hover:bg-green-50 hover:text-green-600 transition-colors" title="Submit progress update"><Upload className="h-4 w-4" /></button>
+                          {canManage && aStatus === "Draft" && (
+                            <button onClick={async () => { try { await submitForApproval.mutateAsync(kpi.id); toast.success("Submitted for approval."); } catch { toast.error("Failed."); } }} disabled={submitForApproval.isPending} className="rounded-lg p-1.5 text-gray-400 hover:bg-amber-50 hover:text-amber-600 transition-colors disabled:opacity-50" title="Submit for approval"><ShieldCheck className="h-4 w-4" /></button>
+                          )}
+                          {!canManage && needsAck && (
+                            <button onClick={async () => { try { await acknowledgeKpi.mutateAsync(kpi.id); toast.success("KPI acknowledged."); } catch { toast.error("Failed."); } }} disabled={acknowledgeKpi.isPending} className="rounded-lg p-1.5 text-gray-400 hover:bg-emerald-50 hover:text-emerald-600 transition-colors disabled:opacity-50" title="Acknowledge assignment"><CheckCircle2 className="h-4 w-4" /></button>
+                          )}
+                          {canManage && <button onClick={() => openEdit(kpi)} className="rounded-lg p-1.5 text-gray-400 hover:bg-blue-50 hover:text-blue-600 transition-colors" title="Edit KPI"><Pencil className="h-4 w-4" /></button>}
+                          {isAdmin && <button onClick={() => setDeleteKpiConfirm(kpi.id)} className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors" title="Delete KPI"><Trash2 className="h-4 w-4" /></button>}
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${LEVEL_COLORS[kpi.kpiLevel] ?? "bg-gray-100 text-gray-600"}`}>{kpi.kpiLevel}</span>
+                        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-500">{CATEGORY_LABELS[kpi.category] ?? kpi.category}</span>
+                        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-500">{kpi.timeHorizon}</span>
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${statusCfg?.bg} ${statusCfg?.text}`}>
+                          <StatusIcon className="h-3 w-3" />{statusCfg?.label ?? kpi.status}
+                        </span>
+                        {approvalCfg && <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${approvalCfg.bg} ${approvalCfg.text}`}>{approvalCfg.label}</span>}
+                        {needsAck && <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium bg-amber-50 text-amber-600">Needs acknowledgment</span>}
+                      </div>
+                      <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-2">
+                        <div className="flex-1 min-w-[140px] max-w-xs">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs text-gray-400">Progress</span>
+                            <span className="text-xs font-semibold text-gray-700">{pct != null ? `${pct}%` : "—"}</span>
+                          </div>
+                          <div className="h-1.5 w-full rounded-full bg-gray-100">
+                            {pct != null && <div className={`h-1.5 rounded-full ${progressBarColor}`} style={{ width: `${Math.min(100, pct)}%` }} />}
+                          </div>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-xs text-gray-400">Target</p>
+                          <p className="text-xs font-semibold text-gray-700">
+                            {kpi.targetType === "Binary" ? "Done/Not Done" : kpi.targetType === "Milestone" ? "Milestone" : kpi.targetValue != null ? `${kpi.targetValue}${kpi.targetType === "Percentage" ? "%" : kpi.unit ? ` ${kpi.unit}` : ""}` : "—"}
+                          </p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-xs text-gray-400">Due</p>
+                          <p className={`text-xs font-semibold ${overdue ? "text-red-600" : dueSoon ? "text-amber-600" : "text-gray-700"}`}>
+                            {formatDate(kpi.endDate)}
+                            {overdue && <span className="ml-1">({Math.abs(daysLeft)}d ago)</span>}
+                            {dueSoon && !overdue && <span className="ml-1">({daysLeft}d left)</span>}
+                          </p>
+                        </div>
+                        {kpi.assignments && kpi.assignments.length > 0 && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-400">Assignees</span>
+                            <div className="flex -space-x-1.5">
+                              {kpi.assignments.slice(0, 4).map((a) => (
+                                <div key={a.id} title={a.employee?.fullName}><Avatar name={a.employee?.fullName ?? "?"} size="sm" /></div>
+                              ))}
+                              {kpi.assignments.length > 4 && <span className="flex h-6 w-6 items-center justify-center rounded-full bg-gray-200 text-xs font-medium border-2 border-white text-gray-600">+{kpi.assignments.length - 4}</span>}
+                            </div>
+                          </div>
+                        )}
+                        {(kpi.sbu || kpi.department) && (
+                          <div className="text-center">
+                            <p className="text-xs text-gray-400">{kpi.department ? "Dept" : "SBU"}</p>
+                            <p className="text-xs font-medium text-gray-600">{kpi.department?.name ?? kpi.sbu?.name}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {pagination && pagination.totalPages > 1 && (
+        <div className="flex justify-center pt-2">
+          <Pagination currentPage={pagination.page} totalPages={pagination.totalPages} onPageChange={(page) => setFilters((f) => ({ ...f, page }))} />
+        </div>
+      )}
 
       {/* Create/Edit KPI Modal */}
       <Modal isOpen={modalOpen} onClose={() => { setModalOpen(false); setEditingId(null); }} title={editingId ? "Edit KPI" : "Create KPI"} size="lg">
@@ -2368,7 +2721,8 @@ function KpiListTab({ canManage, canAssign, isAdmin, employeeId }: { canManage: 
           <p className="text-xs text-gray-400 -mt-2">Weight determines how much this KPI contributes to its parent's rolled-up progress when using Weighted Average.</p>
           {!editingId && employeeOptions.length > 0 && (
             <div>
-              <p className="text-sm font-medium text-gray-700 mb-1.5">Assign to Employees (optional)</p>
+              <p className="text-sm font-medium text-gray-700 mb-0.5">Assign to Employees (optional)</p>
+              <p className="text-xs text-gray-400 mb-2">Select employees and describe each person's specific task to achieve this KPI.</p>
               <div className="relative mb-1.5">
                 <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="8"/><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35"/></svg>
                 <input
@@ -2379,20 +2733,61 @@ function KpiListTab({ canManage, canAssign, isAdmin, employeeId }: { canManage: 
                   onChange={(e) => setAssigneeSearch(e.target.value)}
                 />
               </div>
-              <div className="space-y-1 max-h-44 overflow-y-auto border rounded-lg p-2">
+              {/* Employee list with inline task description */}
+              <div className="space-y-1.5 max-h-64 overflow-y-auto border rounded-lg p-2">
                 {employeeOptions
                   .filter((emp) => emp.label.toLowerCase().includes(assigneeSearch.toLowerCase()) || emp.subLabel.toLowerCase().includes(assigneeSearch.toLowerCase()))
-                  .map((emp) => (
-                    <label key={emp.value} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 rounded px-2 py-1">
-                      <input type="checkbox" className="rounded border-gray-300 text-primary" checked={form.assigneeIds.includes(emp.value)} onChange={(e) => setForm((f) => ({ ...f, assigneeIds: e.target.checked ? [...f.assigneeIds, emp.value] : f.assigneeIds.filter((id) => id !== emp.value) }))} />
-                      <span className="text-sm text-gray-900">{emp.label}</span><span className="text-xs text-gray-500 ml-1">{emp.subLabel}</span>
-                    </label>
-                  ))}
+                  .map((emp) => {
+                    const assigneesList: Array<{ employeeId: string; taskDescription: string }> = (form as any).assignees ?? [];
+                    const isChecked = assigneesList.some((a) => a.employeeId === emp.value);
+                    const taskDesc = assigneesList.find((a) => a.employeeId === emp.value)?.taskDescription ?? "";
+                    return (
+                      <div key={emp.value} className={`rounded-lg border transition-colors ${isChecked ? "border-primary/30 bg-primary-50" : "border-transparent hover:bg-gray-50"}`}>
+                        <label className="flex items-center gap-2 cursor-pointer px-2 py-1.5">
+                          <input
+                            type="checkbox"
+                            className="rounded border-gray-300 text-primary shrink-0"
+                            checked={isChecked}
+                            onChange={(e) => setForm((f) => {
+                              const prev = (f as any).assignees as Array<{ employeeId: string; taskDescription: string }>;
+                              if (e.target.checked) {
+                                return { ...f, assignees: [...prev, { employeeId: emp.value, taskDescription: "" }] } as any;
+                              }
+                              return { ...f, assignees: prev.filter((a) => a.employeeId !== emp.value) } as any;
+                            })}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <span className="text-sm font-medium text-gray-900">{emp.label}</span>
+                            <span className="text-xs text-gray-400 ml-1.5">{emp.subLabel}</span>
+                          </div>
+                        </label>
+                        {isChecked && (
+                          <div className="px-3 pb-2">
+                            <input
+                              type="text"
+                              placeholder="Describe this person's specific task for this KPI…"
+                              value={taskDesc}
+                              onChange={(e) => setForm((f) => {
+                                const prev = (f as any).assignees as Array<{ employeeId: string; taskDescription: string }>;
+                                return { ...f, assignees: prev.map((a) => a.employeeId === emp.value ? { ...a, taskDescription: e.target.value } : a) } as any;
+                              })}
+                              className="w-full rounded-md border border-primary/20 bg-white px-2.5 py-1.5 text-xs text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 {employeeOptions.filter((emp) => emp.label.toLowerCase().includes(assigneeSearch.toLowerCase()) || emp.subLabel.toLowerCase().includes(assigneeSearch.toLowerCase())).length === 0 && (
                   <p className="text-xs text-gray-400 text-center py-3">No employees match &quot;{assigneeSearch}&quot;</p>
                 )}
               </div>
-              {form.assigneeIds.length > 0 && <p className="text-xs text-gray-500 mt-1">{form.assigneeIds.length} selected</p>}
+              {((form as any).assignees ?? []).length > 0 && (
+                <p className="text-xs text-gray-500 mt-1">
+                  {((form as any).assignees ?? []).length} selected ·{" "}
+                  {((form as any).assignees ?? []).filter((a: any) => a.taskDescription?.trim()).length} with task descriptions
+                </p>
+              )}
             </div>
           )}
           <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" className="rounded border-gray-300 text-primary" checked={form.evidenceRequired} onChange={(e) => setForm((f) => ({ ...f, evidenceRequired: e.target.checked }))} /><span className="text-sm text-gray-700">Evidence required for updates</span></label>
@@ -3267,6 +3662,34 @@ function KpiDetailDrawer({ kpiId, onClose }: { kpiId: string; onClose: () => voi
           </div>
         )}
 
+        {/* Assignees & Tasks panel */}
+        {kpiDetail && (kpiDetail as any).assignments?.length > 0 && (
+          <div className="mx-4 mt-3 rounded-xl border border-gray-100 bg-gray-50 p-3 space-y-2">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Assigned To</p>
+            <div className="space-y-2">
+              {(kpiDetail as any).assignments.filter((a: any) => a.isActive).map((a: any) => (
+                <div key={a.id} className="flex items-start gap-2.5">
+                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary-100 text-primary-800 text-xs font-bold">
+                    {(a.employee?.fullName ?? "?").split(" ").map((n: string) => n[0]).join("").slice(0, 2)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-xs font-semibold text-gray-800">{a.employee?.fullName ?? "—"}</span>
+                      {a.employee?.jobTitle && <span className="text-[10px] text-gray-400">{a.employee.jobTitle}</span>}
+                      {a.acknowledgedAt && <span className="text-[10px] text-emerald-600 bg-emerald-50 rounded-full px-1.5 py-0.5">Acknowledged</span>}
+                    </div>
+                    {a.taskDescription ? (
+                      <p className="text-xs text-gray-600 mt-0.5 leading-relaxed">{a.taskDescription}</p>
+                    ) : (
+                      <p className="text-[11px] text-gray-400 italic mt-0.5">No task description set</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Sub-tabs */}
         <div className="flex gap-1 px-4 pt-3 border-b border-gray-100 overflow-x-auto">
           {drawerTabs.map((t) => (
@@ -3543,6 +3966,14 @@ function effectiveProgress(kpi: any): number | null {
 
 // ─── Cascade Tree Node ────────────────────────────────
 
+const LEVEL_ACCENT: Record<string, string> = {
+  Company:    "border-indigo-400 bg-indigo-50",
+  SBU:        "border-blue-400 bg-blue-50",
+  Department: "border-cyan-400 bg-cyan-50",
+  Team:       "border-teal-400 bg-teal-50",
+  Individual: "border-orange-400 bg-orange-50",
+};
+
 function CascadeNode({
   kpi, depth = 0, onSelect, canManage,
 }: {
@@ -3560,6 +3991,14 @@ function CascadeNode({
   const isOverridden = kpi.progressOverride != null;
   const isRolledUp = !isOverridden && kpi.computedProgress != null;
 
+  const progressColor = isOverridden
+    ? "bg-amber-400"
+    : progress == null ? "bg-gray-200"
+    : progress >= 100 ? "bg-emerald-500"
+    : progress >= 60 ? "bg-primary"
+    : progress >= 30 ? "bg-blue-400"
+    : "bg-red-400";
+
   const handleSetOverride = async (clear = false) => {
     const val = clear ? null : parseFloat(overrideValue);
     if (!clear && (isNaN(val!) || val! < 0 || val! > 100)) { toast.error("Enter a value between 0 and 100."); return; }
@@ -3567,156 +4006,179 @@ function CascadeNode({
     try {
       await setOverride.mutateAsync({ kpiId: kpi.id, override: clear ? null : val, reason: clear ? undefined : overrideReason.trim() });
       toast.success(clear ? "Override cleared." : "Progress override set.");
-      setOverrideOpen(false);
-      setOverrideValue("");
-      setOverrideReason("");
+      setOverrideOpen(false); setOverrideValue(""); setOverrideReason("");
     } catch { toast.error("Failed to set override."); }
   };
 
   return (
-    <div className={`${depth > 0 ? "ml-6 border-l-2 border-gray-100 pl-3" : ""}`}>
-      <div className="rounded-xl hover:bg-gray-50 transition-colors">
-        {/* Main row */}
-        <div className="flex items-start gap-3 px-3 py-2.5 cursor-pointer" onClick={() => onSelect(kpi.id)}>
-          {/* Expand toggle */}
-          <button className="mt-1 shrink-0" onClick={(e) => { e.stopPropagation(); if (hasChildren) setExpanded((v) => !v); }}>
-            {hasChildren
-              ? expanded ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronRightIcon className="h-4 w-4 text-gray-400" />
-              : <div className="h-4 w-4" />}
-          </button>
+    <div className={depth > 0 ? "relative ml-8 mt-1" : "mt-2"}>
+      {/* Vertical connector line */}
+      {depth > 0 && (
+        <div className="absolute -left-4 top-0 bottom-0 w-px bg-gray-200" />
+      )}
+      {depth > 0 && (
+        <div className="absolute -left-4 top-5 w-4 h-px bg-gray-200" />
+      )}
 
-          {/* Level pill */}
-          <div className={`shrink-0 flex h-7 w-7 items-center justify-center rounded-lg text-xs font-bold ${LEVEL_COLORS[kpi.kpiLevel] ?? "bg-gray-100 text-gray-600"}`}>
-            {kpi.kpiLevel[0]}
-          </div>
+      <div className={`group relative rounded-xl border bg-white shadow-sm hover:shadow-md transition-all duration-150 overflow-hidden ${LEVEL_ACCENT[kpi.kpiLevel] ?? "border-gray-200 bg-white"}`}>
+        {/* Left accent border */}
+        <div className={`absolute inset-y-0 left-0 w-1 ${progressColor}`} />
 
-          {/* Content */}
-          <div className="flex-1 min-w-0 space-y-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <p className="text-sm font-semibold text-gray-900">{kpi.title}</p>
-              <StatusBadge status={kpi.status} />
-              <PhaseBadge status={kpi.status} />
-              {/* Rollup method tag (only on parent KPIs) */}
-              {hasChildren && (
-                <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-medium ${ROLLUP_COLOR[kpi.rollupMethod] ?? "bg-gray-100 text-gray-500"}`}>
-                  {ROLLUP_LABEL[kpi.rollupMethod] ?? kpi.rollupMethod}
-                </span>
-              )}
-              {/* Weight badge (on child KPIs) */}
-              {kpi.weight != null && kpi.weight !== 1 && !hasChildren && (
-                <span className="inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-medium bg-gray-100 text-gray-500">
-                  w={Number(kpi.weight).toFixed(1)}
-                </span>
-              )}
-              {/* Override indicator */}
-              {isOverridden && (
-                <span className="inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-medium bg-amber-100 text-amber-700">
-                  Override
-                </span>
-              )}
-              {/* Roll-up indicator */}
-              {isRolledUp && (
-                <span className="inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-medium bg-violet-50 text-violet-600">
-                  Rolled up
-                </span>
-              )}
-            </div>
-
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-gray-400">{kpi.category}</span>
-              {kpi.sbu && <span className="text-xs text-gray-400">· {kpi.sbu.name}</span>}
-              {kpi.department && <span className="text-xs text-gray-400">· {kpi.department.name}</span>}
-              {childCount > 0 && <span className="text-xs text-primary font-medium">· {childCount} child KPI{childCount !== 1 ? "s" : ""}</span>}
-            </div>
-
-            {/* Progress bar */}
-            {progress != null && (
-              <div className="flex items-center gap-2 pt-0.5">
-                <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                  <div
-                    className={`h-1.5 rounded-full transition-all ${isOverridden ? "bg-amber-400" : progress >= 100 ? "bg-emerald-500" : progress >= 60 ? "bg-primary" : progress >= 30 ? "bg-blue-400" : "bg-red-400"}`}
-                    style={{ width: `${Math.min(progress, 100)}%` }}
-                  />
-                </div>
-                <span className={`text-xs font-semibold tabular-nums ${isOverridden ? "text-amber-600" : "text-gray-700"}`}>{Math.round(progress)}%</span>
-              </div>
-            )}
-
-            {/* Assignees */}
-            {kpi.assignments && kpi.assignments.length > 0 && (
-              <div className="flex items-center gap-1">
-                <div className="flex -space-x-1">
-                  {kpi.assignments.slice(0, 4).map((a: any) => <Avatar key={a.id} name={a.employee?.fullName ?? "?"} size="sm" />)}
-                </div>
-                {kpi.assignments.length > 4 && <span className="text-xs text-gray-400">+{kpi.assignments.length - 4}</span>}
-              </div>
-            )}
-          </div>
-
-          {/* Right side: target + override button */}
-          <div className="shrink-0 flex flex-col items-end gap-1" onClick={(e) => e.stopPropagation()}>
-            {kpi.targetValue != null && (
-              <div className="text-right">
-                <p className="text-sm font-bold text-gray-700">{kpi.targetValue}{kpi.unit ? ` ${kpi.unit}` : ""}</p>
-                <p className="text-xs text-gray-400">target</p>
-              </div>
-            )}
-            {canManage && (
+        <div className="pl-4 pr-3 py-3">
+          <div className="flex items-start gap-3">
+            {/* Expand toggle + level badge */}
+            <div className="flex flex-col items-center gap-1 shrink-0 pt-0.5">
               <button
-                onClick={() => { setOverrideValue(progress != null ? String(Math.round(progress)) : ""); setOverrideOpen((v) => !v); }}
-                className="text-xs text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded px-1.5 py-0.5 transition-colors"
-                title="Set progress override"
+                onClick={(e) => { e.stopPropagation(); if (hasChildren) setExpanded((v) => !v); }}
+                className={`flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold transition-all ${LEVEL_COLORS[kpi.kpiLevel] ?? "bg-gray-100 text-gray-600"} ${hasChildren ? "hover:opacity-80 cursor-pointer" : "cursor-default"}`}
+                title={kpi.kpiLevel}
               >
-                {isOverridden ? "Edit override" : "Override"}
+                {hasChildren
+                  ? (expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRightIcon className="h-3.5 w-3.5" />)
+                  : <span>{kpi.kpiLevel[0]}</span>}
               </button>
-            )}
-          </div>
-        </div>
+            </div>
 
-        {/* Override input panel */}
-        {overrideOpen && canManage && (
-          <div className="mx-3 mb-2 space-y-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-amber-700 font-medium shrink-0">Manual override (%):</span>
-              <input
-                type="number" min={0} max={100} step={1}
-                value={overrideValue}
-                onChange={(e) => setOverrideValue(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Escape") setOverrideOpen(false); }}
-                placeholder="0–100"
-                className="w-20 rounded border border-amber-300 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400/40"
-                autoFocus
-              />
-              <button onClick={() => setOverrideOpen(false)} className="ml-auto text-gray-400 hover:text-gray-600">
-                <XCircle className="h-4 w-4" />
-              </button>
-            </div>
-            <input
-              type="text"
-              value={overrideReason}
-              onChange={(e) => setOverrideReason(e.target.value)}
-              placeholder="Reason for override (required)"
-              className="w-full rounded border border-amber-300 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400/40"
-            />
-            <div className="flex items-center gap-2">
-              <button onClick={() => handleSetOverride()} disabled={setOverride.isPending}
-                className="rounded bg-amber-500 px-2.5 py-1 text-xs font-medium text-white hover:bg-amber-600 disabled:opacity-50 transition-colors">
-                Set Override
-              </button>
-              {isOverridden && (
-                <button onClick={() => handleSetOverride(true)} disabled={setOverride.isPending}
-                  className="rounded border border-gray-300 bg-white px-2.5 py-1 text-xs text-gray-500 hover:bg-gray-50 disabled:opacity-50 transition-colors">
-                  Clear
+            {/* Content */}
+            <div className="flex-1 min-w-0">
+              {/* Title row */}
+              <div className="flex items-start justify-between gap-2">
+                <button
+                  onClick={() => onSelect(kpi.id)}
+                  className="text-sm font-semibold text-gray-900 hover:text-primary transition-colors text-left leading-snug"
+                >
+                  {kpi.title}
                 </button>
-              )}
+                {/* Action buttons */}
+                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" onClick={(e) => e.stopPropagation()}>
+                  <button onClick={() => onSelect(kpi.id)} className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors" title="View details">
+                    <Eye className="h-3.5 w-3.5" />
+                  </button>
+                  {canManage && (
+                    <button
+                      onClick={() => { setOverrideValue(progress != null ? String(Math.round(progress)) : ""); setOverrideOpen((v) => !v); }}
+                      className={`rounded-lg p-1 transition-colors ${isOverridden ? "text-amber-500 hover:bg-amber-50" : "text-gray-400 hover:bg-amber-50 hover:text-amber-600"}`}
+                      title={isOverridden ? "Edit progress override" : "Set progress override"}
+                    >
+                      <PenLine className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Meta line */}
+              <div className="flex items-center flex-wrap gap-x-2 gap-y-0.5 mt-0.5">
+                <span className="text-xs text-gray-400">{kpi.kpiLevel}</span>
+                <span className="text-gray-200">·</span>
+                <span className="text-xs text-gray-400">{CATEGORY_LABELS[kpi.category] ?? kpi.category}</span>
+                {kpi.sbu && <><span className="text-gray-200">·</span><span className="text-xs text-gray-400">{kpi.sbu.name}</span></>}
+                {kpi.department && <><span className="text-gray-200">·</span><span className="text-xs text-gray-400">{kpi.department.name}</span></>}
+              </div>
+
+              {/* Badges row */}
+              <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                <StatusBadge status={kpi.status} />
+                {hasChildren && (
+                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${ROLLUP_COLOR[kpi.rollupMethod] ?? "bg-gray-100 text-gray-500"}`}>
+                    {ROLLUP_LABEL[kpi.rollupMethod] ?? kpi.rollupMethod}
+                  </span>
+                )}
+                {kpi.weight != null && !hasChildren && (
+                  <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-500">
+                    w={Number(kpi.weight).toFixed(1)}
+                  </span>
+                )}
+                {isOverridden && <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-700">Override</span>}
+                {isRolledUp && <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-violet-50 text-violet-600">Auto rolled up</span>}
+                {childCount > 0 && <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-primary/10 text-primary">{childCount} child KPI{childCount !== 1 ? "s" : ""}</span>}
+              </div>
+
+              {/* Progress + target row */}
+              <div className="mt-2.5 flex items-center gap-4">
+                {/* Progress bar */}
+                <div className="flex-1 min-w-[80px]">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs text-gray-400">Progress</span>
+                    <span className={`text-xs font-bold tabular-nums ${isOverridden ? "text-amber-600" : "text-gray-700"}`}>
+                      {progress != null ? `${Math.round(progress)}%` : "—"}
+                    </span>
+                  </div>
+                  <div className="h-1.5 w-full rounded-full bg-gray-100 overflow-hidden">
+                    {progress != null && (
+                      <div className={`h-1.5 rounded-full transition-all duration-500 ${progressColor}`} style={{ width: `${Math.min(progress, 100)}%` }} />
+                    )}
+                  </div>
+                </div>
+
+                {/* Target */}
+                {kpi.targetValue != null && (
+                  <div className="shrink-0 text-right">
+                    <p className="text-xs text-gray-400">Target</p>
+                    <p className="text-sm font-bold text-gray-800">{kpi.targetValue}{kpi.unit ? ` ${kpi.unit}` : ""}</p>
+                  </div>
+                )}
+
+                {/* Assignees */}
+                {kpi.assignments && kpi.assignments.length > 0 && (
+                  <div className="shrink-0 flex items-center gap-1.5">
+                    <div className="flex -space-x-1.5">
+                      {kpi.assignments.slice(0, 3).map((a: any) => (
+                        <div key={a.id} title={a.employee?.fullName}><Avatar name={a.employee?.fullName ?? "?"} size="sm" /></div>
+                      ))}
+                    </div>
+                    {kpi.assignments.length > 3 && <span className="text-xs text-gray-400">+{kpi.assignments.length - 3}</span>}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        )}
+
+          {/* Override panel */}
+          {overrideOpen && canManage && (
+            <div className="mt-3 space-y-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-amber-800">Manual Progress Override</p>
+                <button onClick={() => setOverrideOpen(false)} className="text-gray-400 hover:text-gray-600"><XCircle className="h-4 w-4" /></button>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-amber-700 shrink-0">Override % (0–100):</label>
+                <input
+                  type="number" min={0} max={100} step={1}
+                  value={overrideValue}
+                  onChange={(e) => setOverrideValue(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Escape") setOverrideOpen(false); }}
+                  placeholder="e.g. 75"
+                  className="w-24 rounded-lg border border-amber-300 bg-white px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400/40"
+                  autoFocus
+                />
+              </div>
+              <input
+                type="text"
+                value={overrideReason}
+                onChange={(e) => setOverrideReason(e.target.value)}
+                placeholder="Reason for override (required)…"
+                className="w-full rounded-lg border border-amber-300 bg-white px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400/40"
+              />
+              <div className="flex items-center gap-2 pt-1">
+                <button onClick={() => handleSetOverride()} disabled={setOverride.isPending}
+                  className="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-600 disabled:opacity-50 transition-colors">
+                  Apply Override
+                </button>
+                {isOverridden && (
+                  <button onClick={() => handleSetOverride(true)} disabled={setOverride.isPending}
+                    className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors">
+                    Clear Override
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Children */}
       {expanded && hasChildren && (
-        <div>
+        <div className="ml-4 mt-0 space-y-0">
           {kpi.children.map((child: any) => (
             <CascadeNode key={child.id} kpi={child} depth={depth + 1} onSelect={onSelect} canManage={canManage} />
           ))}
@@ -3762,84 +4224,150 @@ function CascadeTab() {
   const overriddenCount = allKpis.filter((k) => k.progressOverride != null).length;
   const rolledUpCount = allKpis.filter((k) => k.progressOverride == null && k.computedProgress != null).length;
 
+  const LEVEL_CFG: Record<string, { Icon: React.ElementType; activeBg: string; activeText: string; activeBorder: string; dotColor: string }> = {
+    Company:    { Icon: Building2,    activeBg: "bg-indigo-50", activeText: "text-indigo-700", activeBorder: "border-indigo-300", dotColor: "bg-indigo-400" },
+    SBU:        { Icon: BarChart3,    activeBg: "bg-blue-50",   activeText: "text-blue-700",   activeBorder: "border-blue-300",   dotColor: "bg-blue-400" },
+    Department: { Icon: Briefcase,    activeBg: "bg-cyan-50",   activeText: "text-cyan-700",   activeBorder: "border-cyan-300",   dotColor: "bg-cyan-400" },
+    Team:       { Icon: Users,        activeBg: "bg-teal-50",   activeText: "text-teal-700",   activeBorder: "border-teal-300",   dotColor: "bg-teal-400" },
+    Individual: { Icon: UserIcon,     activeBg: "bg-orange-50", activeText: "text-orange-700", activeBorder: "border-orange-300", dotColor: "bg-orange-400" },
+  };
+
+  const progressColor = avgProgress == null ? "bg-gray-200"
+    : avgProgress >= 75 ? "bg-emerald-500"
+    : avgProgress >= 50 ? "bg-primary"
+    : avgProgress >= 25 ? "bg-amber-400"
+    : "bg-red-400";
+
   return (
     <div className="space-y-4">
-      {/* Stats row */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        {["Company", "SBU", "Department", "Team", "Individual"].map((level) => (
-          <button key={level} onClick={() => setLevelFilter(levelFilter === level ? "" : level)}
-            className={`rounded-xl px-3 py-2.5 text-center transition-all ring-1 ${levelFilter === level ? "ring-primary bg-primary/5" : "ring-gray-200 bg-white hover:bg-gray-50"}`}>
-            <p className={`text-xl font-bold ${levelFilter === level ? "text-primary" : "text-gray-800"}`}>{levelCounts[level] ?? 0}</p>
-            <p className="text-xs text-gray-500 mt-0.5">{level}</p>
-          </button>
-        ))}
-      </div>
-
-      {/* Rollup summary */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="rounded-xl bg-white ring-1 ring-gray-200 px-4 py-3 flex items-center gap-3">
-          <div className="h-8 w-8 shrink-0 flex items-center justify-center rounded-lg bg-primary/10">
-            <TrendingUp className="h-4 w-4 text-primary" />
-          </div>
-          <div>
-            <p className="text-lg font-bold text-gray-900">{avgProgress != null ? `${avgProgress}%` : "—"}</p>
-            <p className="text-xs text-gray-500">Avg Progress</p>
-          </div>
-        </div>
-        <div className="rounded-xl bg-white ring-1 ring-gray-200 px-4 py-3 flex items-center gap-3">
-          <div className="h-8 w-8 shrink-0 flex items-center justify-center rounded-lg bg-violet-50">
-            <RefreshCw className="h-4 w-4 text-violet-500" />
-          </div>
-          <div>
-            <p className="text-lg font-bold text-gray-900">{rolledUpCount}</p>
-            <p className="text-xs text-gray-500">Auto Rolled Up</p>
-          </div>
-        </div>
-        <div className="rounded-xl bg-white ring-1 ring-gray-200 px-4 py-3 flex items-center gap-3">
-          <div className="h-8 w-8 shrink-0 flex items-center justify-center rounded-lg bg-amber-50">
-            <PenLine className="h-4 w-4 text-amber-500" />
-          </div>
-          <div>
-            <p className="text-lg font-bold text-gray-900">{overriddenCount}</p>
-            <p className="text-xs text-gray-500">Manual Overrides</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Legend */}
-      <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
-        <span className="font-medium text-gray-600">Roll-up methods:</span>
-        {Object.entries(ROLLUP_LABEL).map(([k, label]) => (
-          <span key={k} className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 font-medium ${ROLLUP_COLOR[k]}`}>{label}</span>
-        ))}
-        <span className="ml-auto flex items-center gap-1"><span className="inline-block h-2 w-4 rounded-full bg-amber-400" /> Override</span>
-        <span className="flex items-center gap-1"><span className="inline-block h-2 w-4 rounded-full bg-violet-400" /> Auto rollup</span>
-      </div>
-
-      {/* Search + Tree */}
-      <div className="bg-white rounded-xl ring-1 ring-gray-200 shadow-sm">
-        <div className="flex items-center gap-3 px-4 pt-4 pb-3 border-b border-gray-100">
-          <p className="text-sm font-semibold text-gray-800 shrink-0">KPI Cascade Hierarchy</p>
-          <div className="relative flex-1 max-w-xs">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
-            <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search KPIs..." className="w-full rounded-lg border border-gray-200 pl-8 pr-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30" />
-          </div>
-          <div className="ml-auto flex items-center gap-2">
-            {levelFilter && <button onClick={() => setLevelFilter("")} className="text-xs text-primary hover:underline">Clear filter</button>}
-            <button onClick={() => refetch()} className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors" title="Refresh">
-              <RefreshCw className="h-3.5 w-3.5" />
+      {/* ── Row 1: Level filter cards ── */}
+      <div className="grid grid-cols-5 gap-3">
+        {["Company", "SBU", "Department", "Team", "Individual"].map((level) => {
+          const { Icon, activeBg, activeText, activeBorder, dotColor } = LEVEL_CFG[level];
+          const count = levelCounts[level] ?? 0;
+          const isActive = levelFilter === level;
+          return (
+            <button
+              key={level}
+              onClick={() => setLevelFilter(isActive ? "" : level)}
+              className={`group relative flex flex-col items-center gap-2 rounded-xl border-2 px-4 py-4 text-center transition-all duration-150 ${
+                isActive
+                  ? `${activeBg} ${activeBorder} shadow-sm`
+                  : "border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm"
+              }`}
+            >
+              <div className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${isActive ? activeBg : "bg-gray-100 group-hover:bg-gray-200"}`}>
+                <Icon className={`h-4.5 w-4.5 ${isActive ? activeText : "text-gray-500"}`} />
+              </div>
+              <div>
+                <p className={`text-2xl font-bold leading-none ${isActive ? activeText : count > 0 ? "text-gray-900" : "text-gray-400"}`}>{count}</p>
+                <p className={`text-xs mt-1 font-medium ${isActive ? activeText : "text-gray-500"}`}>{level}</p>
+              </div>
+              {isActive && <div className={`absolute bottom-0 left-1/2 -translate-x-1/2 h-0.5 w-10 rounded-full ${dotColor}`} />}
             </button>
+          );
+        })}
+      </div>
+
+      {/* ── Row 2: Metric cards ── */}
+      <div className="grid grid-cols-3 gap-3">
+        {/* Avg Progress */}
+        <div className="rounded-xl border border-gray-200 bg-white px-5 py-4 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className="h-8 w-8 flex items-center justify-center rounded-lg bg-primary/10">
+                <TrendingUp className="h-4 w-4 text-primary" />
+              </div>
+              <p className="text-sm font-semibold text-gray-700">Avg Progress</p>
+            </div>
+            <p className={`text-2xl font-bold ${avgProgress == null ? "text-gray-300" : "text-gray-900"}`}>
+              {avgProgress != null ? `${avgProgress}%` : "—"}
+            </p>
+          </div>
+          <div className="h-2 w-full rounded-full bg-gray-100 overflow-hidden">
+            <div className={`h-2 rounded-full transition-all duration-700 ${progressColor}`} style={{ width: `${avgProgress ?? 0}%` }} />
+          </div>
+          <p className="text-xs text-gray-400 mt-2">{allKpis.length} KPI{allKpis.length !== 1 ? "s" : ""} tracked</p>
+        </div>
+
+        {/* Auto Rolled Up */}
+        <div className="rounded-xl border border-gray-200 bg-white px-5 py-4 shadow-sm flex items-center gap-4">
+          <div className="h-12 w-12 shrink-0 flex items-center justify-center rounded-xl bg-violet-100">
+            <RefreshCw className="h-6 w-6 text-violet-600" />
+          </div>
+          <div>
+            <p className="text-3xl font-bold text-gray-900">{rolledUpCount}</p>
+            <p className="text-sm font-medium text-gray-600 mt-0.5">Auto Rolled Up</p>
+            <p className="text-xs text-gray-400">progress from children</p>
           </div>
         </div>
-        <div className="p-3">
-          {isLoading && <div className="space-y-3 py-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}</div>}
+
+        {/* Manual Overrides */}
+        <div className="rounded-xl border border-gray-200 bg-white px-5 py-4 shadow-sm flex items-center gap-4">
+          <div className="h-12 w-12 shrink-0 flex items-center justify-center rounded-xl bg-amber-100">
+            <PenLine className="h-6 w-6 text-amber-600" />
+          </div>
+          <div>
+            <p className="text-3xl font-bold text-gray-900">{overriddenCount}</p>
+            <p className="text-sm font-medium text-gray-600 mt-0.5">Manual Overrides</p>
+            <p className="text-xs text-gray-400">set by managers</p>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Cascade tree ── */}
+      <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
+        <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100">
+          <GitBranch className="h-4 w-4 text-primary shrink-0" />
+          <p className="text-sm font-semibold text-gray-800">KPI Cascade Hierarchy</p>
+          {filtered.length > 0 && (
+            <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">{filtered.length} root</span>
+          )}
+          <div className="relative flex-1 max-w-sm ml-2">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search KPIs by title or category…"
+              className="w-full rounded-lg border border-gray-200 bg-gray-50 pl-9 pr-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30 focus:bg-white focus:border-primary transition-colors"
+            />
+          </div>
+          {/* Roll-up legend */}
+          <div className="hidden lg:flex items-center gap-2 ml-2 pl-3 border-l border-gray-100">
+            {Object.entries(ROLLUP_LABEL).map(([k, label]) => (
+              <span key={k} className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${ROLLUP_COLOR[k]}`}>{label}</span>
+            ))}
+            <span className="flex items-center gap-1 text-xs text-gray-400"><span className="inline-block h-2 w-3 rounded-full bg-amber-400" />Override</span>
+            <span className="flex items-center gap-1 text-xs text-gray-400"><span className="inline-block h-2 w-3 rounded-full bg-violet-400" />Rollup</span>
+          </div>
+          {levelFilter && <button onClick={() => setLevelFilter("")} className="text-xs text-primary hover:underline shrink-0">Clear filter</button>}
+          <button onClick={() => refetch()} className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors" title="Refresh">
+            <RefreshCw className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="p-4">
+          {isLoading && (
+            <div className="space-y-3 py-4">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="rounded-xl border border-gray-200 bg-gray-50 p-4 flex gap-3">
+                  <Skeleton className="h-8 w-8 rounded-lg shrink-0" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-2/5" />
+                    <Skeleton className="h-3 w-3/5" />
+                    <Skeleton className="h-2 w-full rounded-full" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
           {!isLoading && filtered.length === 0 && (
-            <div className="text-center py-12">
-              <Target className="h-10 w-10 text-gray-200 mx-auto mb-3" />
-              <p className="text-sm text-gray-400">
-                {searchQuery ? "No KPIs match your search." : "No KPIs found. Create KPIs with parent relationships to see the cascade."}
+            <div className="text-center py-16">
+              <GitBranch className="h-12 w-12 text-gray-200 mx-auto mb-3" />
+              <p className="text-sm font-medium text-gray-500">
+                {searchQuery ? "No KPIs match your search." : levelFilter ? `No ${levelFilter}-level KPIs found.` : "No KPIs found."}
               </p>
+              <p className="text-xs text-gray-400 mt-1">Create KPIs with parent relationships to build the cascade hierarchy.</p>
             </div>
           )}
           {!isLoading && filtered.map((kpi: any) => (
@@ -4420,68 +4948,36 @@ export default function KpiPage() {
   // canExport: can download reports
   const canExport  = isAdmin || isSBUHead || isFinance || isDirector;
 
-  const [activeTab, setActiveTab] = useState<"dashboard" | "kpis" | "my-okrs" | "team-okrs" | "cycles" | "hr-review" | "reports" | "cascade" | "dictionary">("dashboard");
+  const pathname = usePathname();
 
-  const tabs = [
-    { id: "dashboard" as const, label: "Dashboard", icon: BarChart3 },
-    { id: "kpis" as const, label: "KPI List", icon: Target },
-    { id: "my-okrs" as const, label: "My OKRs", icon: Zap },
-    { id: "team-okrs" as const, label: "Team OKRs", icon: Users },
-    { id: "cascade" as const, label: "Cascade View", icon: ChevronRightIcon },
-    ...(canManage || isManager ? [{ id: "cycles" as const, label: "Cycles", icon: CalendarDays }] : []),
-    ...(isHR ? [{ id: "hr-review" as const, label: "HR Review", icon: Briefcase }] : []),
-    { id: "reports" as const, label: "Reports & Analytics", icon: TrendingUp },
-    { id: "dictionary" as const, label: "KPI Dictionary", icon: FileEdit },
-  ];
+  // Derive active section from URL path — each sub-page navigates to its own route
+  const activeTab = (() => {
+    if (pathname.startsWith("/kpi/list"))        return "kpis";
+    if (pathname.startsWith("/kpi/my-okrs"))     return "my-okrs";
+    if (pathname.startsWith("/kpi/team-okrs"))   return "team-okrs";
+    if (pathname.startsWith("/kpi/cascade"))     return "cascade";
+    if (pathname.startsWith("/kpi/cycles"))      return "cycles";
+    if (pathname.startsWith("/kpi/hr-review"))   return "hr-review";
+    if (pathname.startsWith("/kpi/reports"))     return "reports";
+    if (pathname.startsWith("/kpi/dictionary"))  return "dictionary";
+    return "dashboard";
+  })();
+
+  const PAGE_TITLES: Record<string, string> = {
+    dashboard:   "Dashboard",
+    kpis:        "KPI List",
+    "my-okrs":   "My OKRs",
+    "team-okrs": "Team OKRs",
+    cascade:     "Cascade View",
+    cycles:      "Cycles",
+    "hr-review": "HR Review",
+    reports:     "Reports & Analytics",
+    dictionary:  "KPI Dictionary",
+  };
 
   return (
-    <AppLayout pageTitle="KPI & Performance">
+    <AppLayout pageTitle={`KPI & Performance — ${PAGE_TITLES[activeTab] ?? "Dashboard"}`}>
       <div className="space-y-6">
-        {/* Hero Header */}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-black via-gray-900 to-black px-6 py-6 shadow-lg">
-          {/* Decorative blobs */}
-          <div className="absolute -top-8 -right-8 h-40 w-40 rounded-full bg-primary/30 blur-3xl" />
-          <div className="absolute -bottom-6 left-16 h-28 w-28 rounded-full bg-blue-400/20 blur-2xl" />
-          <div className="relative flex items-center justify-between gap-4 flex-wrap">
-            <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/20 ring-1 ring-primary/30">
-                <Target className="h-6 w-6 text-primary" />
-              </div>
-              <div>
-                <h2 className="font-display text-xl font-bold text-white tracking-tight">KPI & Performance</h2>
-                <p className="text-sm text-gray-400 mt-0.5">Track KPIs, set OKRs, and manage performance cycles</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="rounded-lg bg-white/10 px-3 py-1.5 text-xs font-medium text-white/80 ring-1 ring-white/10">
-                Performance Hub
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Tabs */}
-        <div className="flex items-center gap-1 rounded-xl bg-gray-100 p-1 overflow-x-auto">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const active = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all whitespace-nowrap flex-shrink-0 ${
-                  active
-                    ? "bg-white text-gray-900 shadow-sm ring-1 ring-gray-200"
-                    : "text-gray-500 hover:text-gray-700 hover:bg-white/50"
-                }`}
-              >
-                <Icon className={`h-4 w-4 ${active ? "text-primary" : ""}`} />
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
-
         {activeTab === "dashboard" && <KpiDashboardView />}
         {activeTab === "kpis" && <KpiListTab canManage={canManage} canAssign={canAssign} isAdmin={isAdmin} employeeId={user?.employeeId ?? ""} />}
         {activeTab === "my-okrs" && <MyOkrsTab employeeId={user?.employeeId ?? ""} canManage={true} />}
