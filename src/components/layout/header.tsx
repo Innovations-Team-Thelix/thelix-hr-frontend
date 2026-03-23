@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
+import { useUnreadCount } from "@/hooks/useNotifications";
 import { getInitials as getNameInitials } from "@/lib/utils";
 
 interface HeaderProps {
@@ -77,7 +78,7 @@ export function Header({ onMobileMenuToggle, pageTitle }: HeaderProps) {
   const displayEmail = profile?.workEmail || "";
   const displayRole = user?.role || "";
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [unreadCount] = useState(3); // Placeholder for notification count
+  const { data: unreadCount = 0 } = useUnreadCount();
   const userMenuRef = useRef<HTMLDivElement>(null);
 
   const title = pageTitle || getPageTitle(pathname);

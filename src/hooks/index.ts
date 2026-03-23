@@ -5,6 +5,7 @@ import api from "@/lib/api";
 import type {
   Employee,
   EmployeeFilters,
+  EmployeeSbuMembership,
   LeaveRequest,
   LeaveRequestFilters,
   LeaveBalance,
@@ -93,6 +94,63 @@ export function useDeleteSbu() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sbus"] });
+    },
+  });
+}
+
+// ─── Multi-SBU Assignment hooks ─────────────────────
+
+export function useEmployeeSbuMemberships(employeeId?: string) {
+  return useQuery<EmployeeSbuMembership[]>({
+    queryKey: ["employee-sbus", employeeId],
+    queryFn: async () => {
+      const res = await api.get<EmployeeSbuMembership[]>(`/sbus/employees/${employeeId}/memberships`);
+      return res.data;
+    },
+    enabled: !!employeeId,
+  });
+}
+
+export function useAssignSbu() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: { employeeId: string; sbuId: string; isPrimary?: boolean }) => {
+      const res = await api.post<EmployeeSbuMembership>("/sbus/assign", data);
+      return res.data;
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["employee-sbus", variables.employeeId] });
+      queryClient.invalidateQueries({ queryKey: ["employees"] });
+      queryClient.invalidateQueries({ queryKey: ["employee", variables.employeeId] });
+    },
+  });
+}
+
+export function useRemoveSbu() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: { employeeId: string; sbuId: string }) => {
+      await api.post("/sbus/remove", data);
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["employee-sbus", variables.employeeId] });
+      queryClient.invalidateQueries({ queryKey: ["employees"] });
+      queryClient.invalidateQueries({ queryKey: ["employee", variables.employeeId] });
+    },
+  });
+}
+
+export function useTransferPrimarySbu() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: { employeeId: string; newPrimarySbuId: string }) => {
+      const res = await api.post<Employee>("/sbus/transfer-primary", data);
+      return res.data;
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["employee-sbus", variables.employeeId] });
+      queryClient.invalidateQueries({ queryKey: ["employees"] });
+      queryClient.invalidateQueries({ queryKey: ["employee", variables.employeeId] });
     },
   });
 }

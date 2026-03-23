@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
+import { useSocket } from "@/hooks/useSocket";
 import { Sidebar } from "./sidebar";
 import { Header } from "./header";
 
@@ -15,6 +16,7 @@ interface AppLayoutProps {
 export function AppLayout({ children, pageTitle }: AppLayoutProps) {
   const router = useRouter();
   const { isAuthenticated, checkAuth } = useAuth();
+  useSocket(); // Real-time notification listener
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mounted, setMounted] = useState(false);

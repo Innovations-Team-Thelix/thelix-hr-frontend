@@ -38,6 +38,7 @@ import { Modal } from "@/components/ui/modal";
 import { Input } from "@/components/ui/input";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { Select } from "@/components/ui/select";
+import { MultiSelect } from "@/components/ui/multi-select";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/loading";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -62,6 +63,8 @@ import {
   useDeleteAsset,
   useExitEmployee,
   useEffectiveRole,
+  useAssignSbu,
+  useRemoveSbu,
 } from "@/hooks";
 import { useDownloadOfferLetter } from "@/hooks/useOfferLetters";
 import { ProbationActionModal } from "@/components/employees/probation-action-modal";
@@ -220,6 +223,9 @@ export default function EmployeeProfilePage() {
   const { data: employeesData } = useEmployees({ limit: 1000 });
   const { data: sbus } = useSbus();
   const updateEmployee = useUpdateEmployee();
+  const assignSbu = useAssignSbu();
+  const removeSbu = useRemoveSbu();
+  const [editSecondarySbuIds, setEditSecondarySbuIds] = useState<string[]>([]);
   const createEvent = useCreateLifecycleEvent();
   const uploadOfferLetter = useUploadOfferLetter();
   const deleteOfferLetter = useDeleteOfferLetter();
@@ -267,6 +273,13 @@ export default function EmployeeProfilePage() {
       const breakdown = employee.salaryBreakdown
         ?? salaryHistory?.find((r) => r.isActive);
 
+
+      // Initialize secondary SBU IDs from memberships
+      setEditSecondarySbuIds(
+        (employee.sbuMemberships || [])
+          .filter((m) => !m.isPrimary)
+          .map((m) => m.sbuId)
+      );
 
       editForm.reset({
         fullName: employee.fullName,
@@ -367,6 +380,24 @@ export default function EmployeeProfilePage() {
         id: employeeId,
         data: payload,
       });
+
+      // Sync secondary SBU memberships
+      const currentSecondary = (employee?.sbuMemberships || [])
+        .filter((m) => !m.isPrimary)
+        .map((m) => m.sbuId);
+
+      // Remove SBUs that were deselected
+      const toRemove = currentSecondary.filter((id) => !editSecondarySbuIds.includes(id));
+      for (const sbuId of toRemove) {
+        await removeSbu.mutateAsync({ employeeId, sbuId });
+      }
+
+      // Add newly selected SBUs
+      const toAdd = editSecondarySbuIds.filter((id) => !currentSecondary.includes(id));
+      for (const sbuId of toAdd) {
+        await assignSbu.mutateAsync({ employeeId, sbuId, isPrimary: false });
+      }
+
       toast.success("Employee updated successfully");
       setEditModalOpen(false);
     } catch (error) {
@@ -562,6 +593,18 @@ export default function EmployeeProfilePage() {
                   <p className="text-sm text-gray-500">
                     {employee.sbu?.name} - {employee.department?.name}
                   </p>
+                  {employee.sbuMemberships && employee.sbuMemberships.filter(m => !m.isPrimary).length > 0 && (
+                    <div className="mt-1 flex flex-wrap items-center gap-1">
+                      <span className="text-xs text-gray-400">Also in:</span>
+                      {employee.sbuMemberships
+                        .filter((m) => !m.isPrimary)
+                        .map((m) => (
+                          <Badge key={m.id} variant="info">
+                            {m.sbu.name}
+                          </Badge>
+                        ))}
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -637,6 +680,24 @@ export default function EmployeeProfilePage() {
                     <InfoField label="Marital Status" value={employee.maritalStatus} />
                   </>
                 )}
+                <InfoField label="Primary SBU" value={employee.sbu?.name} />
+                {employee.sbuMemberships && employee.sbuMemberships.filter(m => !m.isPrimary).length > 0 && (
+                  <InfoField
+                    label="Secondary SBUs"
+                    value={
+                      <div className="flex flex-wrap gap-1">
+                        {employee.sbuMemberships
+                          .filter((m) => !m.isPrimary)
+                          .map((m) => (
+                            <Badge key={m.id} variant="info">
+                              {m.sbu.name}
+                            </Badge>
+                          ))}
+                      </div>
+                    }
+                  />
+                )}
+                <InfoField label="Department" value={employee.department?.name} />
                 <InfoField label="Work Email" value={employee.workEmail} />
                 {canViewSensitiveInfo && (
                   <InfoField
@@ -710,7 +771,23 @@ export default function EmployeeProfilePage() {
                     }
                   />
                 )}
-                <InfoField label="SBU" value={employee.sbu?.name} />
+                <InfoField label="Primary SBU" value={employee.sbu?.name} />
+                {employee.sbuMemberships && employee.sbuMemberships.filter(m => !m.isPrimary).length > 0 && (
+                  <InfoField
+                    label="Secondary SBUs"
+                    value={
+                      <div className="flex flex-wrap gap-1">
+                        {employee.sbuMemberships
+                          .filter((m) => !m.isPrimary)
+                          .map((m) => (
+                            <Badge key={m.id} variant="info">
+                              {m.sbu.name}
+                            </Badge>
+                          ))}
+                      </div>
+                    }
+                  />
+                )}
                 <InfoField
                   label="Department"
                   value={employee.department?.name}
@@ -1595,11 +1672,18 @@ export default function EmployeeProfilePage() {
                   {...editForm.register("employmentType")}
                 />
                 <Select
-                  label="SBU"
+                  label="Primary SBU"
                   options={sbuOptions}
                   placeholder="Select SBU"
                   error={editForm.formState.errors.sbuId?.message}
                   {...editForm.register("sbuId")}
+                />
+                <MultiSelect
+                  label="Secondary SBUs"
+                  placeholder="Select additional SBUs"
+                  options={sbuOptions.filter((o) => o.value !== selectedSbuId)}
+                  value={editSecondarySbuIds}
+                  onChange={setEditSecondarySbuIds}
                 />
                 <Select
                   label="Department"

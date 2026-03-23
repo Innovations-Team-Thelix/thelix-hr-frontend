@@ -225,6 +225,18 @@ export default function ProfilePage() {
                   <p className="text-sm text-gray-500">
                     {profile.sbu?.name} - {profile.department?.name}
                   </p>
+                  {profile.sbuMemberships && profile.sbuMemberships.filter(m => !m.isPrimary).length > 0 && (
+                    <div className="mt-1 flex flex-wrap items-center gap-1">
+                      <span className="text-xs text-gray-400">Also in:</span>
+                      {profile.sbuMemberships
+                        .filter((m) => !m.isPrimary)
+                        .map((m) => (
+                          <Badge key={m.id} variant="info">
+                            {m.sbu.name}
+                          </Badge>
+                        ))}
+                    </div>
+                  )}
                   <StatusBadge status={profile.employmentStatus} />
                 </div>
               </div>
@@ -318,7 +330,23 @@ export default function ProfilePage() {
                     label="Supervisor"
                     value={profile.supervisor?.fullName}
                   />
-                  <InfoRow label="SBU" value={profile.sbu?.name} />
+                  <InfoRow label="Primary SBU" value={profile.sbu?.name} />
+                  {profile.sbuMemberships && profile.sbuMemberships.filter(m => !m.isPrimary).length > 0 && (
+                    <InfoRow
+                      label="Secondary SBUs"
+                      value={
+                        <div className="flex flex-wrap gap-1">
+                          {profile.sbuMemberships
+                            .filter((m) => !m.isPrimary)
+                            .map((m) => (
+                              <Badge key={m.id} variant="info">
+                                {m.sbu.name}
+                              </Badge>
+                            ))}
+                        </div>
+                      }
+                    />
+                  )}
                   <InfoRow label="Department" value={profile.department?.name} />
                 </div>
               </CardContent>
