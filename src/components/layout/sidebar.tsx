@@ -30,18 +30,44 @@ import {
   Eye,
   EyeOff,
   Target,
+  Zap,
+  ChevronDown,
+  TrendingUp,
+  FileEdit,
+  Briefcase,
+  GitBranch,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { getInitials as getNameInitials } from "@/lib/utils";
 import { UserRole } from "@/types";
 
-interface NavItem {
+interface NavChild {
   label: string;
   href: string;
   icon: React.ElementType;
   roles: UserRole[];
 }
+
+interface NavItem {
+  label: string;
+  href: string;
+  icon: React.ElementType;
+  roles: UserRole[];
+  children?: NavChild[];
+}
+
+const kpiChildren: NavChild[] = [
+  { label: "Dashboard",           href: "/kpi",            icon: BarChart3,      roles: ["Admin", "SBUHead", "Finance", "Employee"] },
+  { label: "KPI List",            href: "/kpi/list",       icon: Target,         roles: ["Admin", "SBUHead", "Finance", "Employee"] },
+  { label: "My OKRs",             href: "/kpi/my-okrs",    icon: Zap,            roles: ["Admin", "SBUHead", "Finance", "Employee"] },
+  { label: "Team OKRs",           href: "/kpi/team-okrs",  icon: Users,          roles: ["Admin", "SBUHead", "Finance", "Employee"] },
+  { label: "Cascade View",        href: "/kpi/cascade",    icon: GitBranch,      roles: ["Admin", "SBUHead", "Finance", "Employee"] },
+  { label: "Cycles",              href: "/kpi/cycles",     icon: CalendarDays,   roles: ["Admin", "SBUHead"] },
+  { label: "HR Review",           href: "/kpi/hr-review",  icon: Briefcase,      roles: ["Admin", "SBUHead", "Finance"] },
+  { label: "Reports & Analytics", href: "/kpi/reports",    icon: TrendingUp,     roles: ["Admin", "SBUHead", "Finance", "Employee"] },
+  { label: "KPI Dictionary",      href: "/kpi/dictionary", icon: FileEdit,       roles: ["Admin", "SBUHead", "Finance", "Employee"] },
+];
 
 const navItems: NavItem[] = [
   {
@@ -115,6 +141,7 @@ const navItems: NavItem[] = [
     href: "/kpi",
     icon: Target,
     roles: ["Admin", "SBUHead", "Finance", "Employee"],
+    children: kpiChildren,
   },
   {
     label: "Attendance Reports",
@@ -195,26 +222,35 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
   const canPreview = actualRole === "Admin" || actualRole === "SBUHead";
   const effectiveRole = (viewAs ?? actualRole) as UserRole | undefined;
 
+  // Track which expandable sections are open; auto-open KPI if on a KPI route
+  const isOnKpi = pathname.startsWith("/kpi");
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({
+    "/kpi": isOnKpi,
+  });
+
   const filteredNavItems = navItems.filter(
     (item) => effectiveRole && item.roles.includes(effectiveRole)
   );
 
   const isActive = (href: string): boolean => {
-    // Exact-match these paths so /attendance doesn't activate on /attendance/approvals
     if (href === "/dashboard" || href === "/attendance") {
       return pathname === href;
     }
+    // Exact match for /kpi (dashboard) so it doesn't stay active on sub-pages
+    if (href === "/kpi") return pathname === "/kpi";
     return pathname === href || pathname.startsWith(href + "/");
   };
 
-  const handleNavClick = () => {
-    if (onMobileClose) {
-      onMobileClose();
-    }
+  const isGroupActive = (item: NavItem): boolean => {
+    return pathname.startsWith(item.href);
   };
 
-  const handleLogout = () => {
-    logout();
+  const handleNavClick = () => {
+    if (onMobileClose) onMobileClose();
+  };
+
+  const toggleExpanded = (href: string) => {
+    setExpanded((prev) => ({ ...prev, [href]: !prev[href] }));
   };
 
   return (
@@ -224,7 +260,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
         collapsed ? "w-16" : "w-64"
       )}
     >
-      {/* Logo / Org Name */}
+      {/* Logo */}
       <div
         className={cn(
           "flex h-16 items-center border-b border-gray-200 px-4",
@@ -262,34 +298,124 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-4 px-2">
-        <ul className="space-y-1">
+        <ul className="space-y-0.5">
           {filteredNavItems.map((item) => {
             const Icon = item.icon;
             const active = isActive(item.href);
+            const groupActive = isGroupActive(item);
+            const hasChildren = item.children && item.children.length > 0;
+            const isOpen = expanded[item.href] ?? false;
+
+            // Filter children by role
+            const visibleChildren = hasChildren
+              ? item.children!.filter((c) => effectiveRole && c.roles.includes(effectiveRole))
+              : [];
+
             return (
               <li key={item.href}>
-                <Link
-                  href={item.href}
-                  onClick={handleNavClick}
-                  className={cn(
-                    "group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150",
-                    collapsed && "justify-center px-2",
-                    active
-                      ? "bg-primary-50 text-primary-900 border-l-[3px] border-primary-900"
-                      : "text-gray-600 hover:bg-gray-50 hover:text-gray-900 border-l-[3px] border-transparent"
-                  )}
-                  title={collapsed ? item.label : undefined}
-                >
-                  <Icon
-                    className={cn(
-                      "h-5 w-5 shrink-0 transition-colors",
-                      active
-                        ? "text-primary-900"
-                        : "text-gray-400 group-hover:text-gray-600"
+                {hasChildren ? (
+                  // Expandable group item
+                  <>
+                    <button
+                      onClick={() => {
+                        if (collapsed) return; // in collapsed mode, clicking navigates to base href
+                        toggleExpanded(item.href);
+                      }}
+                      className={cn(
+                        "group w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150",
+                        collapsed && "justify-center px-2",
+                        groupActive
+                          ? "bg-primary-50 text-primary-900 border-l-[3px] border-primary-900"
+                          : "text-gray-600 hover:bg-gray-50 hover:text-gray-900 border-l-[3px] border-transparent"
+                      )}
+                      title={collapsed ? item.label : undefined}
+                    >
+                      <Icon
+                        className={cn(
+                          "h-5 w-5 shrink-0 transition-colors",
+                          groupActive ? "text-primary-900" : "text-gray-400 group-hover:text-gray-600"
+                        )}
+                      />
+                      {!collapsed && (
+                        <>
+                          <span className="flex-1 truncate text-left">{item.label}</span>
+                          <ChevronDown
+                            className={cn(
+                              "h-4 w-4 text-gray-400 transition-transform duration-200",
+                              isOpen && "rotate-180"
+                            )}
+                          />
+                        </>
+                      )}
+                    </button>
+
+                    {/* Sub-menu */}
+                    {!collapsed && isOpen && visibleChildren.length > 0 && (
+                      <ul className="mt-0.5 ml-4 space-y-0.5 border-l-2 border-gray-100 pl-3">
+                        {visibleChildren.map((child) => {
+                          const ChildIcon = child.icon;
+                          const childActive = isActive(child.href);
+                          return (
+                            <li key={child.href}>
+                              <Link
+                                href={child.href}
+                                onClick={handleNavClick}
+                                className={cn(
+                                  "group flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-all duration-150",
+                                  childActive
+                                    ? "bg-primary-50 text-primary-900 font-semibold"
+                                    : "text-gray-500 hover:bg-gray-50 hover:text-gray-800 font-medium"
+                                )}
+                              >
+                                <ChildIcon
+                                  className={cn(
+                                    "h-4 w-4 shrink-0",
+                                    childActive ? "text-primary-900" : "text-gray-400 group-hover:text-gray-600"
+                                  )}
+                                />
+                                <span className="truncate">{child.label}</span>
+                              </Link>
+                            </li>
+                          );
+                        })}
+                      </ul>
                     )}
-                  />
-                  {!collapsed && <span className="truncate">{item.label}</span>}
-                </Link>
+
+                    {/* Collapsed: clicking the icon goes to the base href */}
+                    {collapsed && (
+                      <Link
+                        href={item.href}
+                        onClick={handleNavClick}
+                        className="sr-only"
+                        tabIndex={-1}
+                      >
+                        {item.label}
+                      </Link>
+                    )}
+                  </>
+                ) : (
+                  // Regular nav item
+                  <Link
+                    href={item.href}
+                    onClick={handleNavClick}
+                    className={cn(
+                      "group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150",
+                      collapsed && "justify-center px-2",
+                      active
+                        ? "bg-primary-50 text-primary-900 border-l-[3px] border-primary-900"
+                        : "text-gray-600 hover:bg-gray-50 hover:text-gray-900 border-l-[3px] border-transparent"
+                    )}
+                    title={collapsed ? item.label : undefined}
+                  >
+                    <Icon
+                      className={cn(
+                        "h-5 w-5 shrink-0 transition-colors",
+                        active ? "text-primary-900" : "text-gray-400 group-hover:text-gray-600"
+                      )}
+                    />
+                    {!collapsed && <span className="truncate">{item.label}</span>}
+                  </Link>
+                )}
               </li>
             );
           })}
@@ -337,7 +463,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
               </button>
             )}
             <button
-              onClick={handleLogout}
+              onClick={logout}
               className={cn(
                 "shrink-0 rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors",
                 collapsed && "mt-1"

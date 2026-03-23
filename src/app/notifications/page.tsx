@@ -131,6 +131,9 @@ export default function NotificationsPage() {
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                        {(n.payload?.title as string) || n.type.replace(/([A-Z])/g, ' $1').trim()}
+                      </p>
                       <p className="text-sm text-gray-900">
                         {getNotificationMessage(n)}
                       </p>
