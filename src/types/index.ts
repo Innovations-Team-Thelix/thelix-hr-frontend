@@ -115,12 +115,22 @@ export interface Employee {
 
   // Relations (optional, included when populated)
   sbu?: Sbu;
+  sbuMemberships?: EmployeeSbuMembership[];
   department?: Department;
   supervisor?: Pick<Employee, 'id' | 'employeeId' | 'fullName' | 'jobTitle'>;
   subordinates?: (Pick<Employee, 'id' | 'employeeId' | 'fullName' | 'jobTitle' | 'workEmail' | 'phone'> & {
     department?: { name: string }
   })[];
   userAccount?: UserAccount;
+}
+
+export interface EmployeeSbuMembership {
+  id: string;
+  employeeId: string;
+  sbuId: string;
+  isPrimary: boolean;
+  assignedAt: string;
+  sbu: Sbu;
 }
 
 export interface UserAccount {

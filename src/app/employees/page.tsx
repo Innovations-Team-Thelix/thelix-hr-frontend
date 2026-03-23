@@ -468,6 +468,7 @@ function EmployeesPageContent() {
                   <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Employee ID</TableHead>
                   <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Name</TableHead>
                   <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Job Title</TableHead>
+                  <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">SBU</TableHead>
                   <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Department</TableHead>
                   <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Type</TableHead>
                   <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Date of Hire</TableHead>
@@ -525,6 +526,12 @@ function EmployeesPageContent() {
                           </div>
                         </TableCell>
                         <TableCell className="text-sm text-gray-600">{emp.jobTitle || "—"}</TableCell>
+                        <TableCell className="text-sm text-gray-600">
+                          <span>{emp.sbu?.name || "—"}</span>
+                          {emp.sbuMemberships && emp.sbuMemberships.filter(m => !m.isPrimary).length > 0 && (
+                            <span className="ml-1 text-xs text-gray-400">(+{emp.sbuMemberships.filter(m => !m.isPrimary).length})</span>
+                          )}
+                        </TableCell>
                         <TableCell className="text-sm text-gray-600">{emp.department?.name || "—"}</TableCell>
                         <TableCell>
                           <span className="inline-flex items-center rounded-full border border-gray-200 px-2.5 py-0.5 text-xs font-medium text-gray-600">

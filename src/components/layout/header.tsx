@@ -197,11 +197,13 @@ export function Header({ onMobileMenuToggle, pageTitle }: HeaderProps) {
                       )}
                     >
                       <div className="flex-1 min-w-0">
-                        {n.title && (
-                          <p className="text-xs font-medium text-gray-900 truncate">{n.title}</p>
+                        {(n.payload?.title || n.type) && (
+                          <p className="text-xs font-medium text-gray-900 truncate">
+                            {(n.payload?.title as string) || n.type.replace(/([A-Z])/g, ' $1').trim()}
+                          </p>
                         )}
-                        {n.message && (
-                          <p className="text-xs text-gray-500 line-clamp-2">{n.message}</p>
+                        {!!n.payload?.message && (
+                          <p className="text-xs text-gray-500 line-clamp-2">{String(n.payload.message)}</p>
                         )}
                         <p className="mt-0.5 text-[10px] text-gray-400">
                           {new Date(n.createdAt).toLocaleString()}

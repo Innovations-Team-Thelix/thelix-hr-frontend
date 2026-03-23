@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/loading";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMarkAllRead } from "@/hooks/useNotifications";
 import api from "@/lib/api";
 import toast from "react-hot-toast";
 
@@ -17,7 +18,6 @@ interface Notification {
   channel: string;
   payload: Record<string, unknown>;
   sentAt: string | null;
-  readAt?: string | null;
   createdAt: string;
 }
 
@@ -34,6 +34,9 @@ export default function NotificationsPage() {
   });
 
   const notifications = data?.data || [];
+  const hasUnread = notifications.some((n) => !n.sentAt);
+
+  const markAllRead = useMarkAllRead();
 
   const markAsRead = async (id: string) => {
     try {
@@ -43,6 +46,13 @@ export default function NotificationsPage() {
     } catch {
       toast.error("Failed to mark as read");
     }
+  };
+
+  const handleMarkAllRead = () => {
+    markAllRead.mutate(undefined, {
+      onSuccess: () => toast.success("All notifications marked as read"),
+      onError: () => toast.error("Failed to mark all as read"),
+    });
   };
 
   const formatDate = (dateStr: string) => {
@@ -66,16 +76,28 @@ export default function NotificationsPage() {
   return (
     <AppLayout pageTitle="Notifications">
       <div className="space-y-6">
-        <div className="flex items-center gap-3">
-          <Bell className="h-6 w-6 text-gray-600" />
-          <div>
-            <h2 className="text-xl font-semibold text-gray-900">
-              Notifications
-            </h2>
-            <p className="text-sm text-gray-500">
-              Your recent notifications and alerts
-            </p>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Bell className="h-6 w-6 text-gray-600" />
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900">
+                Notifications
+              </h2>
+              <p className="text-sm text-gray-500">
+                Your recent notifications and alerts
+              </p>
+            </div>
           </div>
+          {hasUnread && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleMarkAllRead}
+              disabled={markAllRead.isPending}
+            >
+              Mark all as read
+            </Button>
+          )}
         </div>
 
         <Card>
@@ -98,17 +120,20 @@ export default function NotificationsPage() {
                   <li
                     key={n.id}
                     className={`flex items-start gap-3 px-5 py-4 ${
-                      !n.readAt ? "bg-blue-50/50" : ""
+                      !n.sentAt ? "bg-blue-50/50" : ""
                     }`}
                   >
                     <div className="mt-0.5">
-                      {n.readAt ? (
+                      {n.sentAt ? (
                         <CheckCircle className="h-5 w-5 text-gray-300" />
                       ) : (
                         <Clock className="h-5 w-5 text-blue-500" />
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                        {(n.payload?.title as string) || n.type.replace(/([A-Z])/g, ' $1').trim()}
+                      </p>
                       <p className="text-sm text-gray-900">
                         {getNotificationMessage(n)}
                       </p>
@@ -121,7 +146,7 @@ export default function NotificationsPage() {
                         </Badge>
                       </div>
                     </div>
-                    {!n.readAt && (
+                    {!n.sentAt && (
                       <Button
                         variant="outline"
                         size="sm"

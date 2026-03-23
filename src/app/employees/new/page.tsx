@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs } from "@/components/ui/tabs";
 import { useCreateEmployee, useSbus, useDepartments, useAuth, useEmployees, useEffectiveRole } from "@/hooks";
 import { CurrencyInput } from "@/components/ui/currency-input";
+import { MultiSelect } from "@/components/ui/multi-select";
 
 const createEmployeeSchema = z.object({
   fullName: z.string().min(1, "Full name is required"),
@@ -81,6 +82,7 @@ export default function CreateEmployeePage() {
   const { data: sbus } = useSbus();
   const { data: employeesData } = useEmployees({ limit: 1000, status: "Active" });
   const createEmployee = useCreateEmployee();
+  const [secondarySbuIds, setSecondarySbuIds] = useState<string[]>([]);
 
   const {
     register,
@@ -226,6 +228,11 @@ export default function CreateEmployeePage() {
 
       // Remove form-only field not in the backend schema
       delete payload.simpleNetPay;
+
+      // Attach secondary SBU assignments
+      if (secondarySbuIds.length > 0) {
+        payload.secondarySbuIds = secondarySbuIds;
+      }
 
       // Remove any remaining empty strings (just in case)
       Object.keys(payload).forEach((key) => {
@@ -407,12 +414,19 @@ export default function CreateEmployeePage() {
                     {...register("employmentType")}
                   />
                   <Select
-                    label="SBU"
+                    label="Primary SBU"
                     required
                     options={sbuOptions}
                     placeholder="Select SBU"
                     error={errors.sbuId?.message}
                     {...register("sbuId")}
+                  />
+                  <MultiSelect
+                    label="Secondary SBUs"
+                    placeholder="Select additional SBUs"
+                    options={sbuOptions.filter((o) => o.value !== selectedSbuId)}
+                    value={secondarySbuIds}
+                    onChange={setSecondarySbuIds}
                   />
                   <Select
                     label="Department"
