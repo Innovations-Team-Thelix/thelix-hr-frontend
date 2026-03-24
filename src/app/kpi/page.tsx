@@ -2441,6 +2441,7 @@ function KpiListTab({ canManage, canAssign, isAdmin, employeeId }: { canManage: 
     setModalOpen(true);
   };
   const openUpdate = (kpiId: string) => { setUpdateKpiId(kpiId); setUpdateForm(emptyUpdateForm); setUpdateModalOpen(true); };
+  const updateTargetKpi = kpis.find((k) => k.id === updateKpiId) ?? null;
 
   const handleSaveKpi = async () => {
     if (!form.title || !form.startDate || !form.endDate) { toast.error("Title and dates required."); return; }
@@ -2539,7 +2540,11 @@ function KpiListTab({ canManage, canAssign, isAdmin, employeeId }: { canManage: 
             const aStatus = (kpi as any).approvalStatus as string | undefined;
             const approvalCfg = aStatus ? APPROVAL_STATUS_CONFIG[aStatus] : null;
             const lastUpdate = kpi.updates?.[0];
-            const pct = lastUpdate?.percentComplete ?? (kpi.targetValue && lastUpdate?.actualValue != null ? Math.min(100, Math.round((lastUpdate.actualValue / kpi.targetValue) * 100)) : null);
+            const pct = kpi.computedProgress != null ? Math.round(Number(kpi.computedProgress))
+              : kpi.progressOverride != null ? Math.round(Number(kpi.progressOverride))
+              : lastUpdate?.percentComplete != null ? Math.round(Number(lastUpdate.percentComplete))
+              : kpi.targetValue && lastUpdate?.actualValue != null ? Math.min(100, Math.round((Number(lastUpdate.actualValue) / Number(kpi.targetValue)) * 100))
+              : null;
             const progressBarColor =
               kpi.status === "OnTrack" || kpi.status === "Completed" ? "bg-emerald-500"
               : kpi.status === "AtRisk" ? "bg-amber-400"
@@ -2836,12 +2841,28 @@ function KpiListTab({ canManage, canAssign, isAdmin, employeeId }: { canManage: 
       {/* Update Modal */}
       <Modal isOpen={updateModalOpen} onClose={() => setUpdateModalOpen(false)} title="Submit KPI Progress Update" size="md">
         <div className="space-y-4">
+          {updateTargetKpi && (
+            <div className="rounded-lg bg-indigo-50 border border-indigo-100 px-3 py-2">
+              <p className="text-xs font-semibold text-indigo-700 truncate">{updateTargetKpi.title}</p>
+              {updateTargetKpi.targetValue != null
+                ? <p className="text-xs text-indigo-500 mt-0.5">Target: <span className="font-medium">{Number(updateTargetKpi.targetValue)}{updateTargetKpi.unit ? ` ${updateTargetKpi.unit}` : updateTargetKpi.targetType === "Percentage" ? "%" : ""}</span> — % Complete auto-calculates as you type</p>
+                : <p className="text-xs text-indigo-400 mt-0.5">No numeric target set — enter % Complete manually</p>
+              }
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Update Period <span className="text-red-500">*</span></label>
             <input type="month" required className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" value={updateForm.updatePeriod} onChange={(e) => setUpdateForm((f) => ({ ...f, updatePeriod: e.target.value }))} />
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <Input label="Actual Value" type="number" placeholder="e.g. 85" value={updateForm.actualValue} onChange={(e) => setUpdateForm((f) => ({ ...f, actualValue: e.target.value }))} />
+            <Input label="Actual Value" type="number" placeholder="e.g. 85" value={updateForm.actualValue} onChange={(e) => {
+                const actual = e.target.value;
+                const rawTarget = updateTargetKpi?.targetValue != null ? Number(updateTargetKpi.targetValue) : null;
+                const auto = actual !== "" && rawTarget !== null && rawTarget > 0
+                  ? String(Math.min(100, Math.round((parseFloat(actual) / rawTarget) * 100)))
+                  : undefined;
+                setUpdateForm((f) => ({ ...f, actualValue: actual, ...(auto !== undefined ? { percentComplete: auto } : {}) }));
+              }} />
             <Input label="% Complete" type="number" placeholder="0-100" value={updateForm.percentComplete} onChange={(e) => setUpdateForm((f) => ({ ...f, percentComplete: e.target.value }))} />
           </div>
           <Textarea label="Narrative" placeholder="Describe progress..." rows={3} value={updateForm.narrative} onChange={(e) => setUpdateForm((f) => ({ ...f, narrative: e.target.value }))} />

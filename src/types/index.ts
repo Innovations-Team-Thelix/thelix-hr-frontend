@@ -670,6 +670,8 @@ export interface Kpi {
   rollupMethod: KpiRollupMethod;
   updateFrequency: KpiUpdateFrequency;
   status: KpiStatus;
+  computedProgress?: number | null;
+  progressOverride?: number | null;
   evidenceRequired: boolean;
   // §21 — Reviewer
   reviewerId?: string;
