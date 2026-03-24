@@ -36,6 +36,10 @@ import {
   FileEdit,
   Briefcase,
   GitBranch,
+  Star,
+  MessageSquare,
+  Activity,
+  BookOpen as BookOpenIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -56,6 +60,15 @@ interface NavItem {
   roles: UserRole[];
   children?: NavChild[];
 }
+
+const performanceChildren: NavChild[] = [
+  { label: "My Dashboard",   href: "/performance",             icon: Activity,       roles: ["Admin", "SBUHead", "Director", "Manager", "Finance", "Employee"] },
+  { label: "Praise Wall",    href: "/performance/praise",      icon: Star,           roles: ["Admin", "SBUHead", "Director", "Manager", "Finance", "Employee"] },
+  { label: "Feedback",       href: "/performance/feedback",    icon: MessageSquare,  roles: ["Admin", "SBUHead", "Director", "Manager", "Finance", "Employee"] },
+  { label: "My Notes",       href: "/performance/notes",       icon: BookOpenIcon,   roles: ["Admin", "SBUHead", "Director", "Manager", "Finance", "Employee"] },
+  { label: "Review Cycles",  href: "/performance/cycles",      icon: CalendarDays,   roles: ["Admin", "SBUHead", "Director", "Manager", "Finance", "Employee"] },
+  { label: "Analytics",      href: "/performance/analytics",   icon: BarChart3,      roles: ["Admin", "Finance", "SBUHead"] },
+];
 
 const kpiChildren: NavChild[] = [
   { label: "Dashboard",           href: "/kpi",            icon: BarChart3,      roles: ["Admin", "SBUHead", "Finance", "Employee"] },
@@ -137,7 +150,14 @@ const navItems: NavItem[] = [
     roles: ["Admin", "Finance", "SBUHead"],
   },
   {
-    label: "KPI & Performance",
+    label: "Performance Appraisal",
+    href: "/performance",
+    icon: Activity,
+    roles: ["Admin", "SBUHead", "Director", "Manager", "Finance", "Employee"],
+    children: performanceChildren,
+  },
+  {
+    label: "KPI & OKR",
     href: "/kpi",
     icon: Target,
     roles: ["Admin", "SBUHead", "Finance", "Employee"],
@@ -222,10 +242,12 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
   const canPreview = actualRole === "Admin" || actualRole === "SBUHead";
   const effectiveRole = (viewAs ?? actualRole) as UserRole | undefined;
 
-  // Track which expandable sections are open; auto-open KPI if on a KPI route
+  // Track which expandable sections are open; auto-open KPI/Performance if on those routes
   const isOnKpi = pathname.startsWith("/kpi");
+  const isOnPerformance = pathname.startsWith("/performance");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
     "/kpi": isOnKpi,
+    "/performance": isOnPerformance,
   });
 
   const filteredNavItems = navItems.filter(
