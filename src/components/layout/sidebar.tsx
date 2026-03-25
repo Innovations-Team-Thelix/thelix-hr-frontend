@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -40,6 +41,8 @@ import {
   MessageSquare,
   Activity,
   BookOpen as BookOpenIcon,
+  FolderTree,
+  UserCog,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -129,7 +132,7 @@ const navItems: NavItem[] = [
     label: "My Attendance",
     href: "/attendance",
     icon: Clock,
-    roles: ["Admin", "SBUHead", "Finance", "Employee"],
+    roles: ["SBUHead", "Finance", "Employee"],
   },
   {
     label: "Attendance Approvals",
@@ -218,6 +221,18 @@ const navItems: NavItem[] = [
     roles: ["Admin"],
   },
   {
+    label: "Departments",
+    href: "/departments",
+    icon: FolderTree,
+    roles: ["Admin"],
+  },
+  {
+    label: "Supervisors",
+    href: "/supervisors",
+    icon: UserCog,
+    roles: ["Admin"],
+  },
+  {
     label: "Settings",
     href: "/settings",
     icon: Settings,
@@ -236,7 +251,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
   const { user, profile, logout, viewAs, setViewAs } = useAuth();
 
   const displayName = profile?.fullName || "User";
-  const displayRole = user?.role || "";
+  const displayRole = viewAs ?? user?.role ?? "";
 
   const actualRole = user?.role;
   const canPreview = actualRole === "Admin" || actualRole === "SBUHead";
@@ -279,47 +294,33 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
     <aside
       className={cn(
         "flex h-full flex-col bg-white border-r border-gray-200 transition-all duration-300 ease-in-out",
-        collapsed ? "w-16" : "w-64"
+        collapsed ? "w-14" : "w-52"
       )}
     >
       {/* Logo */}
       <div
         className={cn(
-          "flex h-16 items-center border-b border-gray-200 px-4",
-          collapsed ? "justify-center" : "gap-3"
+          "flex items-center border-b bg-slate-100 border-gray-200 px-3",
+          collapsed ? "h-14 justify-center" : "h-16 gap-2.5"
         )}
       >
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-white font-bold text-sm">
-          T
+        <div className={cn("relative shrink-0", collapsed ? "h-14 w-14" : "  h-24 w-24")}>
+          <Image
+            src="/Thelix.png"
+            alt="Thelix HRIS"
+            fill
+            className="object-contain"
+          />
         </div>
-        {!collapsed && (
-          <span className="text-lg font-semibold text-primary truncate">
-            Thelix HRIS
+        {/* {!collapsed && (
+          <span className="text-base font-bold text-primary truncate">
+            HRIS
           </span>
-        )}
+        )} */}
       </div>
 
-      {/* Employee Preview Banner */}
-      {viewAs === 'Employee' && !collapsed && (
-        <div className="mx-3 mt-2 flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2">
-          <Eye className="h-3.5 w-3.5 shrink-0 text-amber-600" />
-          <span className="text-xs font-medium text-amber-700">Employee Preview</span>
-          <button
-            onClick={() => setViewAs(null)}
-            className="ml-auto text-xs text-amber-600 underline hover:text-amber-800"
-          >
-            Exit
-          </button>
-        </div>
-      )}
-      {viewAs === 'Employee' && collapsed && (
-        <div className="mx-2 mt-2 flex justify-center rounded-lg bg-amber-50 border border-amber-300 py-1">
-          <Eye className="h-4 w-4 text-amber-600" />
-        </div>
-      )}
-
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto py-4 px-2">
+      <nav className="flex-1 overflow-y-auto py-3 px-1.5">
         <ul className="space-y-0.5">
           {filteredNavItems.map((item) => {
             const Icon = item.icon;
@@ -340,11 +341,11 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
                   <>
                     <button
                       onClick={() => {
-                        if (collapsed) return; // in collapsed mode, clicking navigates to base href
+                        if (collapsed) return;
                         toggleExpanded(item.href);
                       }}
                       className={cn(
-                        "group w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150",
+                        "group w-full flex items-center gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium transition-all duration-150",
                         collapsed && "justify-center px-2",
                         groupActive
                           ? "bg-primary-50 text-primary-900 border-l-[3px] border-primary-900"
@@ -354,7 +355,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
                     >
                       <Icon
                         className={cn(
-                          "h-5 w-5 shrink-0 transition-colors",
+                          "h-4 w-4 shrink-0 transition-colors",
                           groupActive ? "text-primary-900" : "text-gray-400 group-hover:text-gray-600"
                         )}
                       />
@@ -363,7 +364,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
                           <span className="flex-1 truncate text-left">{item.label}</span>
                           <ChevronDown
                             className={cn(
-                              "h-4 w-4 text-gray-400 transition-transform duration-200",
+                              "h-3.5 w-3.5 text-gray-400 transition-transform duration-200",
                               isOpen && "rotate-180"
                             )}
                           />
@@ -373,7 +374,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
 
                     {/* Sub-menu */}
                     {!collapsed && isOpen && visibleChildren.length > 0 && (
-                      <ul className="mt-0.5 ml-4 space-y-0.5 border-l-2 border-gray-100 pl-3">
+                      <ul className="mt-0.5 ml-3.5 space-y-0.5 border-l-2 border-gray-100 pl-2.5">
                         {visibleChildren.map((child) => {
                           const ChildIcon = child.icon;
                           const childActive = isActive(child.href);
@@ -383,7 +384,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
                                 href={child.href}
                                 onClick={handleNavClick}
                                 className={cn(
-                                  "group flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-all duration-150",
+                                  "group flex items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-all duration-150",
                                   childActive
                                     ? "bg-primary-50 text-primary-900 font-semibold"
                                     : "text-gray-500 hover:bg-gray-50 hover:text-gray-800 font-medium"
@@ -391,7 +392,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
                               >
                                 <ChildIcon
                                   className={cn(
-                                    "h-4 w-4 shrink-0",
+                                    "h-3.5 w-3.5 shrink-0",
                                     childActive ? "text-primary-900" : "text-gray-400 group-hover:text-gray-600"
                                   )}
                                 />
@@ -421,7 +422,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
                     href={item.href}
                     onClick={handleNavClick}
                     className={cn(
-                      "group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150",
+                      "group flex items-center gap-2.5 rounded-md px-2.5 py-2 text-xs font-medium transition-all duration-150",
                       collapsed && "justify-center px-2",
                       active
                         ? "bg-primary-50 text-primary-900 border-l-[3px] border-primary-900"
@@ -431,7 +432,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
                   >
                     <Icon
                       className={cn(
-                        "h-5 w-5 shrink-0 transition-colors",
+                        "h-4 w-4 shrink-0 transition-colors",
                         active ? "text-primary-900" : "text-gray-400 group-hover:text-gray-600"
                       )}
                     />
@@ -448,67 +449,49 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
       {user && (
         <div
           className={cn(
-            "border-t border-gray-200 p-3",
-            collapsed ? "flex flex-col items-center gap-2" : ""
+            "border-t border-gray-200 p-2",
+            collapsed ? "flex flex-col items-center gap-1.5" : ""
           )}
         >
           <div
             className={cn(
               "flex items-center",
-              collapsed ? "flex-col gap-2" : "gap-3"
+              collapsed ? "flex-col gap-1.5" : "gap-2.5"
             )}
           >
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-100 text-primary-900 text-sm font-semibold">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary-100 text-primary-900 text-xs font-semibold">
               {getNameInitials(displayName)}
             </div>
             {!collapsed && (
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">
+                <p className="text-xs font-medium text-gray-900 truncate">
                   {displayName}
                 </p>
                 <p className="text-xs text-gray-500 truncate">{displayRole}</p>
               </div>
             )}
-            {canPreview && (
-              <button
-                onClick={() => setViewAs(viewAs === 'Employee' ? null : 'Employee')}
-                className={cn(
-                  "shrink-0 rounded-lg p-1.5 transition-colors",
-                  viewAs === 'Employee'
-                    ? "text-amber-600 hover:bg-amber-50"
-                    : "text-gray-400 hover:bg-gray-100 hover:text-gray-600",
-                  collapsed && "mt-1"
-                )}
-                title={viewAs === 'Employee' ? `Exit Employee Preview (viewing as ${actualRole})` : "Preview as Employee"}
-              >
-                {viewAs === 'Employee' ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            )}
             <button
               onClick={logout}
-              className={cn(
-                "shrink-0 rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors",
-                collapsed && "mt-1"
-              )}
+              className="shrink-0 rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
               title="Logout"
             >
-              <LogOut className="h-4 w-4" />
+              <LogOut className="h-3.5 w-3.5" />
             </button>
           </div>
         </div>
       )}
 
       {/* Collapse Toggle */}
-      <div className="border-t border-gray-200 p-2">
+      <div className="border-t border-gray-200 p-1.5">
         <button
           onClick={onToggle}
-          className="flex w-full items-center justify-center rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+          className="flex w-full items-center justify-center rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
           title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
           {collapsed ? (
-            <ChevronRight className="h-4 w-4" />
+            <ChevronRight className="h-3.5 w-3.5" />
           ) : (
-            <ChevronLeft className="h-4 w-4" />
+            <ChevronLeft className="h-3.5 w-3.5" />
           )}
         </button>
       </div>

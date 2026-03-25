@@ -10,18 +10,18 @@ const config: Config = {
       colors: {
         // Thelix brand palette
         primary: {
-          DEFAULT: '#C8622A', // Amber Flame
-          50: '#fdf4ee',
-          100: '#fae5d3',
-          200: '#f6c9a7',
-          300: '#f0a571',
-          400: '#e87d3e',
-          500: '#C8622A',
-          600: '#b45323',
-          700: '#96431d',
-          800: '#79361a',
-          900: '#622c16',
-          950: '#3a180b',
+          DEFAULT: '#D97530', // Amber Flame
+          50: '#fef6ed',
+          100: '#fde8d3',
+          200: '#faceaa',
+          300: '#f6ac76',
+          400: '#f08640',
+          500: '#D97530',
+          600: '#c46228',
+          700: '#a34e20',
+          800: '#833f1d',
+          900: '#6a341a',
+          950: '#3b190b',
         },
         secondary: {
           DEFAULT: '#000000',

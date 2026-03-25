@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -115,14 +116,16 @@ export default function LoginPage() {
       >
         {/* Logo */}
         <div className="flex items-center gap-2.5">
-          <div
-            className="flex h-9 w-9 items-center justify-center rounded-lg"
-            style={{ backgroundColor: "#C8622A" }}
-          >
-            <span className="text-base font-bold text-white">T</span>
+          <div className="relative h-32 w-32 sm:h-32 sm:w-32">
+            <Image
+              src="/Thelix logo.png"
+              alt="Thelix HRIS"
+              fill
+              className="object-contain"
+            />
           </div>
-          <span className="text-lg font-semibold text-white tracking-tight">
-            Thelix Holdings HRIS
+          <span className=" -mt-4 -ml-[10px] text-sm font-semibold text-white tracking-tight">
+            HRIS
           </span>
         </div>
 
