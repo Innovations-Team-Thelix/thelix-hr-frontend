@@ -223,7 +223,7 @@ export function useDeleteEmployee() {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const response = await api.delete(`/employees/${id}`);
+      const response = await api.delete(`/employees/${id}`, { timeout: 120_000 });
       return response;
     },
     onSuccess: () => {

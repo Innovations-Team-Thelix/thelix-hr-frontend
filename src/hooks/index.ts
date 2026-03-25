@@ -324,7 +324,7 @@ export function useDeleteEmployee() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const res = await api.delete(`/employees/${id}`);
+      const res = await api.delete(`/employees/${id}`, { timeout: 120_000 });
       return res;
     },
     onSuccess: () => {
