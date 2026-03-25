@@ -86,7 +86,7 @@ function InfoRow({
         <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
           {label}
         </p>
-        <p className="mt-0.5 text-sm text-gray-900">{value || "-"}</p>
+        <div className="mt-0.5 text-sm text-gray-900">{value || "-"}</div>
       </div>
     </div>
   );
