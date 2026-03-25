@@ -1,12 +1,13 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import toast from "react-hot-toast";
-import { ArrowLeft, Save, Loader2, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Save, Loader2, Plus, Trash2, UserPlus } from "lucide-react";
 import { AppLayout } from "@/components/layout/app-layout";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -170,6 +171,23 @@ export default function CreateEmployeePage() {
     { label: "Widowed", value: "Widowed" },
   ];
 
+  const PERSONAL_FIELDS = ["fullName", "workEmail", "dateOfBirth", "gender", "nationality", "address", "phone", "personalEmail", "maritalStatus", "nextOfKinName", "nextOfKinRelationship", "nextOfKinPhone", "emergencyContact", "governmentId", "tin", "pensionNumber", "hmoId"];
+  const EMPLOYMENT_FIELDS = ["dateOfHire", "employmentType", "sbuId", "departmentId", "jobTitle", "supervisorId", "workArrangement", "probationPeriod", "probationEndDate", "employmentStatus"];
+
+  const onFormError = (errs: typeof errors) => {
+    const errorKeys = Object.keys(errs);
+    if (errorKeys.some((k) => EMPLOYMENT_FIELDS.includes(k))) {
+      setActiveTab("employment");
+      toast.error("Please fill in the required Employment Details fields.");
+    } else if (errorKeys.some((k) => PERSONAL_FIELDS.includes(k))) {
+      setActiveTab("personal");
+      toast.error("Please fill in the required Personal Info fields.");
+    } else {
+      setActiveTab("compensation");
+      toast.error("Please check the Compensation fields.");
+    }
+  };
+
   const onSubmit = async (data: CreateEmployeeFormData) => {
     try {
       // Base payload with explicit nulls for optional fields
@@ -246,8 +264,11 @@ export default function CreateEmployeePage() {
       router.push(`/employees/${employee.id}`);
     } catch (error: unknown) {
       console.error("Create employee error:", error);
-      const err = error as { response?: { data?: { message?: string } } };
-      toast.error(err.response?.data?.message || "Failed to create employee");
+      const err = error as { response?: { data?: { message?: string; code?: number } } };
+      // 422 validation errors are handled globally by the API interceptor
+      if (err.response?.data?.code !== 422) {
+        toast.error(err.response?.data?.message || "Failed to create employee");
+      }
     }
   };
 
@@ -274,7 +295,7 @@ export default function CreateEmployeePage() {
           </div>
         </div>
 
-        <form onSubmit={handleSubmit(onSubmit)}>
+        <form onSubmit={handleSubmit(onSubmit, onFormError)}>
           <Tabs
             tabs={formTabs}
             activeTab={activeTab}
@@ -714,6 +735,7 @@ export default function CreateEmployeePage() {
               variant="outline"
               type="button"
               onClick={() => router.back()}
+              disabled={createEmployee.isPending}
             >
               Cancel
             </Button>
@@ -727,6 +749,24 @@ export default function CreateEmployeePage() {
           </div>
         </form>
       </div>
+
+      {/* Full-screen loading overlay */}
+      {createEmployee.isPending && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-4 rounded-2xl bg-white px-10 py-8 shadow-2xl">
+            <div className="relative flex h-16 w-16 items-center justify-center">
+              <div className="absolute inset-0 rounded-full border-4 border-gray-100" />
+              <div className="absolute inset-0 animate-spin rounded-full border-4 border-transparent border-t-primary" />
+              <UserPlus className="h-6 w-6 text-primary" />
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-semibold text-gray-900">Creating Employee</p>
+              <p className="mt-0.5 text-xs text-gray-500">Setting up account, leave balances &amp; SBU memberships…</p>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </AppLayout>
   );
 }

@@ -5,7 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   Plus, Users, Upload, Download, X, FileSpreadsheet,
   AlertCircle, CheckCircle2, Trash2, Search, SlidersHorizontal,
-  ChevronDown,
+  ChevronDown, MoreHorizontal, Eye, Pencil, KeyRound, Mail,
+  ShieldCheck, ShieldOff, UserCog,
 } from "lucide-react";
 import { AppLayout } from "@/components/layout/app-layout";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -81,6 +82,86 @@ function EmployeesPageContent() {
   >(null);
   const deleteEmployee = useDeleteEmployee();
   const bulkDeleteEmployees = useBulkDeleteEmployees();
+
+  // Actions dropdown
+  const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [roleTarget, setRoleTarget] = useState<{ id: string; name: string; email: string } | null>(null);
+  const [roleValue, setRoleValue] = useState("Employee");
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+  // Account status cache: employeeId -> { isActive, hasAccount }
+  const [accountStatus, setAccountStatus] = useState<Record<string, { isActive: boolean; hasAccount: boolean }>>({});
+
+  const fetchAccountStatus = async (employeeId: string) => {
+    if (accountStatus[employeeId] !== undefined) return;
+    try {
+      const res = await api.get<{ id: string; isActive: boolean } | null>(`/auth/account/${employeeId}`);
+      setAccountStatus((prev) => ({
+        ...prev,
+        [employeeId]: res.data ? { isActive: res.data.isActive, hasAccount: true } : { isActive: false, hasAccount: false },
+      }));
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleSendResetPassword = async (email: string, empId: string) => {
+    setActionLoading(empId + "-reset");
+    try {
+      await api.post("/auth/forgot-password", { email });
+      toast.success(`Password reset email sent to ${email}`);
+    } catch {
+      toast.error("Failed to send reset email");
+    } finally {
+      setActionLoading(null);
+      setActiveDropdown(null);
+    }
+  };
+
+  const handleResendWelcome = async (email: string, empId: string) => {
+    setActionLoading(empId + "-welcome");
+    try {
+      await api.post("/auth/resend-welcome", { email });
+      toast.success(`Welcome email resent to ${email}`);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Failed to resend welcome email");
+    } finally {
+      setActionLoading(null);
+      setActiveDropdown(null);
+    }
+  };
+
+  const handleToggleAccount = async (employeeId: string, name: string) => {
+    setActionLoading(employeeId + "-toggle");
+    try {
+      const res = await api.patch<{ isActive: boolean }>(`/auth/account/${employeeId}/toggle`, {});
+      setAccountStatus((prev) => ({
+        ...prev,
+        [employeeId]: { isActive: res.data.isActive, hasAccount: true },
+      }));
+      toast.success(res.data.isActive ? `${name}'s account activated` : `${name}'s account deactivated`);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Failed to update account status");
+    } finally {
+      setActionLoading(null);
+      setActiveDropdown(null);
+    }
+  };
+
+  const handleChangeRole = async () => {
+    if (!roleTarget) return;
+    setActionLoading(roleTarget.id + "-role");
+    try {
+      await api.patch(`/auth/account/${roleTarget.id}/role`, { role: roleValue });
+      toast.success(`Role updated to ${roleValue} for ${roleTarget.name}`);
+      setRoleTarget(null);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Failed to update role");
+    } finally {
+      setActionLoading(null);
+    }
+  };
 
   const { data: sbus } = useSbus();
   const { data: departments } = useDepartments(sbuHeadScopeId ?? filters.sbuId);
@@ -547,15 +628,89 @@ function EmployeesPageContent() {
                         </TableCell>
                         {isAdmin && (
                           <TableCell onClick={(e) => e.stopPropagation()}>
-                            {!isSelf && (
+                            <div className="relative" ref={activeDropdown === emp.id ? dropdownRef : undefined}>
                               <button
-                                onClick={() => setDeleteTarget({ type: "single", id: emp.id, name: emp.fullName })}
-                                className="rounded-lg p-1.5 text-gray-300 hover:bg-red-50 hover:text-red-500 transition-colors"
-                                title="Delete employee"
+                                onClick={() => {
+                                  const next = activeDropdown === emp.id ? null : emp.id;
+                                  setActiveDropdown(next);
+                                  if (next) fetchAccountStatus(emp.id);
+                                }}
+                                className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+                                title="Actions"
                               >
-                                <Trash2 className="h-3.5 w-3.5" />
+                                <MoreHorizontal className="h-4 w-4" />
                               </button>
-                            )}
+                              {activeDropdown === emp.id && (
+                                <>
+                                  <div className="fixed inset-0 z-10" onClick={() => setActiveDropdown(null)} />
+                                  <div className="absolute right-0 z-20 mt-1 w-56 rounded-xl border border-gray-100 bg-white shadow-lg shadow-gray-200/60 py-1 text-sm">
+                                    {/* View / Edit */}
+                                    <button
+                                      onClick={() => { router.push(`/employees/${emp.id}`); setActiveDropdown(null); }}
+                                      className="flex w-full items-center gap-2.5 px-3 py-2 text-gray-700 hover:bg-gray-50"
+                                    >
+                                      <Eye className="h-3.5 w-3.5 text-gray-400" /> View Profile
+                                    </button>
+                                    <button
+                                      onClick={() => { router.push(`/employees/${emp.id}/edit`); setActiveDropdown(null); }}
+                                      className="flex w-full items-center gap-2.5 px-3 py-2 text-gray-700 hover:bg-gray-50"
+                                    >
+                                      <Pencil className="h-3.5 w-3.5 text-gray-400" /> Edit Employee
+                                    </button>
+                                    <div className="my-1 border-t border-gray-100" />
+                                    {/* Account actions */}
+                                    <button
+                                      disabled={actionLoading === emp.id + "-reset"}
+                                      onClick={() => handleSendResetPassword(emp.workEmail, emp.id)}
+                                      className="flex w-full items-center gap-2.5 px-3 py-2 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                    >
+                                      <KeyRound className="h-3.5 w-3.5 text-gray-400" />
+                                      {actionLoading === emp.id + "-reset" ? "Sending…" : "Send Password Reset"}
+                                    </button>
+                                    <button
+                                      disabled={actionLoading === emp.id + "-welcome"}
+                                      onClick={() => handleResendWelcome(emp.workEmail, emp.id)}
+                                      className="flex w-full items-center gap-2.5 px-3 py-2 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                                    >
+                                      <Mail className="h-3.5 w-3.5 text-gray-400" />
+                                      {actionLoading === emp.id + "-welcome" ? "Sending…" : "Resend Welcome Email"}
+                                    </button>
+                                    {accountStatus[emp.id]?.hasAccount && (
+                                      <button
+                                        disabled={actionLoading === emp.id + "-toggle"}
+                                        onClick={() => handleToggleAccount(emp.id, emp.fullName)}
+                                        className={cn(
+                                          "flex w-full items-center gap-2.5 px-3 py-2 hover:bg-gray-50 disabled:opacity-50",
+                                          accountStatus[emp.id]?.isActive ? "text-amber-600" : "text-green-600"
+                                        )}
+                                      >
+                                        {accountStatus[emp.id]?.isActive
+                                          ? <><ShieldOff className="h-3.5 w-3.5" />{actionLoading === emp.id + "-toggle" ? "Updating…" : "Deactivate Account"}</>
+                                          : <><ShieldCheck className="h-3.5 w-3.5" />{actionLoading === emp.id + "-toggle" ? "Updating…" : "Activate Account"}</>
+                                        }
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={() => { setRoleTarget({ id: emp.id, name: emp.fullName, email: emp.workEmail }); setRoleValue("Employee"); setActiveDropdown(null); }}
+                                      className="flex w-full items-center gap-2.5 px-3 py-2 text-gray-700 hover:bg-gray-50"
+                                    >
+                                      <UserCog className="h-3.5 w-3.5 text-gray-400" /> Change Role
+                                    </button>
+                                    {!isSelf && (
+                                      <>
+                                        <div className="my-1 border-t border-gray-100" />
+                                        <button
+                                          onClick={() => { setDeleteTarget({ type: "single", id: emp.id, name: emp.fullName }); setActiveDropdown(null); }}
+                                          className="flex w-full items-center gap-2.5 px-3 py-2 text-red-600 hover:bg-red-50"
+                                        >
+                                          <Trash2 className="h-3.5 w-3.5" /> Delete Employee
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
+                                </>
+                              )}
+                            </div>
                           </TableCell>
                         )}
                       </TableRow>
@@ -599,6 +754,50 @@ function EmployeesPageContent() {
         confirmLabel={deleteTarget?.type === "single" ? "Delete" : `Delete ${selectedIds.size} employee(s)`}
         loading={deleteEmployee.isPending || bulkDeleteEmployees.isPending}
       />
+
+      {/* Change Role Modal */}
+      {roleTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl">
+            <div className="border-b border-gray-100 px-6 py-4">
+              <h2 className="text-base font-semibold text-gray-900">Change Portal Role</h2>
+              <p className="mt-0.5 text-sm text-gray-500">{roleTarget.name} &bull; {roleTarget.email}</p>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">New Role</label>
+                <select
+                  value={roleValue}
+                  onChange={(e) => setRoleValue(e.target.value)}
+                  className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  {["Admin", "SBUHead", "Director", "Manager", "Finance", "Employee"].map((r) => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="rounded-lg bg-amber-50 border border-amber-100 px-3 py-2.5 text-xs text-amber-700">
+                Changing this role will take effect on the user's next login.
+              </div>
+            </div>
+            <div className="flex gap-2 border-t border-gray-100 px-6 py-4">
+              <button
+                onClick={() => setRoleTarget(null)}
+                className="flex-1 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleChangeRole}
+                disabled={!!actionLoading}
+                className="flex-1 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50"
+              >
+                {actionLoading ? "Saving…" : "Save Role"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppLayout>
   );
 }

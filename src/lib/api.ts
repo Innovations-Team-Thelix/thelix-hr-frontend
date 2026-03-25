@@ -5,6 +5,7 @@ import axios, {
   AxiosResponse,
   InternalAxiosRequestConfig,
 } from 'axios';
+import toast from 'react-hot-toast';
 
 const BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
@@ -85,6 +86,19 @@ axiosInstance.interceptors.response.use(
     const originalRequest = error.config as InternalAxiosRequestConfig & {
       _retry?: boolean;
     };
+
+    // ── Global 422 Validation Error Handler ──────────────────
+    if (error.response?.status === 422) {
+      const data = error.response.data as { message?: string; details?: { path: string; message: string }[] };
+      const details = data?.details;
+      if (details && details.length > 0) {
+        const msgs = details.slice(0, 4).map((d) => `• ${d.path}: ${d.message}`).join('\n');
+        toast.error(`Validation errors:\n${msgs}`, { duration: 6000, id: 'validation-error' });
+      } else if (data?.message) {
+        toast.error(data.message, { id: 'validation-error' });
+      }
+      return Promise.reject(error);
+    }
 
     // Only attempt refresh for 401 errors, and not on auth endpoints
     if (
