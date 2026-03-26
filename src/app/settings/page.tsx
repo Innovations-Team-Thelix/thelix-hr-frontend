@@ -77,7 +77,7 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
 }
 
 export default function SettingsPage() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
 
   // ── Theme (next-themes) ──
   const { theme, setTheme, resolvedTheme } = useTheme();
@@ -346,7 +346,7 @@ export default function SettingsPage() {
           </div>
           <div className="divide-y divide-gray-100">
             {[
-              { label: "Email", value: user?.email ?? "—" },
+              { label: "Email", value: profile?.workEmail ?? "—" },
               { label: "Role", value: user?.role ?? "—" },
               { label: "Account Status", value: "Active" },
             ].map(({ label, value }) => (
