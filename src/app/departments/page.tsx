@@ -18,7 +18,7 @@ import { Select } from "@/components/ui/select";
 import { Modal } from "@/components/ui/modal";
 import { Spinner } from "@/components/ui/loading";
 import { Pagination } from "@/components/ui/pagination";
-import { useSbus, usePaginatedDepartments } from "@/hooks";
+import { useSbus, usePaginatedDepartments, useDepartments } from "@/hooks";
 import api from "@/lib/api";
 import toast from "react-hot-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -35,6 +35,14 @@ export default function DepartmentsPage() {
   const departments = departmentsData?.data || [];
   const pagination = departmentsData?.pagination;
 
+  // Fetch ALL departments (unpaginated) so stats don't change on pagination
+  const { data: allDepartments } = useDepartments();
+  const totalDeptCount = allDepartments?.length ?? pagination?.total ?? 0;
+  const totalEmployees = (allDepartments || []).reduce(
+    (sum: number, d: any) => sum + (d._count?.employees ?? 0),
+    0
+  );
+
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("");
@@ -47,11 +55,6 @@ export default function DepartmentsPage() {
 
   const filtered = departments.filter((d: any) =>
     d.name.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const totalEmployees = departments.reduce(
-    (sum: number, d: any) => sum + (d._count?.employees ?? 0),
-    0
   );
 
   const openCreate = () => {
@@ -145,7 +148,7 @@ export default function DepartmentsPage() {
               </div>
               <div>
                 <p className="text-xs text-gray-500">Total Departments</p>
-                <p className="text-xl font-semibold text-gray-900">{pagination?.total ?? departments.length}</p>
+                <p className="text-xl font-semibold text-gray-900">{totalDeptCount}</p>
               </div>
             </div>
           </div>

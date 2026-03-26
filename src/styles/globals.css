@@ -20,7 +20,44 @@
   body {
     @apply bg-gray-50 text-gray-900 font-sans;
     min-height: 100vh;
+    transition: background-color 0.2s, color 0.2s;
   }
+
+  /* ── Dark mode overrides ── */
+  .dark body {
+    @apply bg-gray-950 text-gray-100;
+  }
+
+  /* Sidebar & header */
+  .dark .bg-white { background-color: #111827 !important; }
+  .dark .bg-gray-50 { background-color: #0f172a !important; }
+  .dark .bg-gray-100 { background-color: #1e293b !important; }
+  .dark .border-gray-100,
+  .dark .border-gray-200 { border-color: #1e293b !important; }
+  .dark .text-gray-900 { color: #f1f5f9 !important; }
+  .dark .text-gray-700 { color: #cbd5e1 !important; }
+  .dark .text-gray-600 { color: #94a3b8 !important; }
+  .dark .text-gray-500 { color: #64748b !important; }
+  .dark .text-gray-400 { color: #475569 !important; }
+
+  /* Cards */
+  .dark .card,
+  .dark [class*="rounded-xl border"] { border-color: #1e293b; }
+  .dark .hover\:bg-gray-50:hover { background-color: #1e293b !important; }
+  .dark .hover\:bg-gray-100:hover { background-color: #1e293b !important; }
+
+  /* Inputs */
+  .dark input,
+  .dark select,
+  .dark textarea {
+    @apply bg-gray-800 border-gray-700 text-gray-100;
+  }
+  .dark input::placeholder,
+  .dark select::placeholder,
+  .dark textarea::placeholder { color: #475569; }
+
+  /* Scrollbar */
+  .dark ::-webkit-scrollbar-thumb { background-color: #334155; }
 
   /* Clash Display for headings */
   h1, h2, h3 {
