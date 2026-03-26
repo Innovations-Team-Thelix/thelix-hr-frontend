@@ -1,13 +1,13 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import toast from "react-hot-toast";
-import { ArrowLeft, Save, Loader2, Plus, Trash2, UserPlus } from "lucide-react";
+import { ArrowLeft, Save, Loader2, Plus, Trash2, UserPlus, Search, ChevronDown, X } from "lucide-react";
 import { AppLayout } from "@/components/layout/app-layout";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -80,6 +80,10 @@ export default function CreateEmployeePage() {
   const { user } = useAuth();
   const effectiveRole = useEffectiveRole();
   const [activeTab, setActiveTab] = useState("personal");
+  const [supervisorSearch, setSupervisorSearch] = useState("");
+  const [supervisorOpen, setSupervisorOpen] = useState(false);
+  const [supervisorValue, setSupervisorValue] = useState("");
+  const supervisorRef = useRef<HTMLDivElement>(null);
 
   const { data: sbus } = useSbus();
   const { data: employeesData } = useEmployees({ limit: 1000, status: "Active" });
@@ -91,6 +95,7 @@ export default function CreateEmployeePage() {
     handleSubmit,
     control,
     watch,
+    setValue,
     formState: { errors },
   } = useForm<CreateEmployeeFormData>({
     resolver: zodResolver(createEmployeeSchema),
@@ -116,6 +121,17 @@ export default function CreateEmployeePage() {
 
   const selectedSbuId = watch("sbuId");
   const { data: departments } = useDepartments(selectedSbuId);
+
+  // Close supervisor dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (supervisorRef.current && !supervisorRef.current.contains(e.target as Node)) {
+        setSupervisorOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // Redirect non-admin users
   useEffect(() => {
@@ -471,13 +487,90 @@ export default function CreateEmployeePage() {
                     error={errors.jobTitle?.message}
                     {...register("jobTitle")}
                   />
-                  <Select
-                    label="Supervisor"
-                    options={supervisorOptions}
-                    placeholder="Select a supervisor"
-                    error={errors.supervisorId?.message}
-                    {...register("supervisorId")}
-                  />
+                  {/* Searchable Supervisor Combobox */}
+                  <div className="flex flex-col gap-1" ref={supervisorRef}>
+                    <label className="text-sm font-medium text-gray-700">Supervisor</label>
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => { setSupervisorOpen((o) => !o); setSupervisorSearch(""); }}
+                        className="flex w-full items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-left transition-colors hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-400"
+                      >
+                        <span className={supervisorValue ? "text-gray-900" : "text-gray-400"}>
+                          {supervisorValue
+                            ? supervisorOptions.find((o) => o.value === supervisorValue)?.label ?? "Select a supervisor"
+                            : "Select a supervisor"}
+                        </span>
+                        <div className="flex items-center gap-1 shrink-0">
+                          {supervisorValue && (
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSupervisorValue("");
+                                setValue("supervisorId", "");
+                              }}
+                              className="rounded p-0.5 text-gray-400 hover:text-gray-600"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </span>
+                          )}
+                          <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${supervisorOpen ? "rotate-180" : ""}`} />
+                        </div>
+                      </button>
+
+                      {supervisorOpen && (
+                        <div className="absolute left-0 top-full z-50 mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg">
+                          {/* Search input */}
+                          <div className="p-2 border-b border-gray-100">
+                            <div className="relative">
+                              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+                              <input
+                                autoFocus
+                                type="text"
+                                placeholder="Search supervisor..."
+                                value={supervisorSearch}
+                                onChange={(e) => setSupervisorSearch(e.target.value)}
+                                className="w-full rounded-md border border-gray-200 bg-gray-50 py-1.5 pl-8 pr-3 text-sm text-gray-700 placeholder:text-gray-400 focus:border-primary-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary-400"
+                              />
+                            </div>
+                          </div>
+                          {/* Options list */}
+                          <ul className="max-h-52 overflow-y-auto py-1">
+                            {supervisorOptions
+                              .filter((o) =>
+                                o.label.toLowerCase().includes(supervisorSearch.toLowerCase())
+                              )
+                              .map((o) => (
+                                <li
+                                  key={o.value}
+                                  onClick={() => {
+                                    setSupervisorValue(o.value);
+                                    setValue("supervisorId", o.value);
+                                    setSupervisorOpen(false);
+                                    setSupervisorSearch("");
+                                  }}
+                                  className={`cursor-pointer px-3 py-2 text-sm transition-colors hover:bg-primary-50 hover:text-primary-900 ${
+                                    supervisorValue === o.value ? "bg-primary-50 text-primary-900 font-medium" : "text-gray-700"
+                                  }`}
+                                >
+                                  {o.label}
+                                </li>
+                              ))}
+                            {supervisorOptions.filter((o) =>
+                              o.label.toLowerCase().includes(supervisorSearch.toLowerCase())
+                            ).length === 0 && (
+                              <li className="px-3 py-4 text-center text-sm text-gray-400">No supervisors found</li>
+                            )}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                    {errors.supervisorId && (
+                      <p className="text-xs text-red-600">{errors.supervisorId.message}</p>
+                    )}
+                  </div>
                   <Select
                     label="Work Arrangement"
                     options={workArrangementOptions}

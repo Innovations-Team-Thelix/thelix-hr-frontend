@@ -1,12 +1,13 @@
 "use client";
 
 import React, { Suspense, useState, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Plus, Users, Upload, Download, X, FileSpreadsheet,
   AlertCircle, CheckCircle2, Trash2, Search, SlidersHorizontal,
   ChevronDown, MoreHorizontal, Eye, Pencil, KeyRound, Mail,
-  ShieldCheck, ShieldOff, UserCog,
+  ShieldCheck, ShieldOff, UserCog, Loader2,
 } from "lucide-react";
 import { AppLayout } from "@/components/layout/app-layout";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -312,78 +313,137 @@ function EmployeesPageContent() {
     <AppLayout pageTitle="Employees">
       <div className="space-y-5">
 
-        {/* Bulk Upload Panel */}
-        {isAdmin && showBulkUpload && (
-          <div className="rounded-2xl border border-primary/20 bg-primary/5 p-5">
-            <div className="mb-4 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FileSpreadsheet className="h-5 w-5 text-primary" />
-                <h3 className="font-semibold text-gray-900">Bulk Upload Employees</h3>
-              </div>
-              <button
-                onClick={() => { setShowBulkUpload(false); setBulkResult(null); setBulkFile(null); }}
-                className="rounded-lg p-1 text-gray-400 hover:bg-white hover:text-gray-700 transition-colors"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">1</span>
-                <span className="text-sm text-gray-700">Download the template and fill in employee data</span>
+        {/* Bulk Upload Modal */}
+        {isAdmin && showBulkUpload && createPortal(
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <div
+              className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+              onClick={() => { setShowBulkUpload(false); setBulkResult(null); setBulkFile(null); }}
+            />
+            {/* Modal card */}
+            <div className="relative z-10 w-full max-w-lg rounded-2xl bg-white shadow-2xl">
+              {/* Header */}
+              <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-50">
+                    <FileSpreadsheet className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-semibold text-gray-900">Bulk Upload Employees</h3>
+                    <p className="text-xs text-gray-500">Import multiple employees via spreadsheet</p>
+                  </div>
+                </div>
                 <button
-                  onClick={handleDownloadTemplate}
-                  className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:text-primary-700"
+                  onClick={() => { setShowBulkUpload(false); setBulkResult(null); setBulkFile(null); }}
+                  className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
                 >
-                  <Download className="h-3.5 w-3.5" />
-                  Download Template
+                  <X className="h-4 w-4" />
                 </button>
               </div>
-              <div className="flex items-start gap-3">
-                <span className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">2</span>
-                <div className="flex-1">
-                  <span className="text-sm text-gray-700">Upload the completed file</span>
-                  <div className="mt-2 flex items-center gap-3">
-                    <label className="cursor-pointer rounded-xl border-2 border-dashed border-primary/30 bg-white px-4 py-2.5 text-sm text-gray-600 hover:border-primary/60 transition-colors">
-                      {bulkFile
-                        ? <span className="font-medium text-primary">{bulkFile.name}</span>
-                        : <span>Choose .xlsx or .csv file</span>
-                      }
-                      <input ref={fileInputRef} type="file" accept=".xlsx,.csv" onChange={(e) => { setBulkFile(e.target.files?.[0] || null); setBulkResult(null); }} className="hidden" />
+
+              {/* Body */}
+              <div className="p-6 space-y-5">
+                {/* Step 1 */}
+                <div className="flex items-start gap-4 rounded-xl border border-gray-100 bg-gray-50 p-4">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">1</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900">Download the template</p>
+                    <p className="mt-0.5 text-xs text-gray-500">Fill in employee data using our pre-formatted spreadsheet</p>
+                    <button
+                      onClick={handleDownloadTemplate}
+                      className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-white px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary-50 transition-colors"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      Download Template (.xlsx)
+                    </button>
+                  </div>
+                </div>
+
+                {/* Step 2 */}
+                <div className="flex items-start gap-4 rounded-xl border border-gray-100 bg-gray-50 p-4">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">2</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900">Upload the completed file</p>
+                    <p className="mt-0.5 text-xs text-gray-500">Accepted formats: .xlsx, .csv</p>
+                    <label className="mt-3 flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-primary/30 bg-white px-4 py-6 text-center transition-colors hover:border-primary/60 hover:bg-primary-50/30">
+                      {bulkFile ? (
+                        <>
+                          <CheckCircle2 className="h-6 w-6 text-green-500" />
+                          <span className="text-sm font-medium text-gray-900">{bulkFile.name}</span>
+                          <span className="text-xs text-gray-400">Click to change file</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="h-6 w-6 text-gray-300" />
+                          <span className="text-sm font-medium text-gray-600">Click to choose file</span>
+                          <span className="text-xs text-gray-400">.xlsx or .csv</span>
+                        </>
+                      )}
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".xlsx,.csv"
+                        onChange={(e) => { setBulkFile(e.target.files?.[0] || null); setBulkResult(null); }}
+                        className="hidden"
+                      />
                     </label>
-                    <Button onClick={handleBulkUpload} disabled={!bulkFile || bulkUploading} size="sm">
-                      {bulkUploading ? "Uploading..." : "Upload"}
-                    </Button>
                   </div>
                 </div>
-              </div>
-              {bulkResult && (
-                <div className="mt-2 rounded-xl border border-gray-200 bg-white p-4">
-                  <div className="mb-2 flex items-center gap-4">
-                    {bulkResult.created > 0 && (
-                      <div className="flex items-center gap-1.5 text-sm text-green-700">
-                        <CheckCircle2 className="h-4 w-4" />
-                        <span className="font-medium">{bulkResult.created} created</span>
-                      </div>
-                    )}
-                    {bulkResult.errors.length > 0 && (
-                      <div className="flex items-center gap-1.5 text-sm text-red-700">
-                        <AlertCircle className="h-4 w-4" />
-                        <span className="font-medium">{bulkResult.errors.length} errors</span>
-                      </div>
-                    )}
-                  </div>
-                  {bulkResult.errors.length > 0 && (
-                    <div className="max-h-40 overflow-y-auto">
-                      {bulkResult.errors.map((err, i) => (
-                        <p key={i} className="py-0.5 text-xs text-red-600">Row {err.row}: {err.message}</p>
-                      ))}
+
+                {/* Results */}
+                {bulkResult && (
+                  <div className="rounded-xl border border-gray-200 bg-white p-4">
+                    <p className="mb-3 text-sm font-semibold text-gray-900">Upload Results</p>
+                    <div className="flex items-center gap-4 mb-3">
+                      {bulkResult.created > 0 && (
+                        <div className="flex items-center gap-1.5 rounded-lg bg-green-50 px-3 py-1.5 text-sm text-green-700">
+                          <CheckCircle2 className="h-4 w-4" />
+                          <span className="font-semibold">{bulkResult.created} created</span>
+                        </div>
+                      )}
+                      {bulkResult.errors.length > 0 && (
+                        <div className="flex items-center gap-1.5 rounded-lg bg-red-50 px-3 py-1.5 text-sm text-red-700">
+                          <AlertCircle className="h-4 w-4" />
+                          <span className="font-semibold">{bulkResult.errors.length} errors</span>
+                        </div>
+                      )}
                     </div>
+                    {bulkResult.errors.length > 0 && (
+                      <div className="max-h-36 overflow-y-auto rounded-lg bg-red-50 p-3">
+                        {bulkResult.errors.map((err, i) => (
+                          <p key={i} className="py-0.5 text-xs text-red-600">
+                            <span className="font-semibold">Row {err.row}:</span> {err.message}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="flex items-center justify-end gap-2 border-t border-gray-100 px-6 py-4">
+                <button
+                  onClick={() => { setShowBulkUpload(false); setBulkResult(null); setBulkFile(null); }}
+                  className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <Button
+                  onClick={handleBulkUpload}
+                  disabled={!bulkFile || bulkUploading}
+                >
+                  {bulkUploading ? (
+                    <><Loader2 className="h-4 w-4 animate-spin" /> Uploading...</>
+                  ) : (
+                    <><Upload className="h-4 w-4" /> Upload Employees</>
                   )}
-                </div>
-              )}
+                </Button>
+              </div>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
 
         {/* ── Main card ── */}
