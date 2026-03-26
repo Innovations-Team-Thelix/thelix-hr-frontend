@@ -11,6 +11,7 @@ import {
   UserCircle,
   Settings,
   Check,
+  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -73,11 +74,12 @@ function getBreadcrumbs(pathname: string): { label: string; href: string }[] {
 export function Header({ onMobileMenuToggle, pageTitle }: HeaderProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, profile, logout } = useAuth();
+  const { user, profile, logout, viewAs, setViewAs } = useAuth();
+  const canPreview = user?.role === "Admin" || user?.role === "SBUHead";
 
   const displayName = profile?.fullName || "User";
   const displayEmail = profile?.workEmail || "";
-  const displayRole = user?.role || "";
+  const displayRole = viewAs ?? user?.role ?? "";
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -265,6 +267,22 @@ export function Header({ onMobileMenuToggle, pageTitle }: HeaderProps) {
                     <UserCircle className="h-4 w-4 text-gray-400" />
                     My Profile
                   </Link>
+                  {canPreview && (
+                    <button
+                      onClick={() => {
+                        setViewAs(viewAs === 'Employee' ? null : 'Employee');
+                        setShowUserMenu(false);
+                      }}
+                      className={`flex w-full items-center gap-2 px-4 py-2 text-sm transition-colors ${
+                        viewAs === 'Employee'
+                          ? 'text-primary-600 hover:bg-primary-50'
+                          : 'text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      <Users className="h-4 w-4 text-gray-400" />
+                      {viewAs === 'Employee' ? 'Exit Employee Profile' : 'Switch to Employee Profile'}
+                    </button>
+                  )}
                   {displayRole === "Admin" && (
                     <Link
                       href="/settings"

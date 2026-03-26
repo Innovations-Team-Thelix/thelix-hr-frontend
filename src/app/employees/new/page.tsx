@@ -47,6 +47,7 @@ const createEmployeeSchema = z.object({
   probationPeriod: z.string().optional(),
   probationEndDate: z.string().optional(),
   employmentStatus: z.string().default("Active"),
+  role: z.string().default("Employee"),
   
   monthlySalary: z.string().optional().or(z.literal("")),
   baseSalary: z.string().optional().or(z.literal("")),
@@ -157,6 +158,13 @@ export default function CreateEmployeePage() {
     { label: "Onsite", value: "Onsite" },
   ];
 
+  const roleOptions = [
+    { label: "Employee", value: "Employee" },
+    { label: "Admin", value: "Admin" },
+    { label: "Finance", value: "Finance" },
+    { label: "SBU Head", value: "SBUHead" },
+  ];
+
   const statusOptions = [
     { label: "Active", value: "Active" },
     { label: "Suspended", value: "Suspended" },
@@ -172,7 +180,7 @@ export default function CreateEmployeePage() {
   ];
 
   const PERSONAL_FIELDS = ["fullName", "workEmail", "dateOfBirth", "gender", "nationality", "address", "phone", "personalEmail", "maritalStatus", "nextOfKinName", "nextOfKinRelationship", "nextOfKinPhone", "emergencyContact", "governmentId", "tin", "pensionNumber", "hmoId"];
-  const EMPLOYMENT_FIELDS = ["dateOfHire", "employmentType", "sbuId", "departmentId", "jobTitle", "supervisorId", "workArrangement", "probationPeriod", "probationEndDate", "employmentStatus"];
+  const EMPLOYMENT_FIELDS = ["dateOfHire", "employmentType", "sbuId", "departmentId", "jobTitle", "supervisorId", "workArrangement", "probationPeriod", "probationEndDate", "employmentStatus", "role"];
 
   const onFormError = (errs: typeof errors) => {
     const errorKeys = Object.keys(errs);
@@ -493,6 +501,12 @@ export default function CreateEmployeePage() {
                     options={statusOptions}
                     error={errors.employmentStatus?.message}
                     {...register("employmentStatus")}
+                  />
+                  <Select
+                    label="Role"
+                    options={roleOptions}
+                    error={errors.role?.message}
+                    {...register("role")}
                   />
                 </div>
               </CardContent>

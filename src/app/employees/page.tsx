@@ -771,8 +771,15 @@ function EmployeesPageContent() {
                   onChange={(e) => setRoleValue(e.target.value)}
                   className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                 >
-                  {["Admin", "SBUHead", "Director", "Manager", "Finance", "Employee"].map((r) => (
-                    <option key={r} value={r}>{r}</option>
+                  {[
+                    { label: "System Admin (8.6)", value: "Admin" },
+                    { label: "VP / Executive (8.1)", value: "SBUHead" },
+                    { label: "Director (8.2)", value: "Director" },
+                    { label: "Manager (8.3)", value: "Manager" },
+                    { label: "HR / Performance Admin (8.5)", value: "Finance" },
+                    { label: "Team Member (8.4)", value: "Employee" },
+                  ].map((r) => (
+                    <option key={r.value} value={r.value}>{r.label}</option>
                   ))}
                 </select>
               </div>

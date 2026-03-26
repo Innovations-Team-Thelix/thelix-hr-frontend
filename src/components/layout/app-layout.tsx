@@ -1,13 +1,29 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { useSocket } from "@/hooks/useSocket";
 import { useMyProfile } from "@/hooks/useEmployees";
 import { Sidebar } from "./sidebar";
 import { Header } from "./header";
+
+// Routes accessible to Employee role
+const EMPLOYEE_ALLOWED_PREFIXES = [
+  "/employee-dashboard",
+  "/employees",
+  "/profile",
+  "/leave",
+  "/roster",
+  "/attendance",
+  "/celebrations",
+  "/performance",
+  "/kpi",
+  "/policy",
+  "/payslips",
+  "/notifications",
+];
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -16,7 +32,8 @@ interface AppLayoutProps {
 
 export function AppLayout({ children, pageTitle }: AppLayoutProps) {
   const router = useRouter();
-  const { isAuthenticated, checkAuth, setProfile } = useAuth();
+  const pathname = usePathname();
+  const { isAuthenticated, checkAuth, setProfile, viewAs } = useAuth();
   useSocket(); // Real-time notification listener
 
   const { data: profile } = useMyProfile({ enabled: isAuthenticated });
@@ -37,6 +54,17 @@ export function AppLayout({ children, pageTitle }: AppLayoutProps) {
       router.push("/login");
     }
   }, [mounted, isAuthenticated, router]);
+
+  // Auto-redirect when switching to Employee view if current route is not accessible
+  useEffect(() => {
+    if (!viewAs) return;
+    const isAllowed = EMPLOYEE_ALLOWED_PREFIXES.some(
+      (prefix) => pathname === prefix || pathname.startsWith(prefix + "/")
+    );
+    if (!isAllowed) {
+      router.push("/employee-dashboard");
+    }
+  }, [viewAs, pathname, router]);
 
   // Close mobile sidebar on window resize to desktop
   useEffect(() => {
@@ -103,7 +131,7 @@ export function AppLayout({ children, pageTitle }: AppLayoutProps) {
             aria-hidden="true"
           />
           {/* Sidebar panel */}
-          <div className="fixed inset-y-0 left-0 z-50 w-64 animate-slide-in">
+          <div className="fixed inset-y-0 left-0 z-50 w-52 animate-slide-in">
             <Sidebar
               collapsed={false}
               onToggle={handleToggleSidebar}
