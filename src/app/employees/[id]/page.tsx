@@ -608,8 +608,16 @@ export default function EmployeeProfilePage() {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <StatusBadge status={employee.employmentStatus} />
-                <EmployeeTags tags={employee.tags} />
+                <StatusBadge
+                  status={
+                    employee.tags?.some((t) => t.toLowerCase().includes("probation"))
+                      ? "Probation"
+                      : employee.employmentStatus
+                  }
+                />
+                <EmployeeTags
+                  tags={employee.tags?.filter((t) => !t.toLowerCase().includes("probation"))}
+                />
                 {isAdmin && (
                   <Button
                     variant="outline"
