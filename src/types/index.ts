@@ -386,6 +386,7 @@ export interface LoginResponse {
   refreshToken?: string;
   requiresMfa: boolean;
   mfaToken?: string;
+  mustChangePassword?: boolean;
 }
 
 export interface RefreshResponse {

@@ -2,10 +2,14 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { cn } from "@/lib/utils";
+import { Eye, EyeOff } from "lucide-react";
+import toast from "react-hot-toast";
+import api from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { useSocket } from "@/hooks/useSocket";
 import { useMyProfile } from "@/hooks/useEmployees";
+import { Modal } from "@/components/ui/modal";
+import { Button } from "@/components/ui/button";
 import { Sidebar } from "./sidebar";
 import { Header } from "./header";
 
@@ -33,8 +37,46 @@ interface AppLayoutProps {
 export function AppLayout({ children, pageTitle }: AppLayoutProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const { isAuthenticated, checkAuth, setProfile, viewAs } = useAuth();
+  const { isAuthenticated, checkAuth, setProfile, viewAs, mustChangePassword, clearMustChangePassword } = useAuth();
   useSocket(); // Real-time notification listener
+
+  // ── Force Change Password state ──
+  const [currentPw, setCurrentPw] = useState("");
+  const [newPw, setNewPw] = useState("");
+  const [confirmPw, setConfirmPw] = useState("");
+  const [showCurrentPw, setShowCurrentPw] = useState(false);
+  const [showNewPw, setShowNewPw] = useState(false);
+  const [pwLoading, setPwLoading] = useState(false);
+  const [pwError, setPwError] = useState<string | null>(null);
+
+  const handleForceChangePassword = async () => {
+    setPwError(null);
+    if (!currentPw || !newPw || !confirmPw) {
+      setPwError("All fields are required.");
+      return;
+    }
+    if (newPw.length < 8) {
+      setPwError("New password must be at least 8 characters.");
+      return;
+    }
+    if (newPw !== confirmPw) {
+      setPwError("New passwords do not match.");
+      return;
+    }
+    setPwLoading(true);
+    try {
+      await api.post("/auth/change-password", { currentPassword: currentPw, newPassword: newPw });
+      toast.success("Password changed successfully!");
+      clearMustChangePassword();
+      setCurrentPw("");
+      setNewPw("");
+      setConfirmPw("");
+    } catch (err: any) {
+      setPwError(err?.response?.data?.message || "Failed to change password.");
+    } finally {
+      setPwLoading(false);
+    }
+  };
 
   const { data: profile } = useMyProfile({ enabled: isAuthenticated });
   useEffect(() => {
@@ -154,6 +196,84 @@ export function AppLayout({ children, pageTitle }: AppLayoutProps) {
           </div>
         </main>
       </div>
+
+      {/* Force Change Password Modal */}
+      <Modal
+        isOpen={mustChangePassword}
+        onClose={() => {}}
+        title="Change Your Password"
+        size="sm"
+        footer={
+          <div className="flex justify-end">
+            <Button onClick={handleForceChangePassword} loading={pwLoading}>
+              Change Password
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            For security purposes, you must change your password before continuing.
+          </p>
+
+          {pwError && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {pwError}
+            </div>
+          )}
+
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-gray-700">Current Password</label>
+            <div className="relative">
+              <input
+                type={showCurrentPw ? "text" : "password"}
+                value={currentPw}
+                onChange={(e) => setCurrentPw(e.target.value)}
+                className="block w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                placeholder="Enter current password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowCurrentPw(!showCurrentPw)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                {showCurrentPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-gray-700">New Password</label>
+            <div className="relative">
+              <input
+                type={showNewPw ? "text" : "password"}
+                value={newPw}
+                onChange={(e) => setNewPw(e.target.value)}
+                className="block w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                placeholder="At least 8 characters"
+              />
+              <button
+                type="button"
+                onClick={() => setShowNewPw(!showNewPw)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                {showNewPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-gray-700">Confirm New Password</label>
+            <input
+              type="password"
+              value={confirmPw}
+              onChange={(e) => setConfirmPw(e.target.value)}
+              className="block w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm text-gray-900 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              placeholder="Re-enter new password"
+            />
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
