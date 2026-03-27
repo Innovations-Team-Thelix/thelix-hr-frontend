@@ -15,6 +15,8 @@ import {
   AlertTriangle,
   Building2,
   CalendarRange,
+  User,
+  Users,
 } from "lucide-react";
 import { AppLayout } from "@/components/layout/app-layout";
 import { Card, CardContent } from "@/components/ui/card";
@@ -28,6 +30,7 @@ import {
   useEmployees,
   useEffectiveRole,
 } from "@/hooks";
+import { useAuth } from "@/hooks/useAuth";
 import {
   useRoster,
   useGenerateRoster,
@@ -112,7 +115,10 @@ function getAttendanceTile(attendance: any): AttendanceTileType | null {
 export default function RosterPage() {
   const effectiveRole = useEffectiveRole();
   const isAdmin = effectiveRole === "Admin";
+  const { user, viewAs } = useAuth();
+  const isAdminAsEmployee = (user?.role === "Admin" || user?.role === "SBUHead") && viewAs === "Employee";
 
+  const [rosterView, setRosterView] = useState<"my" | "everyone">("everyone");
   const [selectedSbuId, setSelectedSbuId] = useState("");
   const [selectedDeptId, setSelectedDeptId] = useState("");
   const [dateRange, setDateRange] = useState<DateRange | null>(null);
@@ -225,18 +231,28 @@ export default function RosterPage() {
     return map;
   }, [rosterEntries, localOverrides, attendanceEntries, employeesData]);
 
+  const displayedEmployeeMap = useMemo(() => {
+    if (!isAdminAsEmployee || rosterView === "everyone") return employeeMap;
+    const filtered = new Map<string, typeof employeeMap extends Map<string, infer V> ? V : never>();
+    const myId = user?.employeeId;
+    if (myId && employeeMap.has(myId)) {
+      filtered.set(myId, employeeMap.get(myId)!);
+    }
+    return filtered;
+  }, [employeeMap, isAdminAsEmployee, rosterView, user?.employeeId]);
+
   const onsiteCounts = useMemo(() => {
     return days.map((day) => {
       const dateStr = toDateStr(day);
       let count = 0;
-      employeeMap.forEach((emp) => {
+      displayedEmployeeMap.forEach((emp) => {
         if (emp.entries.get(dateStr) === "Onsite") count++;
       });
       return count;
     });
-  }, [employeeMap, days]);
+  }, [displayedEmployeeMap, days]);
 
-  const belowMinDays = onsiteCounts.some((count) => count < minOnsite && employeeMap.size > 0);
+  const belowMinDays = onsiteCounts.some((count) => count < minOnsite && displayedEmployeeMap.size > 0);
 
   const sbuOptions = (sbus || []).map((s) => ({ label: s.name, value: s.id }));
   const deptOptions = (departments || []).map((d) => ({ label: d.name, value: d.id }));
@@ -336,9 +352,42 @@ export default function RosterPage() {
   return (
     <AppLayout pageTitle="Roster">
       <div className="space-y-6">
-        <div className="flex items-center gap-3">
-          <Building2 className="h-6 w-6 text-primary" />
-          <h2 className="text-xl font-semibold text-gray-900">Hybrid Roster</h2>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Building2 className="h-6 w-6 text-primary" />
+            <h2 className="text-xl font-semibold text-gray-900">Hybrid Roster</h2>
+          </div>
+
+          {isAdminAsEmployee && (
+            <div className="inline-flex items-center rounded-lg border border-gray-200 bg-gray-100 p-0.5">
+              <button
+                type="button"
+                onClick={() => setRosterView("my")}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                  rosterView === "my"
+                    ? "bg-white text-gray-900 shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                )}
+              >
+                <User className="h-4 w-4" />
+                My Roster
+              </button>
+              <button
+                type="button"
+                onClick={() => setRosterView("everyone")}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                  rosterView === "everyone"
+                    ? "bg-white text-gray-900 shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                )}
+              >
+                <Users className="h-4 w-4" />
+                Everyone
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Filters */}
@@ -428,7 +477,7 @@ export default function RosterPage() {
               <div className="p-6 space-y-3">
                 {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
               </div>
-            ) : employeeMap.size === 0 ? (
+            ) : displayedEmployeeMap.size === 0 ? (
               <div className="py-16 text-center text-sm text-gray-500">
                 {selectedDeptId
                   ? "No roster entries for this period. Use Auto-Generate to create one."
@@ -454,7 +503,7 @@ export default function RosterPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {Array.from(employeeMap.values()).map((emp) => (
+                    {Array.from(displayedEmployeeMap.values()).map((emp) => (
                       <tr key={emp.id} className="border-b border-gray-100 hover:bg-gray-50/50">
                         <td className="sticky left-0 z-10 bg-white px-4 py-3">
                           <div className="flex items-center gap-2">
