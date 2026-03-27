@@ -134,8 +134,11 @@ export function useCreateEmployee() {
       const response = await api.post<Employee>('/employees', data);
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: (newEmployee) => {
       queryClient.invalidateQueries({ queryKey: employeeKeys.lists() });
+      if (newEmployee?.id) {
+        queryClient.setQueryData(employeeKeys.detail(newEmployee.id), newEmployee);
+      }
       toast.success('Employee created successfully.');
     },
     onError: (error: any) => {
@@ -206,6 +209,9 @@ export function useUpdateEmployee() {
         employeeKeys.detail(updatedEmployee.id),
         updatedEmployee,
       );
+      queryClient.invalidateQueries({
+        queryKey: [...employeeKeys.detail(updatedEmployee.id), 'salary-history'],
+      });
       toast.success('Employee updated successfully.');
     },
     onError: (error: any) => {
