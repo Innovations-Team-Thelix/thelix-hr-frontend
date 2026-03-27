@@ -105,6 +105,11 @@ export const useAuth = create<AuthState>((set, get) => ({
     if (result.accessToken && result.refreshToken) {
       localStorage.setItem('accessToken', result.accessToken);
       localStorage.setItem('refreshToken', result.refreshToken);
+      if (result.mustChangePassword) {
+        localStorage.setItem('mustChangePassword', 'true');
+      } else {
+        localStorage.removeItem('mustChangePassword');
+      }
 
       if (result.mustChangePassword) {
         localStorage.setItem('mustChangePassword', 'true');
