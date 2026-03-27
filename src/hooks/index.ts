@@ -300,9 +300,13 @@ export function useUpdateEmployee() {
       const res = await api.put<Employee>(`/employees/${id}`, data);
       return res.data;
     },
-    onSuccess: (_data, variables) => {
+    onSuccess: (updatedEmployee, variables) => {
+      // Set the full employee data (including salaryBreakdown) immediately in cache
+      if (updatedEmployee) {
+        queryClient.setQueryData(["employee", variables.id], updatedEmployee);
+      }
+      // Invalidate salary history so it refetches in the background
       queryClient.invalidateQueries({ queryKey: ["employees"] });
-      queryClient.invalidateQueries({ queryKey: ["employee", variables.id] });
     },
   });
 }

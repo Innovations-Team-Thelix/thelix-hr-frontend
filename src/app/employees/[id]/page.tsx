@@ -608,19 +608,6 @@ export default function EmployeeProfilePage() {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                {/* Probation Status in Header */}
-                {(employee.probationEndDate || (employee.probationPeriod && employee.probationPeriod > 0)) && (
-                  <StatusBadge
-                    status={
-                      employee.probationEndDate
-                        ? new Date(employee.probationEndDate) <
-                          new Date(new Date().setHours(0, 0, 0, 0))
-                          ? "Overdue"
-                          : "Probation"
-                        : "Confirmed"
-                    }
-                  />
-                )}
                 <StatusBadge status={employee.employmentStatus} />
                 <EmployeeTags tags={employee.tags} />
                 {isAdmin && (
