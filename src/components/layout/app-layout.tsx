@@ -8,6 +8,8 @@ import { useSocket } from "@/hooks/useSocket";
 import { useMyProfile } from "@/hooks/useEmployees";
 import { Sidebar } from "./sidebar";
 import { Header } from "./header";
+import { ForcePasswordChangeModal } from "@/components/auth/force-password-change-modal";
+import { WalkthroughModal } from "@/components/auth/walkthrough-modal";
 
 // Routes accessible to Employee role
 const EMPLOYEE_ALLOWED_PREFIXES = [
@@ -23,6 +25,7 @@ const EMPLOYEE_ALLOWED_PREFIXES = [
   "/policy",
   "/payslips",
   "/notifications",
+  "/settings",
 ];
 
 interface AppLayoutProps {
@@ -43,10 +46,19 @@ export function AppLayout({ children, pageTitle }: AppLayoutProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [mustChangePassword, setMustChangePassword] = useState(false);
+  const [showWalkthrough, setShowWalkthrough] = useState(false);
 
   useEffect(() => {
     setMounted(true);
     checkAuth();
+    if (typeof window !== "undefined") {
+      const mustChange = localStorage.getItem("mustChangePassword") === "true";
+      setMustChangePassword(mustChange);
+      if (!mustChange && localStorage.getItem("walkthroughSeen") !== "true") {
+        setShowWalkthrough(true);
+      }
+    }
   }, [checkAuth]);
 
   useEffect(() => {
@@ -146,6 +158,21 @@ export function AppLayout({ children, pageTitle }: AppLayoutProps) {
         <Header
           onMobileMenuToggle={handleMobileMenuToggle}
           pageTitle={pageTitle}
+        />
+
+        {/* Force password change on first login — cannot be dismissed */}
+        <ForcePasswordChangeModal
+          isOpen={mustChangePassword}
+          onSuccess={() => {
+            setMustChangePassword(false);
+            setShowWalkthrough(true);
+          }}
+        />
+
+        {/* Walkthrough tour — shown once after first password change */}
+        <WalkthroughModal
+          isOpen={!mustChangePassword && showWalkthrough}
+          onClose={() => setShowWalkthrough(false)}
         />
 
         <main className="flex-1 overflow-y-auto">

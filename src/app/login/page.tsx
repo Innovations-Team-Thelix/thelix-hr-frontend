@@ -10,6 +10,20 @@ import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 
+function getRoleDashboard(role: string): string {
+  switch (role) {
+    case "Admin":
+      return "/dashboard";
+    case "Finance":
+      return "/dashboard";
+    case "SBUHead":
+      return "/dashboard";
+    case "Employee":
+    default:
+      return "/employee-dashboard";
+  }
+}
+
 const loginSchema = z.object({
   email: z
     .string()
@@ -63,7 +77,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (mounted && isAuthenticated && user) {
-      const destination = user.role === "Employee" ? "/profile" : "/dashboard";
+      const destination = getRoleDashboard(user.role);
       router.push(destination);
     }
   }, [mounted, isAuthenticated, user, router]);
@@ -77,7 +91,7 @@ export default function LoginPage() {
         return;
       }
       const authUser = useAuth.getState().user;
-      const destination = authUser?.role === "Employee" ? "/profile" : "/dashboard";
+      const destination = getRoleDashboard(authUser?.role ?? "Employee");
       router.push(destination);
     } catch (error: unknown) {
       const axiosError = error as { response?: { data?: { message?: string } } };
@@ -94,7 +108,7 @@ export default function LoginPage() {
     try {
       await verifyMfa(mfaToken, data.code);
       const authUser = useAuth.getState().user;
-      const destination = authUser?.role === "Employee" ? "/profile" : "/dashboard";
+      const destination = getRoleDashboard(authUser?.role ?? "Employee");
       router.push(destination);
     } catch (error: unknown) {
       const axiosError = error as { response?: { data?: { message?: string } } };

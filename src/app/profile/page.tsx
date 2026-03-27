@@ -265,7 +265,13 @@ export default function ProfilePage() {
                         ))}
                     </div>
                   )}
-                  <StatusBadge status={profile.employmentStatus} />
+                  <StatusBadge
+                    status={
+                      profile.tags?.some((t) => t.toLowerCase().includes("probation"))
+                        ? "Probation"
+                        : profile.employmentStatus
+                    }
+                  />
                 </div>
               </div>
               <Button variant="outline" size="sm" onClick={handleEdit}>
