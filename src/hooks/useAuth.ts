@@ -52,6 +52,7 @@ interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   viewAs: 'Employee' | null;
+  mustChangePassword: boolean;
 
   // Actions
   login: (email: string, password: string) => Promise<LoginResponse>;
@@ -61,6 +62,7 @@ interface AuthState {
   checkAuth: () => void;
   setProfile: (profile: Employee) => void;
   setViewAs: (role: 'Employee' | null) => void;
+  clearMustChangePassword: () => void;
 }
 
 // ─── Store ─────────────────────────────────────────────────
@@ -72,8 +74,14 @@ export const useAuth = create<AuthState>((set, get) => ({
   isAuthenticated: false,
   isLoading: true,
   viewAs: null,
+  mustChangePassword: false,
 
   setViewAs: (role) => set({ viewAs: role }),
+
+  clearMustChangePassword: () => {
+    localStorage.removeItem('mustChangePassword');
+    set({ mustChangePassword: false });
+  },
 
   /**
    * Authenticate with email and password.
@@ -98,6 +106,10 @@ export const useAuth = create<AuthState>((set, get) => ({
       localStorage.setItem('accessToken', result.accessToken);
       localStorage.setItem('refreshToken', result.refreshToken);
 
+      if (result.mustChangePassword) {
+        localStorage.setItem('mustChangePassword', 'true');
+      }
+
       const decoded = decodeJwt(result.accessToken);
       if (decoded) {
         const authPayload: AuthPayload = {
@@ -112,6 +124,7 @@ export const useAuth = create<AuthState>((set, get) => ({
           token: result.accessToken,
           isAuthenticated: true,
           isLoading: false,
+          mustChangePassword: !!result.mustChangePassword,
         });
       }
     }
@@ -126,12 +139,17 @@ export const useAuth = create<AuthState>((set, get) => ({
     const response = await api.post<{
       accessToken: string;
       refreshToken: string;
+      mustChangePassword?: boolean;
     }>('/auth/mfa/verify', { token: mfaToken, code });
 
-    const { accessToken, refreshToken } = response.data;
+    const { accessToken, refreshToken, mustChangePassword } = response.data;
 
     localStorage.setItem('accessToken', accessToken);
     localStorage.setItem('refreshToken', refreshToken);
+
+    if (mustChangePassword) {
+      localStorage.setItem('mustChangePassword', 'true');
+    }
 
     const decoded = decodeJwt(accessToken);
     if (decoded) {
@@ -147,6 +165,7 @@ export const useAuth = create<AuthState>((set, get) => ({
         token: accessToken,
         isAuthenticated: true,
         isLoading: false,
+        mustChangePassword: !!mustChangePassword,
       });
     }
   },
@@ -157,6 +176,7 @@ export const useAuth = create<AuthState>((set, get) => ({
   logout: () => {
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
+    localStorage.removeItem('mustChangePassword');
 
     set({
       user: null,
@@ -165,6 +185,7 @@ export const useAuth = create<AuthState>((set, get) => ({
       isAuthenticated: false,
       isLoading: false,
       viewAs: null,
+      mustChangePassword: false,
     });
 
     if (typeof window !== 'undefined') {
@@ -260,6 +281,7 @@ export const useAuth = create<AuthState>((set, get) => ({
         token: accessToken,
         isAuthenticated: true,
         isLoading: false,
+        mustChangePassword: localStorage.getItem('mustChangePassword') === 'true',
       });
     } else {
       set({
