@@ -7,16 +7,18 @@ import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import toast from "react-hot-toast";
-import { ArrowLeft, Save, Loader2, Plus, Trash2, UserPlus, Search, ChevronDown, X } from "lucide-react";
+import { ArrowLeft, Save, Plus, Trash2, UserPlus, Search, ChevronDown, X } from "lucide-react";
 import { AppLayout } from "@/components/layout/app-layout";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Tabs } from "@/components/ui/tabs";
-import { useCreateEmployee, useSbus, useDepartments, useAuth, useEmployees, useEffectiveRole } from "@/hooks";
+import { useCreateEmployee, useCreateDepartment, useSbus, useDepartments, useAuth, useEmployees, useEffectiveRole } from "@/hooks";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { MultiSelect } from "@/components/ui/multi-select";
+import { Modal } from "@/components/ui/modal";
+import { Spinner } from "@/components/ui/loading";
 
 const createEmployeeSchema = z.object({
   fullName: z.string().min(1, "Full name is required"),
@@ -85,6 +87,16 @@ export default function CreateEmployeePage() {
   const [supervisorValue, setSupervisorValue] = useState("");
   const supervisorRef = useRef<HTMLDivElement>(null);
 
+  const [deptOpen, setDeptOpen] = useState(false);
+  const [deptSearch, setDeptSearch] = useState("");
+  const [deptValue, setDeptValue] = useState("");
+  const [showCreateDept, setShowCreateDept] = useState(false);
+  const [newDeptName, setNewDeptName] = useState("");
+  const [newDeptSbuId, setNewDeptSbuId] = useState("");
+  const [newDeptMinOnsite, setNewDeptMinOnsite] = useState("0");
+  const deptRef = useRef<HTMLDivElement>(null);
+  const createDepartment = useCreateDepartment();
+
   const { data: sbus } = useSbus();
   const { data: employeesData } = useEmployees({ limit: 1000, status: "Active" });
   const createEmployee = useCreateEmployee();
@@ -122,11 +134,16 @@ export default function CreateEmployeePage() {
   const selectedSbuId = watch("sbuId");
   const { data: departments } = useDepartments(selectedSbuId);
 
-  // Close supervisor dropdown on outside click
+  // Close dropdowns on outside click
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (supervisorRef.current && !supervisorRef.current.contains(e.target as Node)) {
         setSupervisorOpen(false);
+      }
+      if (deptRef.current && !deptRef.current.contains(e.target as Node)) {
+        setDeptOpen(false);
+        setShowCreateDept(false);
+        setNewDeptName("");
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -473,14 +490,99 @@ export default function CreateEmployeePage() {
                     value={secondarySbuIds}
                     onChange={setSecondarySbuIds}
                   />
-                  <Select
-                    label="Department"
-                    required
-                    options={departmentOptions}
-                    placeholder="Select department"
-                    error={errors.departmentId?.message}
-                    {...register("departmentId")}
-                  />
+                  {/* Searchable Department Combobox with inline create */}
+                  <div className="flex flex-col gap-1" ref={deptRef}>
+                    <label className="text-sm font-medium text-gray-700">Department <span className="text-red-500">*</span></label>
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => { setDeptOpen((o) => !o); setDeptSearch(""); }}
+                        className="flex w-full items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-left transition-colors hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-400"
+                      >
+                        <span className={deptValue ? "text-gray-900" : "text-gray-400"}>
+                          {deptValue
+                            ? departmentOptions.find((o) => o.value === deptValue)?.label ?? "Select department"
+                            : "Select department"}
+                        </span>
+                        <div className="flex items-center gap-1 shrink-0">
+                          {deptValue && (
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeptValue("");
+                                setValue("departmentId", "");
+                              }}
+                              className="rounded p-0.5 text-gray-400 hover:text-gray-600"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </span>
+                          )}
+                          <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${deptOpen ? "rotate-180" : ""}`} />
+                        </div>
+                      </button>
+
+                      {deptOpen && (
+                        <div className="absolute left-0 top-full z-50 mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg">
+                          <div className="p-2 border-b border-gray-100">
+                            <div className="relative">
+                              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+                              <input
+                                autoFocus
+                                type="text"
+                                placeholder="Search department..."
+                                value={deptSearch}
+                                onChange={(e) => setDeptSearch(e.target.value)}
+                                className="w-full rounded-md border border-gray-200 bg-gray-50 py-1.5 pl-8 pr-3 text-sm text-gray-700 placeholder:text-gray-400 focus:border-primary-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary-400"
+                              />
+                            </div>
+                          </div>
+                          <ul className="max-h-52 overflow-y-auto py-1">
+                            {departmentOptions
+                              .filter((o) =>
+                                o.label.toLowerCase().includes(deptSearch.toLowerCase())
+                              )
+                              .map((o) => (
+                                <li
+                                  key={o.value}
+                                  onClick={() => {
+                                    setDeptValue(o.value);
+                                    setValue("departmentId", o.value);
+                                    setDeptOpen(false);
+                                    setDeptSearch("");
+                                  }}
+                                  className={`cursor-pointer px-3 py-2 text-sm transition-colors hover:bg-primary-50 hover:text-primary-900 ${
+                                    deptValue === o.value ? "bg-primary-50 text-primary-900 font-medium" : "text-gray-700"
+                                  }`}
+                                >
+                                  {o.label}
+                                </li>
+                              ))}
+                            {departmentOptions.filter((o) =>
+                              o.label.toLowerCase().includes(deptSearch.toLowerCase())
+                            ).length === 0 && (
+                              <li className="px-3 py-4 text-center text-sm text-gray-400">No departments found</li>
+                            )}
+                          </ul>
+                          {/* Create new department */}
+                          <div className="border-t border-gray-100 p-2">
+                            <button
+                              type="button"
+                              onClick={() => { setShowCreateDept(true); setNewDeptName(deptSearch); setNewDeptSbuId(selectedSbuId || ""); setNewDeptMinOnsite("0"); setDeptOpen(false); }}
+                              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-primary-600 transition-colors hover:bg-primary-50"
+                            >
+                              <Plus className="h-4 w-4" />
+                              Create new department
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    {errors.departmentId && (
+                      <p className="text-xs text-red-600">{errors.departmentId.message}</p>
+                    )}
+                  </div>
                   <Input
                     label="Job Title"
                     required
@@ -874,6 +976,71 @@ export default function CreateEmployeePage() {
         </div>,
         document.body
       )}
+      {/* Add Department Modal */}
+      <Modal
+        isOpen={showCreateDept}
+        onClose={() => { setShowCreateDept(false); setNewDeptName(""); setNewDeptSbuId(""); setNewDeptMinOnsite("0"); }}
+        title="Add Department"
+        size="sm"
+        footer={
+          <div className="flex items-center justify-end gap-2">
+            <button
+              onClick={() => { setShowCreateDept(false); setNewDeptName(""); setNewDeptSbuId(""); setNewDeptMinOnsite("0"); }}
+              className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={async () => {
+                try {
+                  const dept = await createDepartment.mutateAsync({
+                    name: newDeptName.trim(),
+                    sbuId: newDeptSbuId,
+                    minOnsite: parseInt(newDeptMinOnsite) || 0,
+                  });
+                  setDeptValue(dept.id);
+                  setValue("departmentId", dept.id);
+                  setShowCreateDept(false);
+                  setNewDeptName("");
+                  setNewDeptSbuId("");
+                  setNewDeptMinOnsite("0");
+                  toast.success(`Department "${dept.name}" created`);
+                } catch {
+                  toast.error("Failed to create department");
+                }
+              }}
+              disabled={!newDeptName.trim() || !newDeptSbuId || createDepartment.isPending}
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-600 transition-colors disabled:opacity-60"
+            >
+              {createDepartment.isPending && <Spinner size="sm" />}
+              Create Department
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <Input
+            label="Department Name"
+            placeholder="e.g. Engineering"
+            value={newDeptName}
+            onChange={(e) => setNewDeptName(e.target.value)}
+          />
+          <Select
+            label="SBU"
+            options={sbuOptions}
+            value={newDeptSbuId}
+            onChange={(e) => setNewDeptSbuId(e.target.value)}
+            placeholder="Select SBU"
+          />
+          <Input
+            label="Minimum Onsite Days"
+            type="number"
+            min={0}
+            value={newDeptMinOnsite}
+            onChange={(e) => setNewDeptMinOnsite(e.target.value)}
+          />
+        </div>
+      </Modal>
     </AppLayout>
   );
 }

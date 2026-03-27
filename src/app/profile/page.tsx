@@ -41,6 +41,10 @@ import { useRoster } from "@/hooks/useRoster";
 import { formatDate, formatCurrency, cn, formatBirthDate } from "@/lib/utils";
 
 const updateSelfSchema = z.object({
+  fullName: z.string().min(1, "Full name is required").optional(),
+  dateOfBirth: z.string().optional(),
+  gender: z.string().optional(),
+  nationality: z.string().optional(),
   phone: z.string().optional(),
   address: z.string().optional(),
   personalEmail: z.string().email("Invalid email").optional().or(z.literal("")),
@@ -49,6 +53,13 @@ const updateSelfSchema = z.object({
   nextOfKinRelationship: z.string().optional(),
   nextOfKinPhone: z.string().optional(),
   maritalStatus: z.string().optional(),
+  governmentId: z.string().optional(),
+  tin: z.string().optional(),
+  pensionNumber: z.string().optional(),
+  hmoId: z.string().optional(),
+  accountName: z.string().optional(),
+  accountNumber: z.string().optional(),
+  bankName: z.string().optional(),
 });
 
 type UpdateSelfFormData = z.infer<typeof updateSelfSchema>;
@@ -104,6 +115,12 @@ export default function ProfilePage() {
 
   const [activeTab, setActiveTab] = useState("overview");
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const genderOptions = [
+    { label: "Male", value: "Male" },
+    { label: "Female", value: "Female" },
+    { label: "Non-Binary", value: "NonBinary" },
+    { label: "Prefer Not To Say", value: "PreferNotToSay" },
+  ];
 
   const tabs: Tab[] = [
     { id: "overview", label: "Overview" },
@@ -140,6 +157,10 @@ export default function ProfilePage() {
   const handleEdit = () => {
     if (profile) {
       form.reset({
+        fullName: profile.fullName || "",
+        dateOfBirth: profile.dateOfBirth ? (profile.dateOfBirth.includes("T") ? profile.dateOfBirth.split("T")[0] : profile.dateOfBirth) : "",
+        gender: profile.gender || "",
+        nationality: profile.nationality || "",
         phone: profile.phone || "",
         address: profile.address || "",
         personalEmail: profile.personalEmail || "",
@@ -148,6 +169,13 @@ export default function ProfilePage() {
         nextOfKinRelationship: profile.nextOfKinRelationship || "",
         nextOfKinPhone: profile.nextOfKinPhone || "",
         maritalStatus: profile.maritalStatus || "",
+        governmentId: profile.governmentId || "",
+        tin: profile.tin || "",
+        pensionNumber: profile.pensionNumber || "",
+        hmoId: profile.hmoId || "",
+        accountName: profile.accountName || "",
+        accountNumber: profile.accountNumber || "",
+        bankName: profile.bankName || "",
       });
     }
     setEditModalOpen(true);
@@ -282,6 +310,10 @@ export default function ProfilePage() {
                     label="Emergency Contact"
                     value={profile.emergencyContact}
                   />
+                  <InfoRow label="Government ID" value={profile.governmentId} />
+                  <InfoRow label="TIN" value={profile.tin} />
+                  <InfoRow label="Pension Number" value={profile.pensionNumber} />
+                  <InfoRow label="HMO ID" value={profile.hmoId} />
                 </div>
               </CardContent>
             </Card>
@@ -671,6 +703,32 @@ export default function ProfilePage() {
         >
           <div className="space-y-4">
             <Input
+              label="Full Name"
+              required
+              readOnly
+              disabled
+              error={form.formState.errors.fullName?.message}
+              {...form.register("fullName")}
+            />
+            <Input
+              label="Date of Birth"
+              type="date"
+              error={form.formState.errors.dateOfBirth?.message}
+              {...form.register("dateOfBirth")}
+            />
+            <Select
+              label="Gender"
+              options={genderOptions}
+              placeholder="Select gender"
+              error={form.formState.errors.gender?.message}
+              {...form.register("gender")}
+            />
+            <Input
+              label="Nationality"
+              error={form.formState.errors.nationality?.message}
+              {...form.register("nationality")}
+            />
+            <Input
               label="Phone"
               type="tel"
               error={form.formState.errors.phone?.message}
@@ -716,6 +774,50 @@ export default function ProfilePage() {
               error={form.formState.errors.nextOfKinPhone?.message}
               {...form.register("nextOfKinPhone")}
             />
+            <Input
+              label="Government ID"
+              error={form.formState.errors.governmentId?.message}
+              {...form.register("governmentId")}
+            />
+            <Input
+              label="TIN"
+              error={form.formState.errors.tin?.message}
+              {...form.register("tin")}
+            />
+            <Input
+              label="Pension Number"
+              error={form.formState.errors.pensionNumber?.message}
+              {...form.register("pensionNumber")}
+            />
+            <Input
+              label="HMO ID"
+              error={form.formState.errors.hmoId?.message}
+              {...form.register("hmoId")}
+            />
+
+            {/* Bank Details – only editable when empty */}
+            {(!profile?.accountName && !profile?.accountNumber && !profile?.bankName) && (
+              <>
+                <div className="pt-4 border-t">
+                  <p className="text-sm font-medium text-gray-700 mb-3">Bank Details</p>
+                </div>
+                <Input
+                  label="Account Name"
+                  error={form.formState.errors.accountName?.message}
+                  {...form.register("accountName")}
+                />
+                <Input
+                  label="Account Number"
+                  error={form.formState.errors.accountNumber?.message}
+                  {...form.register("accountNumber")}
+                />
+                <Input
+                  label="Bank Name"
+                  error={form.formState.errors.bankName?.message}
+                  {...form.register("bankName")}
+                />
+              </>
+            )}
           </div>
         </Modal>
       </div>

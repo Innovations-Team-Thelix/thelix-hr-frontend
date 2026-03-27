@@ -278,6 +278,7 @@ export function useUpdateMyProfile() {
 
   return useMutation({
     mutationFn: async (data: {
+      // Existing fields
       phone?: string | null;
       address?: string | null;
       personalEmail?: string | null;
@@ -286,6 +287,15 @@ export function useUpdateMyProfile() {
       nextOfKinRelationship?: string | null;
       nextOfKinPhone?: string | null;
       maritalStatus?: string | null;
+      // Newly permitted personal info fields
+      fullName?: string | null;
+      dateOfBirth?: string | null;
+      gender?: string | null;
+      nationality?: string | null;
+      governmentId?: string | null;
+      tin?: string | null;
+      pensionNumber?: string | null;
+      hmoId?: string | null;
     }) => {
       const response = await api.patch<Employee>('/employees/me', data);
       return response.data;

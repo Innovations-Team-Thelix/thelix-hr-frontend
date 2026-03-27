@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -23,6 +23,9 @@ import {
   Pencil,
   Trash2,
   LogOut,
+  Search,
+  ChevronDown,
+  X,
 } from "lucide-react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -40,7 +43,7 @@ import { CurrencyInput } from "@/components/ui/currency-input";
 import { Select } from "@/components/ui/select";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Textarea } from "@/components/ui/textarea";
-import { Skeleton } from "@/components/ui/loading";
+import { Skeleton, Spinner } from "@/components/ui/loading";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { DocumentList } from "@/components/documents/document-list";
 import { UploadDocumentModal } from "@/components/documents/upload-document-modal";
@@ -65,6 +68,7 @@ import {
   useEffectiveRole,
   useAssignSbu,
   useRemoveSbu,
+  useCreateDepartment,
 } from "@/hooks";
 import { useDownloadOfferLetter } from "@/hooks/useOfferLetters";
 import { ProbationActionModal } from "@/components/employees/probation-action-modal";
@@ -200,6 +204,15 @@ export default function EmployeeProfilePage() {
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [probationModalOpen, setProbationModalOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [deptOpen, setDeptOpen] = useState(false);
+  const [deptSearch, setDeptSearch] = useState("");
+  const [deptValue, setDeptValue] = useState("");
+  const [showCreateDept, setShowCreateDept] = useState(false);
+  const [newDeptName, setNewDeptName] = useState("");
+  const [newDeptSbuId, setNewDeptSbuId] = useState("");
+  const [newDeptMinOnsite, setNewDeptMinOnsite] = useState("0");
+  const deptRef = useRef<HTMLDivElement>(null);
+  const createDepartment = useCreateDepartment();
   const [assetModalOpen, setAssetModalOpen] = useState(false);
   const [editingAssetId, setEditingAssetId] = useState<string | null>(null);
   const [assetForm, setAssetForm] = useState({
@@ -339,6 +352,26 @@ export default function EmployeeProfilePage() {
     }
   }, [employee, editModalOpen, editForm, salaryHistory]);
 
+  // Sync deptValue when edit modal opens
+  useEffect(() => {
+    if (editModalOpen && employee) {
+      setDeptValue(employee.department?.id || employee.departmentId || "");
+    }
+  }, [editModalOpen, employee]);
+
+  // Close dept dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (deptRef.current && !deptRef.current.contains(e.target as Node)) {
+        setDeptOpen(false);
+        setShowCreateDept(false);
+        setNewDeptName("");
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const handleEditSubmit = async (data: EditEmployeeFormData) => {
     try {
       // Remove form-only fields that the backend doesn't expect
@@ -463,13 +496,7 @@ export default function EmployeeProfilePage() {
 
   const profileTabs = [
     { id: "personal", label: "Personal" },
-    { id: "employment", label: "Employment" },
-    ...(canViewCompensation
-      ? [
-          { id: "compensation", label: "Compensation" },
-          { id: "salary-history", label: "Salary History" },
-        ]
-      : []),
+    { id: "employment-details", label: "Employment Details" },
     ...(canViewTimeline ? [{ id: "timeline", label: "Timeline" }] : []),
     ...(canViewDiscipline
       ? [
@@ -483,14 +510,13 @@ export default function EmployeeProfilePage() {
           },
         ]
       : []),
-    ...(canViewDocuments ? [{ id: "documents", label: "Documents" }] : []),
+    ...(canViewDocuments || isAdmin ? [{ id: "documents", label: "Documents" }] : []),
     ...(employee?.subordinates?.length ? [{ id: "team", label: "Team" }] : []),
     ...(canViewAttendance ? [{ id: "attendance", label: "Attendance" }] : []),
     ...(isAdmin || isSBUHead || isSelf ? [{
       id: "assets",
       label: `Assets${assets?.length ? ` (${assets.length})` : ""}`,
     }] : []),
-    ...(isAdmin ? [{ id: "offer-letter", label: "Offer Letter" }] : []),
     ...(isAdmin ? [{ id: "audit", label: "Audit Trail" }] : []),
   ];
 
@@ -741,169 +767,171 @@ export default function EmployeeProfilePage() {
         )}
 
         {/* Employment Tab */}
-        {activeTab === "employment" && (
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Employment Details</CardTitle>
-              {isAdmin && employee.probationEndDate && (
-                <Button size="sm" onClick={() => setProbationModalOpen(true)}>
-                  Manage Probation
-                </Button>
-              )}
-            </CardHeader>
-            <CardContent>
-              <dl className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                <InfoField label="Employee ID" value={employee.employeeId} />
-                <InfoField
-                  label="Date of Hire"
-                  value={formatDate(employee.dateOfHire)}
-                />
-                {canViewSensitiveInfo && (
+        {activeTab === "employment-details" && (
+          <div className="space-y-6">
+            {/* Employment Info */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>Employment</CardTitle>
+                {isAdmin && employee.probationEndDate && (
+                  <Button size="sm" onClick={() => setProbationModalOpen(true)}>
+                    Manage Probation
+                  </Button>
+                )}
+              </CardHeader>
+              <CardContent>
+                <dl className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                  <InfoField label="Employee ID" value={employee.employeeId} />
                   <InfoField
-                    label="Employment Type"
+                    label="Date of Hire"
+                    value={formatDate(employee.dateOfHire)}
+                  />
+                  {canViewSensitiveInfo && (
+                    <InfoField
+                      label="Employment Type"
+                      value={
+                        <StatusBadge status={employee.employmentType} />
+                      }
+                    />
+                  )}
+                  <InfoField label="Primary SBU" value={employee.sbu?.name} />
+                  {employee.sbuMemberships && employee.sbuMemberships.filter(m => !m.isPrimary).length > 0 && (
+                    <InfoField
+                      label="Secondary SBUs"
+                      value={
+                        <div className="flex flex-wrap gap-1">
+                          {employee.sbuMemberships
+                            .filter((m) => !m.isPrimary)
+                            .map((m) => (
+                              <Badge key={m.id} variant="info">
+                                {m.sbu.name}
+                              </Badge>
+                            ))}
+                        </div>
+                      }
+                    />
+                  )}
+                  <InfoField
+                    label="Department"
+                    value={employee.department?.name}
+                  />
+                  <InfoField label="Job Title" value={employee.jobTitle} />
+                  <InfoField
+                    label="Supervisor"
+                    value={employee.supervisor?.fullName}
+                  />
+                  {canViewSensitiveInfo && (
+                    <InfoField
+                      label="Work Arrangement"
+                      value={
+                        <StatusBadge status={employee.workArrangement} />
+                      }
+                    />
+                  )}
+                  <InfoField
+                    label="Probation Period"
+                    value={employee.probationPeriod ? `${employee.probationPeriod} Months` : undefined}
+                  />
+                  <InfoField
+                    label="Probation End Date"
+                    value={formatDate(employee.probationEndDate)}
+                  />
+                  <InfoField
+                    label="Probation Status"
                     value={
-                      <StatusBadge status={employee.employmentType} />
+                      employee.probationEndDate ? (
+                        <StatusBadge
+                          status={
+                            new Date(employee.probationEndDate) <
+                            new Date(new Date().setHours(0, 0, 0, 0))
+                              ? "Overdue"
+                              : "Probation"
+                          }
+                        />
+                      ) : employee.probationPeriod && employee.probationPeriod > 0 ? (
+                        <StatusBadge status="Confirmed" />
+                      ) : (
+                        "-"
+                      )
                     }
                   />
-                )}
-                <InfoField label="Primary SBU" value={employee.sbu?.name} />
-                {employee.sbuMemberships && employee.sbuMemberships.filter(m => !m.isPrimary).length > 0 && (
                   <InfoField
-                    label="Secondary SBUs"
+                    label="Employment Status"
                     value={
-                      <div className="flex flex-wrap gap-1">
-                        {employee.sbuMemberships
-                          .filter((m) => !m.isPrimary)
-                          .map((m) => (
-                            <Badge key={m.id} variant="info">
-                              {m.sbu.name}
-                            </Badge>
+                      <StatusBadge status={employee.employmentStatus} />
+                    }
+                  />
+                </dl>
+              </CardContent>
+            </Card>
+
+            {/* Compensation */}
+            {canViewCompensation && (
+              <CompensationSummary
+                salaryBreakdown={employee.salaryBreakdown}
+                currency={employee.currency}
+                monthlySalary={employee.monthlySalary}
+                netPay={employee.netPay}
+                salaryBand={employee.salaryBand}
+                salaryEffectiveDate={employee.salaryEffectiveDate}
+                lastSalaryReview={employee.lastSalaryReview}
+                accountName={employee.accountName}
+                accountNumber={employee.accountNumber}
+                bankName={employee.bankName}
+              />
+            )}
+
+            {/* Salary History */}
+            {canViewCompensation && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Salary History</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {!salaryHistory || salaryHistory.length === 0 ? (
+                    <div className="py-12 text-center text-sm text-gray-500">
+                      No salary history recorded
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm text-left">
+                        <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+                          <tr>
+                            <th className="px-4 py-3 font-medium">Effective Date</th>
+                            <th className="px-4 py-3 font-medium">Base Salary</th>
+                            <th className="px-4 py-3 font-medium">Gross Pay</th>
+                            <th className="px-4 py-3 font-medium">Net Pay</th>
+                            <th className="px-4 py-3 font-medium">Created By</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {salaryHistory.map((record) => (
+                            <tr key={record.id} className="hover:bg-gray-50">
+                              <td className="px-4 py-3 text-gray-900">
+                                {formatDate(record.effectiveDate)}
+                              </td>
+                              <td className="px-4 py-3 text-gray-600">
+                                {formatCurrency(record.baseSalary, employee.currency || "NGN")}
+                              </td>
+                              <td className="px-4 py-3 text-gray-600">
+                                {formatCurrency(record.grossPay, employee.currency || "NGN")}
+                              </td>
+                              <td className="px-4 py-3 text-gray-600">
+                                {formatCurrency(record.netPay, employee.currency || "NGN")}
+                              </td>
+                              <td className="px-4 py-3 text-gray-500">
+                                {record.createdBy?.fullName || record.createdById}
+                              </td>
+                            </tr>
                           ))}
-                      </div>
-                    }
-                  />
-                )}
-                <InfoField
-                  label="Department"
-                  value={employee.department?.name}
-                />
-                <InfoField label="Job Title" value={employee.jobTitle} />
-                <InfoField
-                  label="Supervisor"
-                  value={employee.supervisor?.fullName}
-                />
-                {canViewSensitiveInfo && (
-                  <InfoField
-                    label="Work Arrangement"
-                    value={
-                      <StatusBadge status={employee.workArrangement} />
-                    }
-                  />
-                )}
-                <InfoField
-                  label="Probation Period"
-                  value={employee.probationPeriod ? `${employee.probationPeriod} Months` : undefined}
-                />
-                <InfoField
-                  label="Probation End Date"
-                  value={formatDate(employee.probationEndDate)}
-                />
-                <InfoField
-                  label="Probation Status"
-                  value={
-                    employee.probationEndDate ? (
-                      <StatusBadge
-                        status={
-                          new Date(employee.probationEndDate) <
-                          new Date(new Date().setHours(0, 0, 0, 0))
-                            ? "Overdue"
-                            : "Probation"
-                        }
-                      />
-                    ) : employee.probationPeriod && employee.probationPeriod > 0 ? (
-                      <StatusBadge status="Confirmed" />
-                    ) : (
-                      "-"
-                    )
-                  }
-                />
-                <InfoField
-                  label="Employment Status"
-                  value={
-                    <StatusBadge status={employee.employmentStatus} />
-                  }
-                />
-              </dl>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Compensation Tab */}
-        {activeTab === "compensation" && canViewCompensation && (
-          <CompensationSummary
-            salaryBreakdown={employee.salaryBreakdown}
-            currency={employee.currency}
-            monthlySalary={employee.monthlySalary}
-            netPay={employee.netPay}
-            salaryBand={employee.salaryBand}
-            salaryEffectiveDate={employee.salaryEffectiveDate}
-            lastSalaryReview={employee.lastSalaryReview}
-            accountName={employee.accountName}
-            accountNumber={employee.accountNumber}
-            bankName={employee.bankName}
-          />
-        )}
-
-
-        {/* Salary History Tab */}
-        {activeTab === "salary-history" && canViewCompensation && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Salary History</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {!salaryHistory || salaryHistory.length === 0 ? (
-                <div className="py-12 text-center text-sm text-gray-500">
-                  No salary history recorded
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm text-left">
-                    <thead className="bg-gray-50 text-xs uppercase text-gray-500">
-                      <tr>
-                        <th className="px-4 py-3 font-medium">Effective Date</th>
-                        <th className="px-4 py-3 font-medium">Base Salary</th>
-                        <th className="px-4 py-3 font-medium">Gross Pay</th>
-                        <th className="px-4 py-3 font-medium">Net Pay</th>
-                        <th className="px-4 py-3 font-medium">Created By</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {salaryHistory.map((record) => (
-                        <tr key={record.id} className="hover:bg-gray-50">
-                          <td className="px-4 py-3 text-gray-900">
-                            {formatDate(record.effectiveDate)}
-                          </td>
-                          <td className="px-4 py-3 text-gray-600">
-                            {formatCurrency(record.baseSalary, employee.currency || "NGN")}
-                          </td>
-                          <td className="px-4 py-3 text-gray-600">
-                            {formatCurrency(record.grossPay, employee.currency || "NGN")}
-                          </td>
-                          <td className="px-4 py-3 text-gray-600">
-                            {formatCurrency(record.netPay, employee.currency || "NGN")}
-                          </td>
-                          <td className="px-4 py-3 text-gray-500">
-                            {record.createdBy?.fullName || record.createdById}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+          </div>
         )}
 
         {/* Timeline Tab */}
@@ -1095,21 +1123,124 @@ export default function EmployeeProfilePage() {
           </Card>
         )}
 
-        {/* Documents Tab */}
-        {activeTab === "documents" && canViewDocuments && (
+        {/* Documents Tab (includes Offer Letter for admins) */}
+        {activeTab === "documents" && (canViewDocuments || isAdmin) && (
           <div className="space-y-6">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle>Documents</CardTitle>
-                <Button onClick={() => setUploadModalOpen(true)}>
-                  <Upload className="mr-2 h-4 w-4" />
-                  Upload Document
-                </Button>
-              </CardHeader>
-              <CardContent>
-                <DocumentList employeeId={employeeId} />
-              </CardContent>
-            </Card>
+            {/* Offer Letter (admin only) */}
+            {isAdmin && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Offer Letter</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {employee.offerLetterFileName ? (
+                      <div className="flex items-center justify-between rounded-lg border border-gray-200 p-4">
+                        <div className="flex items-center gap-3">
+                          <FileText className="h-5 w-5 text-blue-600" />
+                          <div>
+                            <p className="font-medium text-gray-900">{employee.offerLetterFileName}</p>
+                            <p className="text-xs text-gray-500">Current offer letter</p>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={async () => {
+                              try {
+                                const url = await downloadOfferLetter.mutateAsync(employeeId);
+                                if (url) window.open(url, "_blank");
+                              } catch (e) {
+                                console.error(e);
+                                toast.error("Failed to download offer letter");
+                              }
+                            }}
+                          >
+                            Download
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={async () => {
+                              if (!confirm("Delete the offer letter?")) return;
+                              try {
+                                await deleteOfferLetter.mutateAsync(employeeId);
+                                toast.success("Offer letter deleted");
+                              } catch {
+                                toast.error("Failed to delete offer letter");
+                              }
+                            }}
+                          >
+                            Delete
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500">No offer letter uploaded</p>
+                    )}
+
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                        {employee.offerLetterFileName ? "Replace" : "Upload"} Offer Letter (PDF)
+                      </label>
+                      <div className="flex items-center gap-3">
+                        <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-600 hover:bg-gray-50">
+                          <Upload className="h-4 w-4" />
+                          Choose PDF
+                          <input
+                            type="file"
+                            accept=".pdf"
+                            className="hidden"
+                            onChange={(e) => {
+                              if (e.target.files?.[0]) {
+                                setOfferLetterFile(e.target.files[0]);
+                              }
+                            }}
+                          />
+                        </label>
+                        {offerLetterFile && (
+                          <span className="text-sm text-gray-500">{offerLetterFile.name}</span>
+                        )}
+                        {offerLetterFile && (
+                          <Button
+                            size="sm"
+                            loading={uploadOfferLetter.isPending}
+                            onClick={async () => {
+                              try {
+                                await uploadOfferLetter.mutateAsync({ employeeId, file: offerLetterFile });
+                                toast.success("Offer letter uploaded");
+                                setOfferLetterFile(null);
+                              } catch {
+                                toast.error("Failed to upload offer letter");
+                              }
+                            }}
+                          >
+                            Upload
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Employee Documents */}
+            {canViewDocuments && (
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <CardTitle>Documents</CardTitle>
+                  <Button onClick={() => setUploadModalOpen(true)}>
+                    <Upload className="mr-2 h-4 w-4" />
+                    Upload Document
+                  </Button>
+                </CardHeader>
+                <CardContent>
+                  <DocumentList employeeId={employeeId} />
+                </CardContent>
+              </Card>
+            )}
           </div>
         )}
 
@@ -1421,105 +1552,6 @@ export default function EmployeeProfilePage() {
         </Modal>
 
         {/* Offer Letter Tab */}
-        {activeTab === "offer-letter" && isAdmin && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Offer Letter</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {employee.offerLetterFileName ? (
-                  <div className="flex items-center justify-between rounded-lg border border-gray-200 p-4">
-                    <div className="flex items-center gap-3">
-                      <FileText className="h-5 w-5 text-blue-600" />
-                      <div>
-                        <p className="font-medium text-gray-900">{employee.offerLetterFileName}</p>
-                        <p className="text-xs text-gray-500">Current offer letter</p>
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={async () => {
-                          try {
-                            const url = await downloadOfferLetter.mutateAsync(employeeId);
-                            if (url) window.open(url, "_blank");
-                          } catch (e) {
-                            console.error(e);
-                            toast.error("Failed to download offer letter");
-                          }
-                        }}
-                      >
-                        Download
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={async () => {
-                          if (!confirm("Delete the offer letter?")) return;
-                          try {
-                            await deleteOfferLetter.mutateAsync(employeeId);
-                            toast.success("Offer letter deleted");
-                          } catch {
-                            toast.error("Failed to delete offer letter");
-                          }
-                        }}
-                      >
-                        Delete
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-500">No offer letter uploaded</p>
-                )}
-
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">
-                    {employee.offerLetterFileName ? "Replace" : "Upload"} Offer Letter (PDF)
-                  </label>
-                  <div className="flex items-center gap-3">
-                    <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-600 hover:bg-gray-50">
-                      <Upload className="h-4 w-4" />
-                      Choose PDF
-                      <input
-                        type="file"
-                        accept=".pdf"
-                        className="hidden"
-                        onChange={(e) => {
-                          if (e.target.files?.[0]) {
-                            setOfferLetterFile(e.target.files[0]);
-                          }
-                        }}
-                      />
-                    </label>
-                    {offerLetterFile && (
-                      <span className="text-sm text-gray-500">{offerLetterFile.name}</span>
-                    )}
-                    {offerLetterFile && (
-                      <Button
-                        size="sm"
-                        loading={uploadOfferLetter.isPending}
-                        onClick={async () => {
-                          try {
-                            await uploadOfferLetter.mutateAsync({ employeeId, file: offerLetterFile });
-                            toast.success("Offer letter uploaded");
-                            setOfferLetterFile(null);
-                          } catch {
-                            toast.error("Failed to upload offer letter");
-                          }
-                        }}
-                      >
-                        Upload
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
         {/* Audit Trail Tab */}
         {activeTab === "audit" && isAdmin && (
           <Card>
@@ -1680,13 +1712,98 @@ export default function EmployeeProfilePage() {
                   value={editSecondarySbuIds}
                   onChange={setEditSecondarySbuIds}
                 />
-                <Select
-                  label="Department"
-                  options={departmentOptions}
-                  placeholder="Select department"
-                  error={editForm.formState.errors.departmentId?.message}
-                  {...editForm.register("departmentId")}
-                />
+                {/* Searchable Department Combobox with inline create */}
+                <div className="flex flex-col gap-1" ref={deptRef}>
+                  <label className="text-sm font-medium text-gray-700">Department</label>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => { setDeptOpen((o) => !o); setDeptSearch(""); }}
+                      className="flex w-full items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-left transition-colors hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-400"
+                    >
+                      <span className={deptValue ? "text-gray-900" : "text-gray-400"}>
+                        {deptValue
+                          ? departmentOptions.find((o) => o.value === deptValue)?.label ?? "Select department"
+                          : "Select department"}
+                      </span>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {deptValue && (
+                          <span
+                            role="button"
+                            tabIndex={0}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeptValue("");
+                              editForm.setValue("departmentId", "");
+                            }}
+                            className="rounded p-0.5 text-gray-400 hover:text-gray-600"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </span>
+                        )}
+                        <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${deptOpen ? "rotate-180" : ""}`} />
+                      </div>
+                    </button>
+
+                    {deptOpen && (
+                      <div className="absolute left-0 top-full z-50 mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg">
+                        <div className="p-2 border-b border-gray-100">
+                          <div className="relative">
+                            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+                            <input
+                              autoFocus
+                              type="text"
+                              placeholder="Search department..."
+                              value={deptSearch}
+                              onChange={(e) => setDeptSearch(e.target.value)}
+                              className="w-full rounded-md border border-gray-200 bg-gray-50 py-1.5 pl-8 pr-3 text-sm text-gray-700 placeholder:text-gray-400 focus:border-primary-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary-400"
+                            />
+                          </div>
+                        </div>
+                        <ul className="max-h-52 overflow-y-auto py-1">
+                          {departmentOptions
+                            .filter((o) =>
+                              o.label.toLowerCase().includes(deptSearch.toLowerCase())
+                            )
+                            .map((o) => (
+                              <li
+                                key={o.value}
+                                onClick={() => {
+                                  setDeptValue(o.value);
+                                  editForm.setValue("departmentId", o.value);
+                                  setDeptOpen(false);
+                                  setDeptSearch("");
+                                }}
+                                className={`cursor-pointer px-3 py-2 text-sm transition-colors hover:bg-primary-50 hover:text-primary-900 ${
+                                  deptValue === o.value ? "bg-primary-50 text-primary-900 font-medium" : "text-gray-700"
+                                }`}
+                              >
+                                {o.label}
+                              </li>
+                            ))}
+                          {departmentOptions.filter((o) =>
+                            o.label.toLowerCase().includes(deptSearch.toLowerCase())
+                          ).length === 0 && (
+                            <li className="px-3 py-4 text-center text-sm text-gray-400">No departments found</li>
+                          )}
+                        </ul>
+                        <div className="border-t border-gray-100 p-2">
+                          <button
+                            type="button"
+                            onClick={() => { setShowCreateDept(true); setNewDeptName(deptSearch); setNewDeptSbuId(selectedSbuId || ""); setNewDeptMinOnsite("0"); setDeptOpen(false); }}
+                            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-primary-600 transition-colors hover:bg-primary-50"
+                          >
+                            <Plus className="h-4 w-4" />
+                            Create new department
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {editForm.formState.errors.departmentId && (
+                    <p className="text-xs text-red-600">{editForm.formState.errors.departmentId.message}</p>
+                  )}
+                </div>
                 <Input
                   label="Job Title"
                   required
@@ -2086,6 +2203,71 @@ export default function EmployeeProfilePage() {
           </div>
         </Modal>
       </div>
+      {/* Add Department Modal */}
+      <Modal
+        isOpen={showCreateDept}
+        onClose={() => { setShowCreateDept(false); setNewDeptName(""); setNewDeptSbuId(""); setNewDeptMinOnsite("0"); }}
+        title="Add Department"
+        size="sm"
+        footer={
+          <div className="flex items-center justify-end gap-2">
+            <button
+              onClick={() => { setShowCreateDept(false); setNewDeptName(""); setNewDeptSbuId(""); setNewDeptMinOnsite("0"); }}
+              className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={async () => {
+                try {
+                  const dept = await createDepartment.mutateAsync({
+                    name: newDeptName.trim(),
+                    sbuId: newDeptSbuId,
+                    minOnsite: parseInt(newDeptMinOnsite) || 0,
+                  });
+                  setDeptValue(dept.id);
+                  editForm.setValue("departmentId", dept.id);
+                  setShowCreateDept(false);
+                  setNewDeptName("");
+                  setNewDeptSbuId("");
+                  setNewDeptMinOnsite("0");
+                  toast.success(`Department "${dept.name}" created`);
+                } catch {
+                  toast.error("Failed to create department");
+                }
+              }}
+              disabled={!newDeptName.trim() || !newDeptSbuId || createDepartment.isPending}
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-600 transition-colors disabled:opacity-60"
+            >
+              {createDepartment.isPending && <Spinner size="sm" />}
+              Create Department
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <Input
+            label="Department Name"
+            placeholder="e.g. Engineering"
+            value={newDeptName}
+            onChange={(e) => setNewDeptName(e.target.value)}
+          />
+          <Select
+            label="SBU"
+            options={sbuOptions}
+            value={newDeptSbuId}
+            onChange={(e) => setNewDeptSbuId(e.target.value)}
+            placeholder="Select SBU"
+          />
+          <Input
+            label="Minimum Onsite Days"
+            type="number"
+            min={0}
+            value={newDeptMinOnsite}
+            onChange={(e) => setNewDeptMinOnsite(e.target.value)}
+          />
+        </div>
+      </Modal>
     </AppLayout>
   );
 }
