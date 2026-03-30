@@ -726,6 +726,7 @@ export default function ProfilePage() {
               label="Gender"
               options={genderOptions}
               placeholder="Select gender"
+              searchable={false}
               error={form.formState.errors.gender?.message}
               {...form.register("gender")}
             />
@@ -760,7 +761,8 @@ export default function ProfilePage() {
             <Select
               label="Marital Status"
               options={maritalStatusOptions}
-              placeholder="Select status"
+              placeholder="Select marital status"
+              searchable={false}
               error={form.formState.errors.maritalStatus?.message}
               {...form.register("maritalStatus")}
             />
