@@ -1599,6 +1599,7 @@ export default function EmployeeProfilePage() {
                   label="Gender"
                   options={genderOptions}
                   placeholder="Select gender"
+                  searchable={false}
                   error={editForm.formState.errors.gender?.message}
                   {...editForm.register("gender")}
                 />
@@ -1634,7 +1635,8 @@ export default function EmployeeProfilePage() {
                 <Select
                   label="Marital Status"
                   options={maritalStatusOptions}
-                  placeholder="Select status"
+                  placeholder="Select marital status"
+                  searchable={false}
                   error={editForm.formState.errors.maritalStatus?.message}
                   {...editForm.register("maritalStatus")}
                 />

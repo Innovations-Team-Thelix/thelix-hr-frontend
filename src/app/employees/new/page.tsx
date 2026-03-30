@@ -7,7 +7,7 @@ import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import toast from "react-hot-toast";
-import { ArrowLeft, Save, Plus, Trash2, UserPlus, Search, ChevronDown, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Save, Plus, Trash2, UserPlus, Search, ChevronDown, X } from "lucide-react";
 import { AppLayout } from "@/components/layout/app-layout";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -40,7 +40,7 @@ const createEmployeeSchema = z.object({
   hmoId: z.string().optional(),
 
   dateOfHire: z.string().min(1, "Date of hire is required"),
-  employmentType: z.string().default("FullTime"),
+  employmentType: z.string().min(1, "Employment type is required"),
   sbuId: z.string().min(1, "SBU is required"),
   departmentId: z.string().min(1, "Department is required"),
   jobTitle: z.string().min(1, "Job title is required"),
@@ -368,6 +368,7 @@ export default function CreateEmployeePage() {
                     label="Gender"
                     options={genderOptions}
                     placeholder="Select gender"
+                    searchable={false}
                     error={errors.gender?.message}
                     {...register("gender")}
                   />
@@ -403,7 +404,8 @@ export default function CreateEmployeePage() {
                   <Select
                     label="Marital Status"
                     options={maritalStatusOptions}
-                    placeholder="Select status"
+                    placeholder="Select marital status"
+                    searchable={false}
                     error={errors.maritalStatus?.message}
                     {...register("maritalStatus")}
                   />
@@ -471,6 +473,7 @@ export default function CreateEmployeePage() {
                   />
                   <Select
                     label="Employment Type"
+                    required
                     options={employmentTypeOptions}
                     error={errors.employmentType?.message}
                     {...register("employmentType")}
@@ -938,7 +941,7 @@ export default function CreateEmployeePage() {
             </div>
           )}
 
-          {/* Submit */}
+          {/* Navigation / Submit */}
           <div className="mt-6 flex items-center justify-end gap-3">
             <Button
               variant="outline"
@@ -948,13 +951,29 @@ export default function CreateEmployeePage() {
             >
               Cancel
             </Button>
-            <Button
-              type="submit"
-              loading={createEmployee.isPending}
-            >
-              <Save className="h-4 w-4" />
-              Create Employee
-            </Button>
+            {activeTab === "compensation" ? (
+              <Button
+                type="submit"
+                loading={createEmployee.isPending}
+              >
+                <Save className="h-4 w-4" />
+                Create Employee
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                onClick={() => {
+                  const tabOrder = formTabs.map((t) => t.id);
+                  const currentIndex = tabOrder.indexOf(activeTab);
+                  if (currentIndex < tabOrder.length - 1) {
+                    setActiveTab(tabOrder[currentIndex + 1]);
+                  }
+                }}
+              >
+                Next
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         </form>
       </div>
