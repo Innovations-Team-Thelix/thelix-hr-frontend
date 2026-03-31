@@ -9,6 +9,8 @@ import { Sidebar } from "./sidebar";
 import { Header } from "./header";
 import { ForcePasswordChangeModal } from "@/components/auth/force-password-change-modal";
 import { WalkthroughModal } from "@/components/auth/walkthrough-modal";
+import { SessionTimeoutModal } from "@/components/auth/session-timeout-modal";
+import { useSessionTimeout } from "@/hooks/useSessionTimeout";
 
 // Routes accessible to Employee role
 const EMPLOYEE_ALLOWED_PREFIXES = [
@@ -37,6 +39,7 @@ export function AppLayout({ children, pageTitle }: AppLayoutProps) {
   const pathname = usePathname();
   const { isAuthenticated, checkAuth, setProfile, viewAs } = useAuth();
   useSocket(); // Real-time notification listener
+  const { showWarning, remainingSeconds, continueSession, handleLogout: sessionLogout } = useSessionTimeout();
 
   const { data: profile } = useMyProfile({ enabled: isAuthenticated });
   useEffect(() => {
@@ -158,6 +161,14 @@ export function AppLayout({ children, pageTitle }: AppLayoutProps) {
         <Header
           onMobileMenuToggle={handleMobileMenuToggle}
           pageTitle={pageTitle}
+        />
+
+        {/* Session inactivity timeout warning */}
+        <SessionTimeoutModal
+          isOpen={showWarning}
+          remainingSeconds={remainingSeconds}
+          onContinue={continueSession}
+          onLogout={sessionLogout}
         />
 
         {/* Force password change on first login — cannot be dismissed */}
