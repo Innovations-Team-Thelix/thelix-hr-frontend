@@ -100,6 +100,23 @@ axiosInstance.interceptors.response.use(
       return Promise.reject(error);
     }
 
+    // ── Session timeout detection ─────────────────────────────
+    const responseMessage = (error.response?.data as { message?: string })?.message;
+    if (
+      error.response?.status === 401 &&
+      responseMessage?.includes('Session timed out')
+    ) {
+      clearTokens();
+      if (typeof window !== 'undefined') {
+        toast.error('Session timed out due to inactivity. Please log in again.', {
+          id: 'session-timeout',
+          duration: 5000,
+        });
+        window.location.href = '/login';
+      }
+      return Promise.reject(error);
+    }
+
     // Only attempt refresh for 401 errors, and not on auth endpoints
     if (
       error.response?.status !== 401 ||
