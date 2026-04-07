@@ -9,6 +9,7 @@ import { z } from "zod";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
+import { useAuth0 } from "@auth0/auth0-react";
 
 function getRoleDashboard(role: string): string {
   switch (role) {
@@ -48,6 +49,7 @@ type MfaFormData = z.infer<typeof mfaSchema>;
 export default function LoginPage() {
   const router = useRouter();
   const { isAuthenticated, user, login, verifyMfa, checkAuth } = useAuth();
+  const { loginWithRedirect: ssoRedirect } = useAuth0();
   const [showPassword, setShowPassword] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);

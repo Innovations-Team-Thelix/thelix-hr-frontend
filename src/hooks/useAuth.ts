@@ -63,6 +63,8 @@ interface AuthState {
   setProfile: (profile: Employee) => void;
   setViewAs: (role: 'Employee' | null) => void;
   clearMustChangePassword: () => void;
+  /** Called by AuthGuard after a successful Auth0 silent login. */
+  ssoLogin: (accessToken: string) => Promise<void>;
 }
 
 // ─── Store ─────────────────────────────────────────────────
@@ -251,36 +253,48 @@ export const useAuth = create<AuthState>((set, get) => ({
     const accessToken = localStorage.getItem('accessToken');
     const storedRefreshToken = localStorage.getItem('refreshToken');
 
-    if (!accessToken || !storedRefreshToken) {
-      set({
-        user: null,
-        token: null,
-        isAuthenticated: false,
-        isLoading: false,
-      });
+    if (!accessToken) {
+      set({ user: null, token: null, isAuthenticated: false, isLoading: false });
       return;
     }
 
-    // If the access token is expired, attempt a refresh
-    if (isTokenExpired(accessToken)) {
+    // If the access token is expired, attempt a refresh (local tokens only)
+    if (isTokenExpired(accessToken) && storedRefreshToken) {
       get()
         .refreshToken()
+        .catch(() => set({ isLoading: false }));
+      return;
+    }
+
+    const decoded = decodeJwt(accessToken);
+
+    // SSO token: has `sub` but no `userId` — fetch identity from backend
+    if (decoded && !decoded.userId && (decoded as unknown as { sub?: string }).sub) {
+      api
+        .get<AuthPayload>('/auth/me')
+        .then((response) => {
+          set({
+            user: response.data,
+            token: accessToken,
+            isAuthenticated: true,
+            isLoading: false,
+          });
+        })
         .catch(() => {
-          set({ isLoading: false });
+          localStorage.removeItem('accessToken');
+          set({ user: null, token: null, isAuthenticated: false, isLoading: false });
         });
       return;
     }
 
-    // Token is still valid -- restore state from it
-    const decoded = decodeJwt(accessToken);
-    if (decoded) {
+    // Local HS256 token — restore state directly from decoded payload
+    if (decoded && decoded.userId) {
       const authPayload: AuthPayload = {
         userId: decoded.userId,
         employeeId: decoded.employeeId,
         role: decoded.role as AuthPayload['role'],
         sbuScopeId: decoded.sbuScopeId,
       };
-
       set({
         user: authPayload,
         token: accessToken,
@@ -289,12 +303,7 @@ export const useAuth = create<AuthState>((set, get) => ({
         mustChangePassword: localStorage.getItem('mustChangePassword') === 'true',
       });
     } else {
-      set({
-        user: null,
-        token: null,
-        isAuthenticated: false,
-        isLoading: false,
-      });
+      set({ user: null, token: null, isAuthenticated: false, isLoading: false });
     }
   },
 
@@ -303,5 +312,22 @@ export const useAuth = create<AuthState>((set, get) => ({
    */
   setProfile: (profile: Employee) => {
     set({ profile });
+  },
+
+  /**
+   * Called by AuthGuard after a successful Auth0 silent login.
+   * Stores the Auth0 access token and fetches the user identity from /auth/me.
+   */
+  ssoLogin: async (accessToken: string) => {
+    localStorage.setItem('accessToken', accessToken);
+    // Fetch user identity from the backend (works for both local and SSO tokens)
+    const response = await api.get<AuthPayload>('/auth/me');
+    const userData = response.data;
+    set({
+      user: userData,
+      token: accessToken,
+      isAuthenticated: true,
+      isLoading: false,
+    });
   },
 }));
