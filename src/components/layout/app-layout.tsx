@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import { useAuth0 } from "@auth0/auth0-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useSocket } from "@/hooks/useSocket";
 import { useMyProfile } from "@/hooks/useEmployees";
@@ -38,6 +39,7 @@ export function AppLayout({ children, pageTitle }: AppLayoutProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { isAuthenticated, checkAuth, setProfile, viewAs } = useAuth();
+  const { isLoading: isSsoLoading, isAuthenticated: isSsoAuthenticated } = useAuth0();
   useSocket(); // Real-time notification listener
   const { showWarning, remainingSeconds, continueSession, handleLogout: sessionLogout } = useSessionTimeout();
 
@@ -65,10 +67,12 @@ export function AppLayout({ children, pageTitle }: AppLayoutProps) {
   }, [checkAuth]);
 
   useEffect(() => {
-    if (mounted && !isAuthenticated) {
+    // Don't redirect while Auth0 is still loading or SSO is authenticated
+    // (AuthGuard will call ssoLogin which sets isAuthenticated via Zustand)
+    if (mounted && !isAuthenticated && !isSsoLoading && !isSsoAuthenticated) {
       router.push("/login");
     }
-  }, [mounted, isAuthenticated, router]);
+  }, [mounted, isAuthenticated, isSsoLoading, isSsoAuthenticated, router]);
 
   // Auto-redirect when switching to Employee view if current route is not accessible
   useEffect(() => {
@@ -117,8 +121,8 @@ export function AppLayout({ children, pageTitle }: AppLayoutProps) {
     setMobileOpen(false);
   }, []);
 
-  // Show nothing while checking auth to avoid flash
-  if (!mounted || !isAuthenticated) {
+  // Show spinner while checking auth — also wait for SSO to finish if Auth0 session exists
+  if (!mounted || !isAuthenticated || isSsoLoading) {
     return (
       <div className="flex h-screen items-center justify-center bg-gray-50">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary-200 border-t-primary-900" />
