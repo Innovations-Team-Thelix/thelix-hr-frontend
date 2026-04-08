@@ -47,6 +47,7 @@ export function useEmployees(
       if (filters.departmentId)
         params.set('departmentId', filters.departmentId);
       if (filters.status) params.set('status', filters.status);
+      if (filters.scope) params.set('scope', filters.scope);
       if (filters.search) params.set('search', filters.search);
       if (filters.sortBy) params.set('sortBy', filters.sortBy);
       if (filters.sortOrder) params.set('sortOrder', filters.sortOrder);
