@@ -299,6 +299,23 @@ export default function LoginPage() {
                       )}
                     </button>
                   </form>
+
+                  <div className="mt-6 flex items-center gap-3">
+                    <div className="h-px flex-1 bg-gray-200" />
+                    <span className="text-xs text-gray-400">or</span>
+                    <div className="h-px flex-1 bg-gray-200" />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => ssoRedirect()}
+                    className="mt-4 flex w-full items-center justify-center gap-2.5 rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 transition-all duration-200 hover:bg-gray-50 active:scale-[0.98]"
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z" fill="#C8622A"/>
+                    </svg>
+                    Sign in with Thelix SSO
+                  </button>
                 </>
               ) : (
                 <>
