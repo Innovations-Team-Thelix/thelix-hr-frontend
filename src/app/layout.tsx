@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "@/styles/globals.css";
+import { Suspense } from "react";
 import { Providers } from "./providers";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 
@@ -22,7 +23,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={inter.variable} suppressHydrationWarning>
       <body className="font-sans antialiased" suppressHydrationWarning>
-        <Providers><AuthGuard>{children}</AuthGuard></Providers>
+        <Providers><Suspense><AuthGuard>{children}</AuthGuard></Suspense></Providers>
       </body>
     </html>
   );
