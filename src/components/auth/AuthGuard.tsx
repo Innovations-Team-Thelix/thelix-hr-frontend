@@ -58,7 +58,12 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     getAccessTokenSilently,
     logout: auth0Logout,
     user: auth0User,
+    error: auth0Error,
   } = useAuth0();
+
+  if (auth0Error) {
+    console.error("[AuthGuard] Auth0 SDK error:", auth0Error);
+  }
 
   const { isAuthenticated: isLocalAuthenticated, ssoLogin, logout } = useAuth();
   const [tokenReady, setTokenReady] = useState(false);
@@ -69,6 +74,21 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!isSsoAuthenticated) setTokenReady(false);
   }, [isSsoAuthenticated]);
+
+  // Log whenever isLoading changes
+  useEffect(() => {
+    console.log("[AuthGuard] isLoading changed →", isLoading, "| isSsoAuthenticated:", isSsoAuthenticated);
+  }, [isLoading, isSsoAuthenticated]);
+
+  // Safety timeout: if Auth0 is still loading after 5s, unblock for local login
+  useEffect(() => {
+    if (!isLoading) return;
+    const timer = setTimeout(() => {
+      console.warn("[AuthGuard] Auth0 isLoading timed out after 5s — unblocking for local login");
+      setTokenReady(true);
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [isLoading]);
 
   useEffect(() => {
     const init = async () => {
