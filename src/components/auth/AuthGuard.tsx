@@ -1,81 +1,126 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth0 } from "@auth0/auth0-react";
 import { useAuth } from "@/hooks/useAuth";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
+
+const PageLoader = () => (
+  <div className="flex h-screen w-full items-center justify-center bg-gray-50">
+    <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-black" />
+  </div>
+);
 
 /**
- * AuthGuard — handles SSO login for users arriving from the SSO dashboard.
+ * AuthGuard — mirrors thelix-orbit's AuthGuard exactly.
  *
- * Two-stage flow:
- *
- * Stage 1 (?sso=1 in URL, not yet authenticated):
- *   Call loginWithRedirect(). Auth0 sees the existing tenant session and
- *   immediately redirects back with an auth code — no login screen shown.
- *
- * Stage 2 (Auth0 has redirected back, isSsoAuthenticated = true):
- *   Call getAccessTokenSilently() to get the token, run ssoLogin() to
- *   store it and set Zustand state, then push to /dashboard.
- *
- * These two stages use separate refs so Stage 1 completing does not
- * block Stage 2 from running.
- *
- * Local login users are never affected — if neither condition applies
- * we do nothing and let the normal login page handle it.
+ * Key behaviours:
+ * 1. BLOCKS rendering until token is ready (prevents app-layout from
+ *    seeing isAuthenticated=false and redirecting to /login).
+ * 2. When Auth0 session exists → getAccessTokenSilently() → ssoLogin() → unblock.
+ * 3. When not authenticated → loginWithRedirect({ prompt: "none" }) for silent login.
+ *    If there is no SSO session, Auth0 returns login_required and we unblock
+ *    (local login page handles it).
+ * 4. Checks for ?code= in URL so we don't call loginWithRedirect while Auth0
+ *    SDK is still exchanging the code.
+ * 5. Local-login users: checkAuth() already set isAuthenticated=true before
+ *    this component runs, so we skip all SSO logic immediately.
  */
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const {
-    isLoading: isSsoLoading,
+    isLoading,
     isAuthenticated: isSsoAuthenticated,
     loginWithRedirect,
     getAccessTokenSilently,
+    error,
   } = useAuth0();
+
   const { isAuthenticated: isLocalAuthenticated, ssoLogin } = useAuth();
   const router = useRouter();
-  const searchParams = useSearchParams();
+  const [tokenReady, setTokenReady] = useState(false);
+  const consentRedirectDone = useRef(false);
 
-  // Prevents calling loginWithRedirect() more than once
-  const didRedirect = useRef(false);
-  // Prevents calling getAccessTokenSilently() + ssoLogin() more than once
-  const didFetchToken = useRef(false);
+  // Reset tokenReady when SSO session ends
+  useEffect(() => {
+    if (!isSsoAuthenticated) setTokenReady(false);
+  }, [isSsoAuthenticated]);
 
   useEffect(() => {
-    if (isSsoLoading) return;
-    if (isLocalAuthenticated) return;
+    const init = async () => {
+      if (isLoading) return;
 
-    // ── Stage 2: Auth0 has completed the redirect, exchange for token ──
-    if (isSsoAuthenticated && !didFetchToken.current) {
-      didFetchToken.current = true;
+      // Local token already valid — no SSO needed, unblock immediately
+      if (isLocalAuthenticated) {
+        setTokenReady(true);
+        return;
+      }
 
-      getAccessTokenSilently()
-        .then(async (token) => {
+      if (isSsoAuthenticated) {
+        // Auth0 session exists — get token, store in Zustand, then unblock
+        try {
+          const token = await getAccessTokenSilently();
           await ssoLogin(token);
-          router.push("/dashboard");
-        })
-        .catch(() => {
-          // Token fetch failed after auth — send to login
-          router.push("/login");
-        });
-      return;
-    }
+          setTokenReady(true);
+        } catch (err: unknown) {
+          const e = err as { error?: string };
+          if (e?.error === "consent_required") {
+            loginWithRedirect();
+          }
+        }
+        return;
+      }
 
-    // ── Stage 1: user arrived with ?sso=1 — trigger the Auth0 redirect ──
-    const comingFromSSO = searchParams.get("sso") === "1";
-    if (comingFromSSO && !isSsoAuthenticated && !didRedirect.current) {
-      didRedirect.current = true;
-      loginWithRedirect();
-    }
+      // Not authenticated — check URL state
+      const params = new URLSearchParams(window.location.search);
+      const urlCode = params.get("code");
+      const urlError = params.get("error");
+
+      // Auth0 just redirected back with a code — SDK is processing it, wait
+      if (urlCode) return;
+
+      // consent_required on return: redirect once, then stop
+      if (urlError === "consent_required") {
+        if (!consentRedirectDone.current) {
+          consentRedirectDone.current = true;
+          loginWithRedirect();
+        }
+        return;
+      }
+
+      // Any other URL error — unblock so the error can be shown
+      if (urlError) {
+        setTokenReady(true);
+        return;
+      }
+
+      // Attempt silent login (prompt:none). If an SSO session exists Auth0
+      // redirects back instantly. If not, Auth0 returns login_required which
+      // we catch and unblock so the local login page can render.
+      try {
+        await loginWithRedirect({
+          authorizationParams: { prompt: "none" },
+        });
+      } catch {
+        // No SSO session — unblock and let local login page handle it
+        setTokenReady(true);
+      }
+    };
+
+    init();
   }, [
-    isSsoLoading,
+    isLoading,
     isSsoAuthenticated,
     isLocalAuthenticated,
-    searchParams,
     getAccessTokenSilently,
     loginWithRedirect,
     ssoLogin,
-    router,
   ]);
+
+  // Block rendering until we know auth state — prevents app-layout from
+  // seeing isAuthenticated=false and bouncing the user to /login
+  if (isLoading || (!tokenReady && !isLocalAuthenticated)) {
+    return <PageLoader />;
+  }
 
   return <>{children}</>;
 }
