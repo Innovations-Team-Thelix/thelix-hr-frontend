@@ -122,12 +122,11 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
       }
 
       // Attempt silent login. If an SSO session exists Auth0 redirects back
-      // instantly. If not, it throws login_required and we unblock for local login.
-      // Pass appState.returnTo so onRedirectCallback knows where to send the user.
+      // to /employee-dashboard (our redirect_uri). If no session exists, it
+      // throws login_required and we unblock for local email/password login.
       try {
         await loginWithRedirect({
           authorizationParams: { prompt: "none" },
-          appState: { returnTo: window.location.pathname === "/" ? "/employee-dashboard" : window.location.pathname },
         });
       } catch {
         setTokenReady(true);

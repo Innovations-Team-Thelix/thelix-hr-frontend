@@ -73,19 +73,18 @@ export function Providers({ children }: ProvidersProps) {
       domain={auth0Domain}
       clientId={auth0ClientId}
       authorizationParams={{
-        redirect_uri: typeof window !== "undefined" ? window.location.origin : "",
+        redirect_uri: typeof window !== "undefined"
+          ? `${window.location.origin}/employee-dashboard`
+          : "",
         audience: auth0Audience,
         scope: "openid profile email offline_access",
       }}
       useRefreshTokens={true}
       cacheLocation="localstorage"
-      onRedirectCallback={(appState) => {
-        // After Auth0 processes the callback code, navigate to the intended page.
-        // history.replaceState alone won't cause Next.js to render a new route,
-        // so we do a full replace navigate. Auth0 session is cached in localstorage
-        // so the next load will have isSsoAuthenticated=true without another redirect.
-        const returnTo = appState?.returnTo || "/employee-dashboard";
-        window.location.replace(returnTo);
+      onRedirectCallback={() => {
+        // Auth0 always redirects back to /employee-dashboard (our redirect_uri).
+        // The SDK cleans up ?code= from the URL automatically.
+        // No navigation needed here — AuthGuard will call ssoLogin once isAuthenticated=true.
       }}
     >
       {content}
