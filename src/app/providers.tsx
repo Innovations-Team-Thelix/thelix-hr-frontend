@@ -80,10 +80,12 @@ export function Providers({ children }: ProvidersProps) {
       useRefreshTokens={true}
       cacheLocation="localstorage"
       onRedirectCallback={(appState) => {
-        // Navigate to the intended destination (or /dashboard) after Auth0 processes the callback.
-        // Without this, the user stays on / which has no page and shows a blank screen.
-        const returnTo = appState?.returnTo || "/dashboard";
-        window.history.replaceState({}, document.title, returnTo);
+        // After Auth0 processes the callback code, navigate to the intended page.
+        // history.replaceState alone won't cause Next.js to render a new route,
+        // so we do a full replace navigate. Auth0 session is cached in localstorage
+        // so the next load will have isSsoAuthenticated=true without another redirect.
+        const returnTo = appState?.returnTo || "/employee-dashboard";
+        window.location.replace(returnTo);
       }}
     >
       {content}
