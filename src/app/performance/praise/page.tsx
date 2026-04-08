@@ -20,7 +20,7 @@ const EMOJI_REACTIONS = ["👏", "🔥", "💪", "🎉", "❤️"];
 export default function PraiseWallPage() {
   const { user } = useAuth();
   const { data: praiseRes, isLoading } = usePraiseWall({ page: 1, limit: 30 });
-  const { data: employees } = useEmployees({});
+  const { data: employees } = useEmployees({ limit: 1000, status: "Active", scope: "all" });
   const postPraise = usePostPraise();
   const reactToPraise = useReactToPraise();
 
