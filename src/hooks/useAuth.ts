@@ -267,6 +267,13 @@ export const useAuth = create<AuthState>((set, get) => ({
       return;
     }
 
+    // If already authenticated (e.g. ssoLogin just ran), don't undo it
+    const current = get();
+    if (current.isAuthenticated && current.token && !isTokenExpired(current.token)) {
+      set({ isLoading: false });
+      return;
+    }
+
     const accessToken = localStorage.getItem('accessToken');
     const storedRefreshToken = localStorage.getItem('refreshToken');
 
