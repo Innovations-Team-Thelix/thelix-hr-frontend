@@ -72,6 +72,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const init = async () => {
+      console.log("[AuthGuard] init", { isLoading, isSsoAuthenticated, isLocalAuthenticated });
       if (isLoading) return;
 
       // Local token already valid — no SSO needed, unblock immediately
@@ -82,16 +83,19 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
 
       if (isSsoAuthenticated) {
         try {
+          console.log("[AuthGuard] SSO authenticated, getting token silently...");
           const token = await getAccessTokenSilently();
+          console.log("[AuthGuard] got token, calling ssoLogin...");
           await ssoLogin(token);
+          console.log("[AuthGuard] ssoLogin success");
           setTokenReady(true);
         } catch (err: unknown) {
+          console.error("[AuthGuard] ssoLogin error:", err);
           const e = err as { error?: string };
           if (e?.error === "consent_required") {
             loginWithRedirect();
             return;
           }
-          // ssoLogin failed — user has no HRIS account, show error screen
           setNoAccount(auth0User?.email ?? null);
           setTokenReady(true);
         }
@@ -102,6 +106,8 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
       const params = new URLSearchParams(window.location.search);
       const urlCode = params.get("code");
       const urlError = params.get("error");
+
+      console.log("[AuthGuard] not SSO authenticated", { urlCode, urlError });
 
       // Auth0 just redirected back with a code — SDK is processing it, wait
       if (urlCode) return;
@@ -124,11 +130,14 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
       // Attempt silent login. If an SSO session exists Auth0 redirects back
       // to /employee-dashboard (our redirect_uri). If no session exists, it
       // throws login_required and we unblock for local email/password login.
+      console.log("[AuthGuard] attempting silent loginWithRedirect...");
       try {
         await loginWithRedirect({
           authorizationParams: { prompt: "none" },
         });
-      } catch {
+        console.log("[AuthGuard] loginWithRedirect resolved (unexpected for redirect)");
+      } catch (err) {
+        console.error("[AuthGuard] loginWithRedirect threw:", err);
         setTokenReady(true);
       }
     };
