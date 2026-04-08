@@ -3,45 +3,78 @@
 import { useEffect, useRef } from "react";
 import { useAuth0 } from "@auth0/auth0-react";
 import { useAuth } from "@/hooks/useAuth";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 /**
- * AuthGuard — silently picks up an existing Auth0 SSO session.
+ * AuthGuard — handles two SSO entry points:
  *
- * When a user arrives from the SSO dashboard they have an active Auth0
- * tenant session but isSsoAuthenticated is still false (the HRIS client
- * hasn't exchanged a token yet). We always attempt getAccessTokenSilently()
- * once the SDK has loaded — if an SSO session exists it succeeds silently
- * and we log the user in. If there is no session it throws and we do nothing,
- * letting the normal local login flow run.
+ * 1. User arrives from SSO dashboard with ?sso=1 in the URL.
+ *    We call loginWithRedirect() which does a full Auth0 redirect.
+ *    Auth0 sees the existing SSO session and immediately redirects back
+ *    with an auth code — no login screen shown.
+ *
+ * 2. After Auth0 redirects back (isSsoAuthenticated = true), we call
+ *    getAccessTokenSilently() to get the token, store it, and send
+ *    the user to the dashboard.
+ *
+ * 3. If neither condition applies (direct visit, local login user),
+ *    we do nothing and let the local login page handle it.
  */
 export function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { isLoading: isSsoLoading, getAccessTokenSilently } = useAuth0();
+  const {
+    isLoading: isSsoLoading,
+    isAuthenticated: isSsoAuthenticated,
+    loginWithRedirect,
+    getAccessTokenSilently,
+  } = useAuth0();
   const { isAuthenticated: isLocalAuthenticated, ssoLogin } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const ran = useRef(false);
 
   useEffect(() => {
-    // Wait for Auth0 SDK to finish its initial check
     if (isSsoLoading) return;
-    // Already authenticated (local token or previous SSO pick-up) — nothing to do
     if (isLocalAuthenticated) return;
-    // Only attempt once per mount
     if (ran.current) return;
 
     ran.current = true;
 
-    getAccessTokenSilently()
-      .then(async (token) => {
-        // Active SSO session found — store token and redirect to dashboard
-        await ssoLogin(token);
-        router.push("/dashboard");
-      })
-      .catch(() => {
-        // No active SSO session — do nothing, local login page handles it
-      });
-  }, [isSsoLoading, isLocalAuthenticated, getAccessTokenSilently, ssoLogin, router]);
+    const comingFromSSO = searchParams.get("sso") === "1";
 
-  // Never block rendering
+    if (isSsoAuthenticated) {
+      // Auth0 has just completed the redirect back — exchange code for token
+      getAccessTokenSilently()
+        .then(async (token) => {
+          await ssoLogin(token);
+          router.push("/dashboard");
+        })
+        .catch(() => {
+          // Token fetch failed after auth — fallback to login
+          router.push("/login");
+        });
+      return;
+    }
+
+    if (comingFromSSO) {
+      // User arrived from SSO dashboard — do a full Auth0 redirect.
+      // Auth0 will see the existing tenant session and redirect back instantly.
+      loginWithRedirect({
+        appState: { returnTo: "/dashboard" },
+      });
+      return;
+    }
+
+    // No SSO param, not authenticated — local login flow takes over
+  }, [
+    isSsoLoading,
+    isSsoAuthenticated,
+    isLocalAuthenticated,
+    searchParams,
+    getAccessTokenSilently,
+    loginWithRedirect,
+    ssoLogin,
+    router,
+  ]);
+
   return <>{children}</>;
 }

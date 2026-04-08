@@ -80,6 +80,12 @@ export function Providers({ children }: ProvidersProps) {
       }}
       useRefreshTokens={true}
       cacheLocation="localstorage"
+      onRedirectCallback={(appState) => {
+        // After Auth0 redirects back, go to the intended destination
+        if (typeof window !== "undefined") {
+          window.location.replace(appState?.returnTo ?? "/dashboard");
+        }
+      }}
     >
       {content}
     </Auth0Provider>
