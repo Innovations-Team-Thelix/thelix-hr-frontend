@@ -489,6 +489,7 @@ function EmployeesPageContent() {
               </button>
 
               {/* Export */}
+              {isAdmin && (
               <div ref={exportRef} className="relative">
                 <button
                   onClick={() => setShowExport(!showExport)}
@@ -505,6 +506,7 @@ function EmployeesPageContent() {
                   </div>
                 )}
               </div>
+              )}
 
               {/* Bulk upload */}
               {isAdmin && (
