@@ -53,6 +53,8 @@ interface AuthState {
   isLoading: boolean;
   viewAs: 'Employee' | null;
   mustChangePassword: boolean;
+  /** True when the current session was established via Auth0 SSO. */
+  isSsoSession: boolean;
 
   // Actions
   login: (email: string, password: string) => Promise<LoginResponse>;
@@ -77,6 +79,7 @@ export const useAuth = create<AuthState>((set, get) => ({
   isLoading: true,
   viewAs: null,
   mustChangePassword: false,
+  isSsoSession: false,
 
   setViewAs: (role) => set({ viewAs: role }),
 
@@ -179,8 +182,12 @@ export const useAuth = create<AuthState>((set, get) => ({
 
   /**
    * Clear all auth state and localStorage. Redirect to login.
+   * For SSO sessions also terminates the Auth0 session so the user
+   * is fully signed out of the Thelix SSO dashboard too.
    */
   logout: () => {
+    const { isSsoSession } = get();
+
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('mustChangePassword');
@@ -193,10 +200,20 @@ export const useAuth = create<AuthState>((set, get) => ({
       isLoading: false,
       viewAs: null,
       mustChangePassword: false,
+      isSsoSession: false,
     });
 
     if (typeof window !== 'undefined') {
-      window.location.href = '/login';
+      if (isSsoSession) {
+        // Redirect to Auth0 logout endpoint — this terminates the SSO browser session
+        // so the user is also signed out of the Thelix SSO dashboard.
+        const domain = process.env.NEXT_PUBLIC_AUTH0_DOMAIN;
+        const clientId = process.env.NEXT_PUBLIC_AUTH0_CLIENT_ID;
+        const returnTo = encodeURIComponent(`${window.location.origin}/login`);
+        window.location.href = `https://${domain}/v2/logout?client_id=${clientId}&returnTo=${returnTo}`;
+      } else {
+        window.location.href = '/login';
+      }
     }
   },
 
@@ -278,6 +295,7 @@ export const useAuth = create<AuthState>((set, get) => ({
             token: accessToken,
             isAuthenticated: true,
             isLoading: false,
+            isSsoSession: true,
           });
         })
         .catch(() => {
@@ -328,6 +346,7 @@ export const useAuth = create<AuthState>((set, get) => ({
       token: accessToken,
       isAuthenticated: true,
       isLoading: false,
+      isSsoSession: true,
     });
   },
 }));

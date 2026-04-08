@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "@/styles/globals.css";
 import { Providers } from "./providers";
+import { AuthGuard } from "@/components/auth/AuthGuard";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -21,7 +22,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={inter.variable} suppressHydrationWarning>
       <body className="font-sans antialiased" suppressHydrationWarning>
-        <Providers>{children}</Providers>
+        <Providers><AuthGuard>{children}</AuthGuard></Providers>
       </body>
     </html>
   );

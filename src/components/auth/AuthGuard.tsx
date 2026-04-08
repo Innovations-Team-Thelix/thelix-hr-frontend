@@ -1,60 +1,56 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useAuth0 } from "@auth0/auth0-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useRouter } from "next/navigation";
 
 /**
- * AuthGuard — wraps SSO-protected pages.
+ * AuthGuard — silently picks up an existing Auth0 SSO session.
  *
- * Attempts a silent Auth0 login on mount. If the user already has an
- * active Auth0 session (arrived via the SSO dashboard), they are logged
- * in automatically without seeing a login prompt. If no session exists,
- * the user is redirected to Auth0 (which in turn redirects to the SSO
- * login page). The acquired token is stored under `accessToken` in
- * localStorage — the same key used by the Axios interceptor in lib/api.ts.
+ * Behaviour:
+ * - If the user arrives from the SSO dashboard they already have an active
+ *   Auth0 session. getAccessTokenSilently() will succeed silently and we
+ *   store the token + redirect to the dashboard.
+ * - If there is NO Auth0 session (direct visit, local login user) we do
+ *   nothing and let the normal local login flow run. We never force-redirect
+ *   to SSO — HRIS supports both local and SSO login.
+ *
+ * The component renders children immediately (no blocking / loading gate)
+ * so local users never experience a delay.
  */
 export function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated: isSsoAuthenticated, isLoading: isSsoLoading, loginWithRedirect, getAccessTokenSilently } = useAuth0();
+  const {
+    isAuthenticated: isSsoAuthenticated,
+    isLoading: isSsoLoading,
+    getAccessTokenSilently,
+  } = useAuth0();
   const { isAuthenticated: isLocalAuthenticated, ssoLogin } = useAuth();
-  const [ssoReady, setSsoReady] = useState(false);
-  const consentRedirected = useRef(false);
+  const router = useRouter();
+  const ran = useRef(false);
 
   useEffect(() => {
-    if (isSsoLoading) return;
+    // Only run once per mount and only when Auth0 SDK has finished loading
+    if (isSsoLoading || ran.current) return;
+    // Already authenticated (local or previous SSO pick-up) — nothing to do
+    if (isLocalAuthenticated) return;
+    // No Auth0 session — let the local login page handle it
+    if (!isSsoAuthenticated) return;
 
-    // Already authenticated locally (local token) — skip SSO check
-    if (isLocalAuthenticated) {
-      setSsoReady(true);
-      return;
-    }
+    ran.current = true;
 
-    if (!isSsoAuthenticated) {
-      // No session at all — redirect to Auth0 (SSO login page)
-      loginWithRedirect();
-      return;
-    }
-
-    // Auth0 session exists — get the access token and store it
     getAccessTokenSilently()
-      .then((token) => {
-        ssoLogin(token);
-        setSsoReady(true);
+      .then(async (token) => {
+        await ssoLogin(token);
+        // Redirect to dashboard after successful SSO pick-up
+        router.push("/dashboard");
       })
-      .catch((err: Error) => {
-        if (err.message?.includes("consent_required") && !consentRedirected.current) {
-          consentRedirected.current = true;
-          loginWithRedirect();
-        } else {
-          // Fallback to login page if token fetch fails
-          window.location.href = "/login";
-        }
+      .catch(() => {
+        // Silent fail — no active Auth0 session or consent issue.
+        // Do nothing; local auth flow will take over.
       });
-  }, [isSsoLoading, isSsoAuthenticated, isLocalAuthenticated, getAccessTokenSilently, loginWithRedirect, ssoLogin]);
+  }, [isSsoLoading, isSsoAuthenticated, isLocalAuthenticated, getAccessTokenSilently, ssoLogin, router]);
 
-  if (!ssoReady && !isLocalAuthenticated) {
-    return null; // or a loading spinner
-  }
-
+  // Never block rendering — children always mount immediately
   return <>{children}</>;
 }
