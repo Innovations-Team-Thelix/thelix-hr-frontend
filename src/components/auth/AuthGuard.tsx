@@ -68,6 +68,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const { isAuthenticated: isLocalAuthenticated, ssoLogin, logout } = useAuth();
   const [tokenReady, setTokenReady] = useState(false);
   const [noAccount, setNoAccount] = useState<string | null>(null);
+  const [auth0TimedOut, setAuth0TimedOut] = useState(false);
   const consentRedirectDone = useRef(false);
 
   // Reset tokenReady when SSO session ends
@@ -85,7 +86,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     if (!isLoading) return;
     const timer = setTimeout(() => {
       console.warn("[AuthGuard] Auth0 isLoading timed out after 5s — unblocking for local login");
-      setTokenReady(true);
+      setAuth0TimedOut(true);
     }, 5000);
     return () => clearTimeout(timer);
   }, [isLoading]);
@@ -173,7 +174,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     ssoLogin,
   ]);
 
-  if (isLoading || (!tokenReady && !isLocalAuthenticated)) {
+  if ((isLoading && !auth0TimedOut) || (!tokenReady && !isLocalAuthenticated && !auth0TimedOut)) {
     return <PageLoader />;
   }
 
