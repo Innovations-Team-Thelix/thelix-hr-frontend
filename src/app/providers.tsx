@@ -5,7 +5,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "react-hot-toast";
 import { ThemeProvider } from "next-themes";
 import { Auth0Provider } from "@auth0/auth0-react";
-
 interface ProvidersProps {
   children: React.ReactNode;
 }
@@ -80,9 +79,11 @@ export function Providers({ children }: ProvidersProps) {
       }}
       useRefreshTokens={true}
       cacheLocation="localstorage"
-      onRedirectCallback={() => {
-        // Do nothing — AuthGuard handles the redirect after ssoLogin() completes
-        // so the token is in Zustand before the dashboard renders
+      onRedirectCallback={(appState) => {
+        // Navigate to the intended destination (or /dashboard) after Auth0 processes the callback.
+        // Without this, the user stays on / which has no page and shows a blank screen.
+        const returnTo = appState?.returnTo || "/dashboard";
+        window.history.replaceState({}, document.title, returnTo);
       }}
     >
       {content}
