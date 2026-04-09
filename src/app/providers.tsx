@@ -1,10 +1,18 @@
 "use client";
 
 import React, { useState } from "react";
+import dynamic from "next/dynamic";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "react-hot-toast";
 import { ThemeProvider } from "next-themes";
-import { Auth0Provider } from "@auth0/auth0-react";
+
+// Load Auth0Provider only on the client — never during SSR.
+// This matches how Orbit sets it up (Vite SPA = browser-only).
+// Without this, Next.js SSR causes Auth0 isLoading to hang forever.
+const Auth0ProviderClient = dynamic(
+  () => import("@/components/auth/Auth0ProviderClient").then((m) => ({ default: m.Auth0ProviderClient })),
+  { ssr: false }
+);
 
 interface ProvidersProps {
   children: React.ReactNode;
@@ -57,24 +65,9 @@ export function Providers({ children }: ProvidersProps) {
     return content;
   }
 
-  const redirectUri = typeof window !== "undefined"
-    ? `${window.location.origin}/employee-dashboard`
-    : "https://hirs.thelixholdings.com/employee-dashboard";
-
   return (
-    <Auth0Provider
-      domain={auth0Domain}
-      clientId={auth0ClientId}
-      authorizationParams={{
-        redirect_uri: redirectUri,
-        audience: auth0Audience,
-        scope: "openid profile email offline_access",
-      }}
-      useRefreshTokens={true}
-      useRefreshTokensFallback={false}
-      cacheLocation="localstorage"
-    >
+    <Auth0ProviderClient domain={auth0Domain} clientId={auth0ClientId} audience={auth0Audience}>
       {content}
-    </Auth0Provider>
+    </Auth0ProviderClient>
   );
 }

@@ -47,30 +47,28 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     getAccessTokenSilently,
     logout: auth0Logout,
     user: auth0User,
+    error,
   } = useAuth0();
 
   const { isAuthenticated: isLocalAuthenticated, ssoLogin, logout } = useAuth();
   const [tokenReady, setTokenReady] = useState(false);
   const [noAccount, setNoAccount] = useState<string | null>(null);
-  const initDone = useRef(false);
+  const consentRedirectDone = useRef(false);
 
   useEffect(() => {
     if (!isSsoAuthenticated) setTokenReady(false);
   }, [isSsoAuthenticated]);
 
   useEffect(() => {
-    if (initDone.current) return;
-    if (isLoading) return;
-    initDone.current = true;
+    const init = async () => {
+      if (isLoading) return;
 
-    const run = async () => {
-      // Already authenticated locally — no SSO needed
+      // Local token valid — no SSO needed
       if (isLocalAuthenticated) {
         setTokenReady(true);
         return;
       }
 
-      // Auth0 has an active session — exchange for HRIS token
       if (isSsoAuthenticated) {
         try {
           const token = await getAccessTokenSilently();
@@ -88,19 +86,18 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // Check URL for Auth0 callback params
       const params = new URLSearchParams(window.location.search);
       const urlCode = params.get("code");
       const urlError = params.get("error");
 
-      // SDK is processing the callback — wait for isLoading/isAuthenticated to update
-      if (urlCode) {
-        initDone.current = false; // allow re-run after SDK processes
-        return;
-      }
+      // SDK is processing the callback — wait
+      if (urlCode) return;
 
       if (urlError === "consent_required") {
-        loginWithRedirect();
+        if (!consentRedirectDone.current) {
+          consentRedirectDone.current = true;
+          loginWithRedirect();
+        }
         return;
       }
 
@@ -109,12 +106,36 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // No local auth, no SSO session, no callback code — unblock for local login
-      setTokenReady(true);
+      // Attempt silent SSO login — matches Orbit's exact pattern
+      try {
+        await loginWithRedirect({
+          authorizationParams: { prompt: "none" },
+          appState: { returnTo: "/employee-dashboard" },
+        });
+      } catch (err) {
+        console.error("Silent authentication failed:", err);
+        setTokenReady(true);
+      }
     };
 
-    run();
+    init();
   }, [isLoading, isSsoAuthenticated, isLocalAuthenticated, auth0User, getAccessTokenSilently, loginWithRedirect, ssoLogin]);
+
+  const urlParams = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+  const urlError = urlParams.get("error");
+  const urlErrorDesc = urlParams.get("error_description");
+
+  if (error || urlError) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen">
+        <h2 className="mb-4 font-semibold">Authentication failed</h2>
+        <p className="mb-2 text-sm text-gray-500">{urlErrorDesc || error?.message || "Unknown error"}</p>
+        <button onClick={() => loginWithRedirect()} className="px-6 py-2 bg-[#C8622A] text-white rounded hover:opacity-90 transition">
+          Log In to HRIS
+        </button>
+      </div>
+    );
+  }
 
   if (isLoading || (!tokenReady && !isLocalAuthenticated)) {
     return <PageLoader />;

@@ -10,20 +10,21 @@ interface Props {
 }
 
 export function Auth0ProviderClient({ domain, clientId, audience, children }: Props) {
-  const redirectUri = typeof window !== "undefined"
-    ? `${window.location.origin}/employee-dashboard`
-    : "https://hirs.thelixholdings.com/employee-dashboard";
-
   return (
     <Auth0Provider
       domain={domain}
       clientId={clientId}
       authorizationParams={{
-        redirect_uri: redirectUri,
+        redirect_uri: window.location.origin,
         audience,
         scope: "openid profile email offline_access",
       }}
+      useRefreshTokens={true}
       cacheLocation="localstorage"
+      onRedirectCallback={(appState) => {
+        // After Auth0 exchanges the code, navigate to the intended page.
+        window.location.replace(appState?.returnTo ?? "/employee-dashboard");
+      }}
     >
       {children}
     </Auth0Provider>
