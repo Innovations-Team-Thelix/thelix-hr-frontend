@@ -223,6 +223,9 @@ export const useAuth = create<AuthState>((set, get) => ({
   refreshToken: async () => {
     const storedRefreshToken = localStorage.getItem('refreshToken');
     if (!storedRefreshToken) {
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.setItem('sso_redirect_reason', `refreshToken(): no storedRefreshToken, calling logout isSso=${get().isSsoSession} at ${new Date().toISOString()}`);
+      }
       get().logout();
       return;
     }
@@ -278,6 +281,9 @@ export const useAuth = create<AuthState>((set, get) => ({
     const storedRefreshToken = localStorage.getItem('refreshToken');
 
     if (!accessToken) {
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.setItem('sso_redirect_reason', `checkAuth: no accessToken in localStorage at ${new Date().toISOString()}`);
+      }
       set({ user: null, token: null, isAuthenticated: false, isLoading: false });
       return;
     }

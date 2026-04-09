@@ -214,6 +214,13 @@ axiosInstance.interceptors.response.use(
       return axiosInstance(originalRequest);
     } catch (refreshError) {
       processQueue(refreshError as AxiosError);
+      if (getIsSsoSession()) {
+        isRefreshing = false;
+        return Promise.reject(refreshError);
+      }
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.setItem('sso_redirect_reason', `interceptor refresh-catch: isSso=${getIsSsoSession()} at ${new Date().toISOString()}`);
+      }
       clearTokens();
       if (typeof window !== 'undefined') {
         window.location.href = '/login';
