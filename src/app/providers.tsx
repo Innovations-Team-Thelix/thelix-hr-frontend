@@ -57,24 +57,20 @@ export function Providers({ children }: ProvidersProps) {
     return content;
   }
 
+  const redirectUri = typeof window !== "undefined"
+    ? `${window.location.origin}/employee-dashboard`
+    : "https://hirs.thelixholdings.com/employee-dashboard";
+
   return (
     <Auth0Provider
       domain={auth0Domain}
       clientId={auth0ClientId}
       authorizationParams={{
-        redirect_uri: typeof window !== "undefined"
-          ? `${window.location.origin}/employee-dashboard`
-          : `https://hirs.thelixholdings.com/employee-dashboard`,
+        redirect_uri: redirectUri,
         audience: auth0Audience,
         scope: "openid profile email offline_access",
       }}
-      useRefreshTokens={true}
-      useRefreshTokensFallback={false}
       cacheLocation="localstorage"
-      skipRedirectCallback={
-        typeof window !== "undefined" &&
-        !window.location.search.includes("code=")
-      }
     >
       {content}
     </Auth0Provider>

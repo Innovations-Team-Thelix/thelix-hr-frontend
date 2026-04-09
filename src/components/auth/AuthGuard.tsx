@@ -21,28 +21,17 @@ const NoAccountScreen = ({ email, onLogout }: { email?: string; onLogout: () => 
       <h1 className="text-xl font-bold text-gray-900">No HRIS Account Found</h1>
       <p className="mt-2 text-sm text-gray-500">
         {email ? (
-          <>
-            <span className="font-medium text-gray-700">{email}</span> does not have an account in the Thelix HRIS system.
-          </>
+          <><span className="font-medium text-gray-700">{email}</span> does not have an account in the Thelix HRIS system.</>
         ) : (
           "Your account does not have access to the Thelix HRIS system."
         )}
       </p>
-      <p className="mt-2 text-sm text-gray-500">
-        Please contact your HR administrator to get access.
-      </p>
+      <p className="mt-2 text-sm text-gray-500">Please contact your HR administrator to get access.</p>
       <div className="mt-6 flex flex-col gap-2">
-        <a
-          href="mailto:hr@thelixholdings.com"
-          className="inline-flex items-center justify-center rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition-colors bg-[#C8622A]"
-        >
+        <a href="mailto:hr@thelixholdings.com" className="inline-flex items-center justify-center rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition-colors bg-[#C8622A]">
           Contact HR Support
         </a>
-        <button
-          type="button"
-          onClick={onLogout}
-          className="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
-        >
+        <button type="button" onClick={onLogout} className="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50">
           Sign out
         </button>
       </div>
@@ -58,60 +47,36 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     getAccessTokenSilently,
     logout: auth0Logout,
     user: auth0User,
-    error: auth0Error,
   } = useAuth0();
-
-  if (auth0Error) {
-    console.error("[AuthGuard] Auth0 SDK error:", auth0Error);
-  }
 
   const { isAuthenticated: isLocalAuthenticated, ssoLogin, logout } = useAuth();
   const [tokenReady, setTokenReady] = useState(false);
   const [noAccount, setNoAccount] = useState<string | null>(null);
-  const [auth0TimedOut, setAuth0TimedOut] = useState(false);
-  const consentRedirectDone = useRef(false);
+  const initDone = useRef(false);
 
-  // Reset tokenReady when SSO session ends
   useEffect(() => {
     if (!isSsoAuthenticated) setTokenReady(false);
   }, [isSsoAuthenticated]);
 
-  // Log whenever isLoading changes
   useEffect(() => {
-    console.log("[AuthGuard] isLoading changed →", isLoading, "| isSsoAuthenticated:", isSsoAuthenticated);
-  }, [isLoading, isSsoAuthenticated]);
+    if (initDone.current) return;
+    if (isLoading) return;
+    initDone.current = true;
 
-  // Safety timeout: if Auth0 is still loading after 5s, unblock for local login
-  useEffect(() => {
-    if (!isLoading) return;
-    const timer = setTimeout(() => {
-      console.warn("[AuthGuard] Auth0 isLoading timed out after 5s — unblocking for local login");
-      setAuth0TimedOut(true);
-    }, 5000);
-    return () => clearTimeout(timer);
-  }, [isLoading]);
-
-  useEffect(() => {
-    const init = async () => {
-      console.log("[AuthGuard] init", { isLoading, isSsoAuthenticated, isLocalAuthenticated });
-      if (isLoading) return;
-
-      // Local token already valid — no SSO needed, unblock immediately
+    const run = async () => {
+      // Already authenticated locally — no SSO needed
       if (isLocalAuthenticated) {
         setTokenReady(true);
         return;
       }
 
+      // Auth0 has an active session — exchange for HRIS token
       if (isSsoAuthenticated) {
         try {
-          console.log("[AuthGuard] SSO authenticated, getting token silently...");
           const token = await getAccessTokenSilently();
-          console.log("[AuthGuard] got token, calling ssoLogin...");
           await ssoLogin(token);
-          console.log("[AuthGuard] ssoLogin success");
           setTokenReady(true);
         } catch (err: unknown) {
-          console.error("[AuthGuard] ssoLogin error:", err);
           const e = err as { error?: string };
           if (e?.error === "consent_required") {
             loginWithRedirect();
@@ -123,58 +88,35 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // Not yet authenticated — check URL state
+      // Check URL for Auth0 callback params
       const params = new URLSearchParams(window.location.search);
       const urlCode = params.get("code");
       const urlError = params.get("error");
 
-      console.log("[AuthGuard] not SSO authenticated", { urlCode, urlError });
-
-      // Auth0 just redirected back with a code — SDK is processing it, wait
-      if (urlCode) return;
-
-      // consent_required on return: redirect once, then stop
-      if (urlError === "consent_required") {
-        if (!consentRedirectDone.current) {
-          consentRedirectDone.current = true;
-          loginWithRedirect();
-        }
+      // SDK is processing the callback — wait for isLoading/isAuthenticated to update
+      if (urlCode) {
+        initDone.current = false; // allow re-run after SDK processes
         return;
       }
 
-      // Any other URL error — unblock so the page can render
+      if (urlError === "consent_required") {
+        loginWithRedirect();
+        return;
+      }
+
       if (urlError) {
         setTokenReady(true);
         return;
       }
 
-      // Attempt silent login. If an SSO session exists Auth0 redirects back
-      // to /employee-dashboard (our redirect_uri). If no session exists, it
-      // throws login_required and we unblock for local email/password login.
-      console.log("[AuthGuard] attempting silent loginWithRedirect...");
-      try {
-        await loginWithRedirect({
-          authorizationParams: { prompt: "none" },
-        });
-        console.log("[AuthGuard] loginWithRedirect resolved (unexpected for redirect)");
-      } catch (err) {
-        console.error("[AuthGuard] loginWithRedirect threw:", err);
-        setTokenReady(true);
-      }
+      // No local auth, no SSO session, no callback code — unblock for local login
+      setTokenReady(true);
     };
 
-    init();
-  }, [
-    isLoading,
-    isSsoAuthenticated,
-    isLocalAuthenticated,
-    auth0User,
-    getAccessTokenSilently,
-    loginWithRedirect,
-    ssoLogin,
-  ]);
+    run();
+  }, [isLoading, isSsoAuthenticated, isLocalAuthenticated, auth0User, getAccessTokenSilently, loginWithRedirect, ssoLogin]);
 
-  if ((isLoading && !auth0TimedOut) || (!tokenReady && !isLocalAuthenticated && !auth0TimedOut)) {
+  if (isLoading || (!tokenReady && !isLocalAuthenticated)) {
     return <PageLoader />;
   }
 
