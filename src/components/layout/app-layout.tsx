@@ -121,8 +121,8 @@ export function AppLayout({ children, pageTitle }: AppLayoutProps) {
     setMobileOpen(false);
   }, []);
 
-  // Show spinner while checking auth — also wait for SSO to finish if Auth0 session exists
-  if (!mounted || !isAuthenticated || isSsoLoading) {
+  // Show spinner only until local auth is confirmed — don't block on isSsoLoading
+  if (!mounted || !isAuthenticated) {
     return (
       <div className="flex h-screen items-center justify-center bg-gray-50">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary-200 border-t-primary-900" />
