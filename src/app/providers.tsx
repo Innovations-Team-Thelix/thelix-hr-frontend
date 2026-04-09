@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "react-hot-toast";
 import { ThemeProvider } from "next-themes";
@@ -24,11 +24,6 @@ export function Providers({ children }: ProvidersProps) {
       })
   );
 
-  // Only mount Auth0Provider on the client to prevent SSR hydration issues
-  // that cause Auth0 isLoading to hang forever in Next.js App Router.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-
   const auth0Domain = process.env.NEXT_PUBLIC_AUTH0_DOMAIN;
   const auth0ClientId = process.env.NEXT_PUBLIC_AUTH0_CLIENT_ID;
   const auth0Audience = process.env.NEXT_PUBLIC_AUTH0_AUDIENCE;
@@ -48,23 +43,17 @@ export function Providers({ children }: ProvidersProps) {
               border: "1px solid #e5e7eb",
               padding: "12px 16px",
               fontSize: "14px",
-              boxShadow:
-                "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
+              boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
             },
-            success: {
-              iconTheme: { primary: "#10b981", secondary: "#ecfdf5" },
-            },
-            error: {
-              iconTheme: { primary: "#ef4444", secondary: "#fef2f2" },
-            },
+            success: { iconTheme: { primary: "#10b981", secondary: "#ecfdf5" } },
+            error: { iconTheme: { primary: "#ef4444", secondary: "#fef2f2" } },
           }}
         />
       </QueryClientProvider>
     </ThemeProvider>
   );
 
-  // Don't mount Auth0Provider until we're on the client
-  if (!mounted || !auth0Domain || !auth0ClientId) {
+  if (!auth0Domain || !auth0ClientId) {
     return content;
   }
 
@@ -73,13 +62,19 @@ export function Providers({ children }: ProvidersProps) {
       domain={auth0Domain}
       clientId={auth0ClientId}
       authorizationParams={{
-        redirect_uri: `${window.location.origin}/employee-dashboard`,
+        redirect_uri: typeof window !== "undefined"
+          ? `${window.location.origin}/employee-dashboard`
+          : `https://hirs.thelixholdings.com/employee-dashboard`,
         audience: auth0Audience,
         scope: "openid profile email offline_access",
       }}
       useRefreshTokens={true}
       useRefreshTokensFallback={false}
       cacheLocation="localstorage"
+      skipRedirectCallback={
+        typeof window !== "undefined" &&
+        !window.location.search.includes("code=")
+      }
     >
       {content}
     </Auth0Provider>
