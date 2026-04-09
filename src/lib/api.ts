@@ -8,7 +8,25 @@ import axios, {
 import toast from 'react-hot-toast';
 // Access Zustand store state outside React components
 import { useAuth } from '@/hooks/useAuth';
-const getIsSsoSession = () => useAuth.getState().isSsoSession;
+
+/**
+ * Returns true if the current session is an Auth0 SSO session.
+ * Checks Zustand state first; falls back to inspecting the token header
+ * so this is reliable even before ssoLogin() completes (race condition guard).
+ * Auth0 tokens are RS256; local HRIS tokens are HS256.
+ */
+function getIsSsoSession(): boolean {
+  if (useAuth.getState().isSsoSession) return true;
+  try {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+    if (!token) return false;
+    const headerB64 = token.split('.')[0].replace(/-/g, '+').replace(/_/g, '/');
+    const header = JSON.parse(atob(headerB64)) as { alg?: string };
+    return header.alg === 'RS256';
+  } catch {
+    return false;
+  }
+}
 
 const BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
