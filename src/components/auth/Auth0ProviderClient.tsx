@@ -19,7 +19,8 @@ function Auth0Guard({ children }: { children: React.ReactNode }) {
   } = useAuth0();
 
   const { isAuthenticated: isLocalAuthenticated, ssoLogin, logout } = useAuth();
-  const [tokenReady, setTokenReady] = useState(false);
+  // Start ready if already locally authenticated (e.g. page refresh with valid localStorage token)
+  const [tokenReady, setTokenReady] = useState(isLocalAuthenticated);
   const [noAccount, setNoAccount] = useState<string | null>(null);
   const consentRedirectDone = useRef(false);
 
