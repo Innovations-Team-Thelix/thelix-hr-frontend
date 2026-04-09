@@ -373,6 +373,8 @@ export const useAuth = create<AuthState>((set, get) => ({
         aud: payload.aud,
         sub: payload.sub,
         email: payload.email,
+        customEmail: payload['https://thelix.com/email'],
+        roles: payload['https://thelix.com/roles'],
         exp: payload.exp,
       }));
     } catch { /* ignore */ }
