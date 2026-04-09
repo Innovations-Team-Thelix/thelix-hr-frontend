@@ -70,6 +70,8 @@ export function Providers({ children }: ProvidersProps) {
         audience: auth0Audience,
         scope: "openid profile email offline_access",
       }}
+      useRefreshTokens={true}
+      useRefreshTokensFallback={false}
       cacheLocation="localstorage"
     >
       {content}
