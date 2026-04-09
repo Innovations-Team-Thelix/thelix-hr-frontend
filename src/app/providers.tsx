@@ -77,13 +77,7 @@ export function Providers({ children }: ProvidersProps) {
         audience: auth0Audience,
         scope: "openid profile email offline_access",
       }}
-      useRefreshTokens={true}
       cacheLocation="localstorage"
-      onRedirectCallback={() => {
-        // Auth0 lands at /employee-dashboard (our redirect_uri).
-        // SDK cleans up ?code= automatically.
-        // AuthGuard handles ssoLogin once isAuthenticated=true.
-      }}
     >
       {content}
     </Auth0Provider>
