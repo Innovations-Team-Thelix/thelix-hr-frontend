@@ -158,6 +158,9 @@ axiosInstance.interceptors.response.use(
           if (getIsSsoSession()) {
             return Promise.reject(error);
           }
+          if (typeof sessionStorage !== 'undefined') {
+            sessionStorage.setItem('sso_redirect_reason', `interceptor outer-if: url=${originalRequest?.url} isSso=${getIsSsoSession()} at ${new Date().toISOString()}`);
+          }
           clearTokens();
           window.location.href = '/login';
           return Promise.reject(error);
@@ -183,6 +186,9 @@ axiosInstance.interceptors.response.use(
       // SSO sessions have no local refresh token — don't redirect.
       if (getIsSsoSession()) {
         return Promise.reject(error);
+      }
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.setItem('sso_redirect_reason', `interceptor no-refresh: url=${originalRequest?.url} isSso=${getIsSsoSession()} at ${new Date().toISOString()}`);
       }
       clearTokens();
       if (typeof window !== 'undefined') {

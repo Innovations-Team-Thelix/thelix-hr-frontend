@@ -292,8 +292,13 @@ export const useAuth = create<AuthState>((set, get) => ({
 
     const decoded = decodeJwt(accessToken);
 
-    // SSO token: has `sub` but no `userId` — fetch identity from backend
+    // SSO token: has `sub` but no `userId`.
+    // Mark as SSO immediately so AppLayout won't redirect while /auth/me is in flight.
+    // ssoLogin() may already be running in Auth0Guard — the early-exit above handles
+    // the case where it already completed. If not yet done, we set isSsoSession=true
+    // here so the rest of the app knows not to redirect.
     if (decoded && !decoded.userId && (decoded as unknown as { sub?: string }).sub) {
+      set({ isSsoSession: true, isLoading: false });
       api
         .get<AuthPayload>('/auth/me')
         .then((response) => {
@@ -306,8 +311,9 @@ export const useAuth = create<AuthState>((set, get) => ({
           });
         })
         .catch(() => {
-          localStorage.removeItem('accessToken');
-          set({ user: null, token: null, isAuthenticated: false, isLoading: false });
+          // Don't clear the token — ssoLogin() may still be in-flight or may have
+          // already succeeded (race). Just mark loading done; Auth0Guard will re-auth.
+          set({ isLoading: false });
         });
       return;
     }

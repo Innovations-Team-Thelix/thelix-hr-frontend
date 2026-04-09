@@ -37,7 +37,7 @@ interface AppLayoutProps {
 export function AppLayout({ children, pageTitle }: AppLayoutProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const { isAuthenticated, checkAuth, setProfile, viewAs } = useAuth();
+  const { isAuthenticated, isSsoSession, isLoading: isAuthLoading, checkAuth, setProfile, viewAs } = useAuth();
   useSocket(); // Real-time notification listener
   const { showWarning, remainingSeconds, continueSession, handleLogout: sessionLogout } = useSessionTimeout();
 
@@ -65,10 +65,15 @@ export function AppLayout({ children, pageTitle }: AppLayoutProps) {
   }, [checkAuth]);
 
   useEffect(() => {
-    if (mounted && !isAuthenticated) {
+    // Never redirect SSO sessions — Auth0Guard (the parent) owns SSO re-auth.
+    // Also wait for auth loading to finish before deciding to redirect.
+    if (mounted && !isAuthenticated && !isSsoSession && !isAuthLoading) {
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.setItem('sso_redirect_reason', `AppLayout: isAuthenticated=false isSsoSession=${isSsoSession} isAuthLoading=${isAuthLoading} at ${new Date().toISOString()}`);
+      }
       router.push("/login");
     }
-  }, [mounted, isAuthenticated, router]);
+  }, [mounted, isAuthenticated, isSsoSession, isAuthLoading, router]);
 
   // Auto-redirect when switching to Employee view if current route is not accessible
   useEffect(() => {
@@ -117,8 +122,8 @@ export function AppLayout({ children, pageTitle }: AppLayoutProps) {
     setMobileOpen(false);
   }, []);
 
-  // Show spinner only until local auth is confirmed — don't block on isSsoLoading
-  if (!mounted || !isAuthenticated) {
+  // Show spinner until mounted and auth is confirmed
+  if (!mounted || (!isAuthenticated && !isSsoSession)) {
     return (
       <div className="flex h-screen items-center justify-center bg-gray-50">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary-200 border-t-primary-900" />
