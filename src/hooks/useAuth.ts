@@ -364,11 +364,22 @@ export const useAuth = create<AuthState>((set, get) => ({
    */
   ssoLogin: async (accessToken: string) => {
     localStorage.setItem('accessToken', accessToken);
-    console.log('[ssoLogin] calling /auth/me...');
+    // Decode token payload for diagnostics (no verification needed here)
+    try {
+      const b64 = accessToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+      const payload = JSON.parse(atob(b64)) as Record<string, unknown>;
+      sessionStorage.setItem('sso_token_info', JSON.stringify({
+        iss: payload.iss,
+        aud: payload.aud,
+        sub: payload.sub,
+        email: payload.email,
+        exp: payload.exp,
+      }));
+    } catch { /* ignore */ }
     try {
       const response = await api.get<AuthPayload>('/auth/me');
       const userData = response.data;
-      console.log('[ssoLogin] /auth/me success:', userData);
+      sessionStorage.setItem('sso_login_result', 'success:' + JSON.stringify(userData));
       set({
         user: userData,
         token: accessToken,
@@ -377,7 +388,8 @@ export const useAuth = create<AuthState>((set, get) => ({
         isSsoSession: true,
       });
     } catch (err) {
-      console.error('[ssoLogin] /auth/me FAILED:', err);
+      const e = err as { response?: { status?: number; data?: unknown } };
+      sessionStorage.setItem('sso_login_result', 'FAILED:' + JSON.stringify({ status: e?.response?.status, data: e?.response?.data }));
       throw err;
     }
   },
