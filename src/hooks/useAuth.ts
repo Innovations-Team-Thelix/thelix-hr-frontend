@@ -281,8 +281,15 @@ export const useAuth = create<AuthState>((set, get) => ({
     const storedRefreshToken = localStorage.getItem('refreshToken');
 
     if (!accessToken) {
-      if (typeof sessionStorage !== 'undefined') {
-        sessionStorage.setItem('sso_redirect_reason', `checkAuth: no accessToken in localStorage at ${new Date().toISOString()}`);
+      // Auth0 SDK (cacheLocation="localstorage") stores its session under @@auth0spajs@@::... keys.
+      // If that cache exists, Auth0Guard is still initialising and will call ssoLogin() shortly.
+      // Don't mark as unauthenticated yet — bail out with isLoading=true and let Auth0Guard win.
+      const hasAuth0Cache = Object.keys(localStorage).some((k) =>
+        k.startsWith('@@auth0spajs@@'),
+      );
+      if (hasAuth0Cache) {
+        set({ isSsoSession: true, isLoading: true });
+        return;
       }
       set({ user: null, token: null, isAuthenticated: false, isLoading: false });
       return;
