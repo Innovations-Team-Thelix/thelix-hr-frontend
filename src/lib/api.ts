@@ -10,22 +10,30 @@ import toast from 'react-hot-toast';
 import { useAuth } from '@/hooks/useAuth';
 
 /**
- * Returns true if the current session is an Auth0 SSO session.
- * Checks Zustand state first; falls back to inspecting the token header
- * so this is reliable even before ssoLogin() completes (race condition guard).
- * Auth0 tokens are RS256; local HRIS tokens are HS256.
+ * Returns true if the current session is (or is becoming) an Auth0 SSO session.
+ * Checks three signals in order:
+ * 1. Zustand isSsoSession flag (set after ssoLogin completes)
+ * 2. Auth0 SDK localStorage cache (@@auth0spajs@@) — present as soon as Auth0
+ *    processes the callback, even before ssoLogin() writes to Zustand
+ * 3. RS256 token header — Auth0 tokens are RS256, local tokens are HS256
  */
 function getIsSsoSession(): boolean {
   if (useAuth.getState().isSsoSession) return true;
-  try {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
-    if (!token) return false;
-    const headerB64 = token.split('.')[0].replace(/-/g, '+').replace(/_/g, '/');
-    const header = JSON.parse(atob(headerB64)) as { alg?: string };
-    return header.alg === 'RS256';
-  } catch {
-    return false;
+  if (typeof window !== 'undefined') {
+    const hasAuth0Cache = Object.keys(localStorage).some((k) =>
+      k.startsWith('@@auth0spajs@@'),
+    );
+    if (hasAuth0Cache) return true;
+    try {
+      const token = localStorage.getItem('accessToken');
+      if (token) {
+        const headerB64 = token.split('.')[0].replace(/-/g, '+').replace(/_/g, '/');
+        const header = JSON.parse(atob(headerB64)) as { alg?: string };
+        if (header.alg === 'RS256') return true;
+      }
+    } catch { /* ignore */ }
   }
+  return false;
 }
 
 const BASE_URL =
