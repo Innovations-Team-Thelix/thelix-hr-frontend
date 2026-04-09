@@ -106,7 +106,12 @@ function Auth0Guard({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (isLoading || (!tokenReady && !isLocalAuthenticated)) {
+  // Block rendering until we know the auth state.
+  // tokenReady=true means: either ssoLogin succeeded (isAuthenticated=true in Zustand),
+  // or ssoLogin failed (noAccount is set), or there's no SSO session at all.
+  // We must NOT render children with tokenReady=false — that would fire all API
+  // requests before the token is in localStorage, causing blanket 401s.
+  if (isLoading || !tokenReady) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-gray-50">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-black" />
