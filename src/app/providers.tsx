@@ -32,9 +32,9 @@ export function Providers({ children }: ProvidersProps) {
       })
   );
 
-  const auth0Domain = process.env.NEXT_PUBLIC_AUTH0_DOMAIN;
-  const auth0ClientId = process.env.NEXT_PUBLIC_AUTH0_CLIENT_ID;
-  const auth0Audience = process.env.NEXT_PUBLIC_AUTH0_AUDIENCE;
+  const auth0Domain = process.env.NEXT_PUBLIC_AUTH0_DOMAIN || "auth.thelixholdings.com";
+  const auth0ClientId = process.env.NEXT_PUBLIC_AUTH0_CLIENT_ID || "a7KNF7CvA4sbYw8Ckwn7gKFvc1WVNDp3";
+  const auth0Audience = process.env.NEXT_PUBLIC_AUTH0_AUDIENCE || "https://api.thelixholdings-apps.com";
 
   const content = (
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
