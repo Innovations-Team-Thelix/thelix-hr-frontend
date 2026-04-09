@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { useAuth0 } from "@auth0/auth0-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useSocket } from "@/hooks/useSocket";
 import { useMyProfile } from "@/hooks/useEmployees";
@@ -39,7 +38,6 @@ export function AppLayout({ children, pageTitle }: AppLayoutProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { isAuthenticated, checkAuth, setProfile, viewAs } = useAuth();
-  const { isLoading: isSsoLoading, isAuthenticated: isSsoAuthenticated } = useAuth0();
   useSocket(); // Real-time notification listener
   const { showWarning, remainingSeconds, continueSession, handleLogout: sessionLogout } = useSessionTimeout();
 
@@ -67,12 +65,10 @@ export function AppLayout({ children, pageTitle }: AppLayoutProps) {
   }, [checkAuth]);
 
   useEffect(() => {
-    console.log("[AppLayout] auth check", { mounted, isAuthenticated, isSsoLoading, isSsoAuthenticated });
-    if (mounted && !isAuthenticated && !isSsoLoading && !isSsoAuthenticated) {
-      console.log("[AppLayout] redirecting to /login");
+    if (mounted && !isAuthenticated) {
       router.push("/login");
     }
-  }, [mounted, isAuthenticated, isSsoLoading, isSsoAuthenticated, router]);
+  }, [mounted, isAuthenticated, router]);
 
   // Auto-redirect when switching to Employee view if current route is not accessible
   useEffect(() => {
