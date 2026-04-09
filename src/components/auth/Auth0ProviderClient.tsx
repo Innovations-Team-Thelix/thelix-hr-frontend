@@ -2,6 +2,7 @@
 
 import { Auth0Provider, useAuth0 } from "@auth0/auth0-react";
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 
 // ─── Inner guard — must be inside Auth0Provider ───────────────
@@ -151,6 +152,7 @@ interface Props {
 }
 
 export function Auth0ProviderClient({ domain, clientId, audience, children }: Props) {
+  const router = useRouter();
   return (
     <Auth0Provider
       domain={domain}
@@ -164,7 +166,9 @@ export function Auth0ProviderClient({ domain, clientId, audience, children }: Pr
       useRefreshTokensFallback={false}
       cacheLocation="localstorage"
       onRedirectCallback={(appState) => {
-        window.location.replace(appState?.returnTo ?? "/employee-dashboard");
+        // Use client-side navigation — avoids a full page reload which would
+        // wipe Zustand state and race checkAuth() against Auth0 re-initialising.
+        router.replace(appState?.returnTo ?? "/employee-dashboard");
       }}
     >
       <Auth0Guard>{children}</Auth0Guard>
