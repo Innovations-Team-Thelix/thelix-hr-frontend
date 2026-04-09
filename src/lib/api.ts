@@ -6,6 +6,9 @@ import axios, {
   InternalAxiosRequestConfig,
 } from 'axios';
 import toast from 'react-hot-toast';
+// Access Zustand store state outside React components
+import { useAuth } from '@/hooks/useAuth';
+const getIsSsoSession = () => useAuth.getState().isSsoSession;
 
 const BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
@@ -132,6 +135,11 @@ axiosInstance.interceptors.response.use(
       ) {
         const refreshToken = getRefreshToken();
         if (!refreshToken) {
+          // SSO sessions have no local refresh token — don't redirect to /login,
+          // the Auth0Guard will handle re-auth via Auth0.
+          if (getIsSsoSession()) {
+            return Promise.reject(error);
+          }
           clearTokens();
           window.location.href = '/login';
           return Promise.reject(error);
@@ -154,6 +162,10 @@ axiosInstance.interceptors.response.use(
 
     if (!refreshToken) {
       isRefreshing = false;
+      // SSO sessions have no local refresh token — don't redirect.
+      if (getIsSsoSession()) {
+        return Promise.reject(error);
+      }
       clearTokens();
       if (typeof window !== 'undefined') {
         window.location.href = '/login';
