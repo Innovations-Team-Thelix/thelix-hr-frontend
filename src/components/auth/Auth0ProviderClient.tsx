@@ -30,6 +30,11 @@ function Auth0Guard({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const init = async () => {
+      sessionStorage.setItem('auth0guard_state', JSON.stringify({
+        isLoading, isSsoAuthenticated, isLocalAuthenticated,
+        url: window.location.href, t: new Date().toISOString()
+      }));
+
       if (isLoading) return;
 
       if (isLocalAuthenticated) {
@@ -39,15 +44,12 @@ function Auth0Guard({ children }: { children: React.ReactNode }) {
 
       if (isSsoAuthenticated) {
         try {
-          console.log('[Auth0Guard] isSsoAuthenticated=true, getting token...');
           const token = await getAccessTokenSilently();
-          console.log('[Auth0Guard] calling ssoLogin...');
           await ssoLogin(token);
-          console.log('[Auth0Guard] ssoLogin succeeded, setting tokenReady');
           setTokenReady(true);
         } catch (err: unknown) {
-          console.error('[Auth0Guard] ssoLogin failed:', err);
           const e = err as { error?: string };
+          sessionStorage.setItem('auth0guard_ssologin_err', JSON.stringify(e));
           if (e?.error === "consent_required") {
             loginWithRedirect();
             return;
@@ -62,6 +64,8 @@ function Auth0Guard({ children }: { children: React.ReactNode }) {
       const urlCode = params.get("code");
       const urlError = params.get("error");
 
+      sessionStorage.setItem('auth0guard_url_params', JSON.stringify({ urlCode: !!urlCode, urlError }));
+
       if (urlCode) return; // SDK is processing callback
 
       if (urlError === "consent_required") {
@@ -73,17 +77,20 @@ function Auth0Guard({ children }: { children: React.ReactNode }) {
       }
 
       if (urlError) {
+        sessionStorage.setItem('auth0guard_url_error', urlError);
         setTokenReady(true);
         return;
       }
 
       // Silent SSO attempt
+      sessionStorage.setItem('auth0guard_silent_attempt', new Date().toISOString());
       try {
         await loginWithRedirect({
           authorizationParams: { prompt: "none" },
           appState: { returnTo: window.location.pathname },
         });
-      } catch {
+      } catch (e) {
+        sessionStorage.setItem('auth0guard_silent_err', String(e));
         setTokenReady(true);
       }
     };
