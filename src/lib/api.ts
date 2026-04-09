@@ -6,35 +6,6 @@ import axios, {
   InternalAxiosRequestConfig,
 } from 'axios';
 import toast from 'react-hot-toast';
-// Access Zustand store state outside React components
-import { useAuth } from '@/hooks/useAuth';
-
-/**
- * Returns true if the current session is (or is becoming) an Auth0 SSO session.
- * Checks three signals in order:
- * 1. Zustand isSsoSession flag (set after ssoLogin completes)
- * 2. Auth0 SDK localStorage cache (@@auth0spajs@@) — present as soon as Auth0
- *    processes the callback, even before ssoLogin() writes to Zustand
- * 3. RS256 token header — Auth0 tokens are RS256, local tokens are HS256
- */
-function getIsSsoSession(): boolean {
-  if (useAuth.getState().isSsoSession) return true;
-  if (typeof window !== 'undefined') {
-    const hasAuth0Cache = Object.keys(localStorage).some((k) =>
-      k.startsWith('@@auth0spajs@@'),
-    );
-    if (hasAuth0Cache) return true;
-    try {
-      const token = localStorage.getItem('accessToken');
-      if (token) {
-        const headerB64 = token.split('.')[0].replace(/-/g, '+').replace(/_/g, '/');
-        const header = JSON.parse(atob(headerB64)) as { alg?: string };
-        if (header.alg === 'RS256') return true;
-      }
-    } catch { /* ignore */ }
-  }
-  return false;
-}
 
 const BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
@@ -129,7 +100,7 @@ axiosInstance.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    // ── Session timeout detection ─────────────────────────────
+    // ── Session timeout (local sessions only) ────────────────
     const responseMessage = (error.response?.data as { message?: string })?.message;
     if (
       error.response?.status === 401 &&
@@ -146,34 +117,21 @@ axiosInstance.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    // Only attempt refresh for 401 errors, and not on auth endpoints
+    // ── Only attempt token refresh for 401s on non-auth endpoints ──
     if (
       error.response?.status !== 401 ||
       !originalRequest ||
       originalRequest._retry ||
       originalRequest.url?.includes('/auth/')
     ) {
-      // Redirect to login on 401 if no refresh available
-      if (
-        error.response?.status === 401 &&
-        typeof window !== 'undefined' &&
-        !originalRequest?.url?.includes('/auth/')
-      ) {
-        const refreshToken = getRefreshToken();
-        if (!refreshToken) {
-          // SSO sessions have no local refresh token — don't redirect to /login,
-          // the Auth0Guard will handle re-auth via Auth0.
-          if (getIsSsoSession()) {
-            return Promise.reject(error);
-          }
-          if (typeof sessionStorage !== 'undefined') {
-            sessionStorage.setItem('sso_redirect_reason', `interceptor outer-if: url=${originalRequest?.url} isSso=${getIsSsoSession()} at ${new Date().toISOString()}`);
-          }
-          clearTokens();
-          window.location.href = '/login';
-          return Promise.reject(error);
-        }
-      }
+      return Promise.reject(error);
+    }
+
+    // If no local refreshToken, just reject — don't redirect.
+    // SSO sessions never have a refreshToken; AppLayout/Auth0Guard handle re-auth.
+    // Local sessions without a refreshToken are already effectively logged out.
+    const refreshToken = getRefreshToken();
+    if (!refreshToken) {
       return Promise.reject(error);
     }
 
@@ -187,24 +145,6 @@ axiosInstance.interceptors.response.use(
     originalRequest._retry = true;
     isRefreshing = true;
 
-    const refreshToken = getRefreshToken();
-
-    if (!refreshToken) {
-      isRefreshing = false;
-      // SSO sessions have no local refresh token — don't redirect.
-      if (getIsSsoSession()) {
-        return Promise.reject(error);
-      }
-      if (typeof sessionStorage !== 'undefined') {
-        sessionStorage.setItem('sso_redirect_reason', `interceptor no-refresh: url=${originalRequest?.url} isSso=${getIsSsoSession()} at ${new Date().toISOString()}`);
-      }
-      clearTokens();
-      if (typeof window !== 'undefined') {
-        window.location.href = '/login';
-      }
-      return Promise.reject(error);
-    }
-
     try {
       const { data } = await axios.post(`${BASE_URL}/auth/refresh`, {
         refreshToken,
@@ -213,7 +153,6 @@ axiosInstance.interceptors.response.use(
       const newAccessToken: string = data.data.accessToken;
       setAccessToken(newAccessToken);
 
-      // Retry the original request with the new token
       if (originalRequest.headers) {
         originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
       }
@@ -222,13 +161,7 @@ axiosInstance.interceptors.response.use(
       return axiosInstance(originalRequest);
     } catch (refreshError) {
       processQueue(refreshError as AxiosError);
-      if (getIsSsoSession()) {
-        isRefreshing = false;
-        return Promise.reject(refreshError);
-      }
-      if (typeof sessionStorage !== 'undefined') {
-        sessionStorage.setItem('sso_redirect_reason', `interceptor refresh-catch: isSso=${getIsSsoSession()} at ${new Date().toISOString()}`);
-      }
+      // Refresh failed for a local session — clear and redirect
       clearTokens();
       if (typeof window !== 'undefined') {
         window.location.href = '/login';
