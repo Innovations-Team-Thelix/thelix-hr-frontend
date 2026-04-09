@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "react-hot-toast";
 import { ThemeProvider } from "next-themes";
 import { Auth0Provider } from "@auth0/auth0-react";
+
 interface ProvidersProps {
   children: React.ReactNode;
 }
@@ -15,7 +16,7 @@ export function Providers({ children }: ProvidersProps) {
       new QueryClient({
         defaultOptions: {
           queries: {
-            staleTime: 5 * 60 * 1000, // 5 minutes
+            staleTime: 5 * 60 * 1000,
             retry: 1,
             refetchOnWindowFocus: false,
           },
@@ -23,11 +24,15 @@ export function Providers({ children }: ProvidersProps) {
       })
   );
 
+  // Only mount Auth0Provider on the client to prevent SSR hydration issues
+  // that cause Auth0 isLoading to hang forever in Next.js App Router.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
   const auth0Domain = process.env.NEXT_PUBLIC_AUTH0_DOMAIN;
   const auth0ClientId = process.env.NEXT_PUBLIC_AUTH0_CLIENT_ID;
   const auth0Audience = process.env.NEXT_PUBLIC_AUTH0_AUDIENCE;
 
-  // Only wrap with Auth0Provider when SSO env vars are configured
   const content = (
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
       <QueryClientProvider client={queryClient}>
@@ -47,16 +52,10 @@ export function Providers({ children }: ProvidersProps) {
                 "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
             },
             success: {
-              iconTheme: {
-                primary: "#10b981",
-                secondary: "#ecfdf5",
-              },
+              iconTheme: { primary: "#10b981", secondary: "#ecfdf5" },
             },
             error: {
-              iconTheme: {
-                primary: "#ef4444",
-                secondary: "#fef2f2",
-              },
+              iconTheme: { primary: "#ef4444", secondary: "#fef2f2" },
             },
           }}
         />
@@ -64,7 +63,8 @@ export function Providers({ children }: ProvidersProps) {
     </ThemeProvider>
   );
 
-  if (!auth0Domain || !auth0ClientId) {
+  // Don't mount Auth0Provider until we're on the client
+  if (!mounted || !auth0Domain || !auth0ClientId) {
     return content;
   }
 
@@ -73,18 +73,16 @@ export function Providers({ children }: ProvidersProps) {
       domain={auth0Domain}
       clientId={auth0ClientId}
       authorizationParams={{
-        redirect_uri: typeof window !== "undefined"
-          ? `${window.location.origin}/employee-dashboard`
-          : "",
+        redirect_uri: `${window.location.origin}/employee-dashboard`,
         audience: auth0Audience,
         scope: "openid profile email offline_access",
       }}
       useRefreshTokens={true}
       cacheLocation="localstorage"
       onRedirectCallback={() => {
-        // Auth0 always redirects back to /employee-dashboard (our redirect_uri).
-        // The SDK cleans up ?code= from the URL automatically.
-        // No navigation needed here — AuthGuard will call ssoLogin once isAuthenticated=true.
+        // Auth0 lands at /employee-dashboard (our redirect_uri).
+        // SDK cleans up ?code= automatically.
+        // AuthGuard handles ssoLogin once isAuthenticated=true.
       }}
     >
       {content}
