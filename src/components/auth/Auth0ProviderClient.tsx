@@ -20,6 +20,7 @@ export function Auth0ProviderClient({ domain, clientId, audience, children }: Pr
         scope: "openid profile email offline_access",
       }}
       useRefreshTokens={true}
+      useRefreshTokensFallback={false}
       cacheLocation="localstorage"
       onRedirectCallback={(appState) => {
         // After Auth0 exchanges the code, navigate to the intended page.

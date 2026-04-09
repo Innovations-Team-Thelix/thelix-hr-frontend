@@ -59,6 +59,21 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     if (!isSsoAuthenticated) setTokenReady(false);
   }, [isSsoAuthenticated]);
 
+  // If Auth0 isLoading hangs for >4s (iframe blocked), force a full redirect to Auth0.
+  // This handles the case where Auth0ProviderClient hasn't mounted yet or iframe is blocked.
+  useEffect(() => {
+    if (!isLoading || isLocalAuthenticated) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("code") || params.get("error")) return; // already in callback
+    const timer = setTimeout(() => {
+      loginWithRedirect({
+        authorizationParams: { prompt: "none" },
+        appState: { returnTo: window.location.pathname },
+      });
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, [isLoading, isLocalAuthenticated, loginWithRedirect]);
+
   useEffect(() => {
     const init = async () => {
       if (isLoading) return;
