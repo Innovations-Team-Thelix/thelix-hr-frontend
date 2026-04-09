@@ -65,6 +65,8 @@ export function Providers({ children }: ProvidersProps) {
     return content;
   }
 
+  // Auth0ProviderClient includes Auth0Guard inside it (loaded client-only via dynamic import).
+  // Children are passed through Auth0Guard which handles SSO before rendering them.
   return (
     <Auth0ProviderClient domain={auth0Domain} clientId={auth0ClientId} audience={auth0Audience}>
       {content}
