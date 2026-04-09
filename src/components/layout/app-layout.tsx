@@ -67,9 +67,9 @@ export function AppLayout({ children, pageTitle }: AppLayoutProps) {
   }, [checkAuth]);
 
   useEffect(() => {
-    // Don't redirect while Auth0 is still loading or SSO is authenticated
-    // (AuthGuard will call ssoLogin which sets isAuthenticated via Zustand)
+    console.log("[AppLayout] auth check", { mounted, isAuthenticated, isSsoLoading, isSsoAuthenticated });
     if (mounted && !isAuthenticated && !isSsoLoading && !isSsoAuthenticated) {
+      console.log("[AppLayout] redirecting to /login");
       router.push("/login");
     }
   }, [mounted, isAuthenticated, isSsoLoading, isSsoAuthenticated, router]);
