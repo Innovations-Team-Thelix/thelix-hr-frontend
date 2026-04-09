@@ -8,6 +8,12 @@ import { useAuth } from "@/hooks/useAuth";
 // ─── Inner guard — must be inside Auth0Provider ───────────────
 
 function Auth0Guard({ children }: { children: React.ReactNode }) {
+  // This runs synchronously on every render — if it's null after redirect,
+  // Auth0Guard never mounted at all.
+  if (typeof window !== 'undefined') {
+    sessionStorage.setItem('auth0guard_mounted', new Date().toISOString());
+  }
+
   const {
     isLoading,
     isAuthenticated: isSsoAuthenticated,

@@ -61,7 +61,17 @@ export function Providers({ children }: ProvidersProps) {
     </ThemeProvider>
   );
 
+  if (typeof window !== 'undefined') {
+    sessionStorage.setItem('providers_auth0_vars', JSON.stringify({
+      hasDomain: !!auth0Domain, domain: auth0Domain,
+      hasClientId: !!auth0ClientId, clientId: auth0ClientId,
+    }));
+  }
+
   if (!auth0Domain || !auth0ClientId) {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('providers_auth0_skipped', 'true — missing domain or clientId');
+    }
     return content;
   }
 
