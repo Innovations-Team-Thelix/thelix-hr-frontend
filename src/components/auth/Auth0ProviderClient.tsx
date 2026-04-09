@@ -37,16 +37,20 @@ function Auth0Guard({ children }: { children: React.ReactNode }) {
 
       if (isSsoAuthenticated) {
         try {
+          console.log('[Auth0Guard] isSsoAuthenticated=true, getting token...');
           const token = await getAccessTokenSilently();
+          console.log('[Auth0Guard] calling ssoLogin...');
           await ssoLogin(token);
+          console.log('[Auth0Guard] ssoLogin succeeded, setting tokenReady');
           setTokenReady(true);
         } catch (err: unknown) {
+          console.error('[Auth0Guard] ssoLogin failed:', err);
           const e = err as { error?: string };
           if (e?.error === "consent_required") {
             loginWithRedirect();
             return;
           }
-          setNoAccount(auth0User?.email ?? null);
+          setNoAccount(auth0User?.email ?? "unknown");
           setTokenReady(true);
         }
         return;

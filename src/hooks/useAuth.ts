@@ -345,15 +345,21 @@ export const useAuth = create<AuthState>((set, get) => ({
    */
   ssoLogin: async (accessToken: string) => {
     localStorage.setItem('accessToken', accessToken);
-    // Fetch user identity from the backend (works for both local and SSO tokens)
-    const response = await api.get<AuthPayload>('/auth/me');
-    const userData = response.data;
-    set({
-      user: userData,
-      token: accessToken,
-      isAuthenticated: true,
-      isLoading: false,
-      isSsoSession: true,
-    });
+    console.log('[ssoLogin] calling /auth/me...');
+    try {
+      const response = await api.get<AuthPayload>('/auth/me');
+      const userData = response.data;
+      console.log('[ssoLogin] /auth/me success:', userData);
+      set({
+        user: userData,
+        token: accessToken,
+        isAuthenticated: true,
+        isLoading: false,
+        isSsoSession: true,
+      });
+    } catch (err) {
+      console.error('[ssoLogin] /auth/me FAILED:', err);
+      throw err;
+    }
   },
 }));
