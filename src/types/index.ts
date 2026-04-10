@@ -248,6 +248,8 @@ export interface LeaveRequest {
   createdAt: string;
 
   // Relations
+  relieveOfficerId?: string | null;
+  relieveOfficer?: Pick<Employee, 'id' | 'fullName'> | null;
   employee?: Pick<Employee, 'id' | 'employeeId' | 'fullName' | 'jobTitle' | 'sbuId'> & {
     sbu?: Sbu;
   };
