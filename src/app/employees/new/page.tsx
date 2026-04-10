@@ -336,7 +336,14 @@ export default function CreateEmployeePage() {
           </div>
         </div>
 
-        <form onSubmit={handleSubmit(onSubmit, onFormError)}>
+        <form
+          onSubmit={handleSubmit(onSubmit, onFormError)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.target as HTMLElement).tagName !== "TEXTAREA") {
+              e.preventDefault();
+            }
+          }}
+        >
           <Tabs
             tabs={formTabs}
             activeTab={activeTab}

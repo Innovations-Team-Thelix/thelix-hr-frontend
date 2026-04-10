@@ -52,6 +52,7 @@ import {
   useCancelLeave as useCancelLeaveRequest,
   useSupervisorAction,
   useHrAction,
+  useRelieverAction,
   useSendApprovalReminder,
 } from "@/hooks/useLeave";
 import { useEmployees } from "@/hooks/useEmployees";
@@ -65,6 +66,7 @@ const createLeaveSchema = z
     startDate: z.string().min(1, "Start date is required"),
     endDate: z.string().min(1, "End date is required"),
     reason: z.string().optional(),
+    handoverNote: z.string().optional(),
     relieveOfficerId: z.string().min(1, "Relieve officer is required"),
     attachments: z.any().optional(),
   })
@@ -109,6 +111,7 @@ export default function LeavePage() {
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
   const [rejectTargetId, setRejectTargetId] = useState<string | null>(null);
   const [rejectNote, setRejectNote] = useState("");
+  const [rejectType, setRejectType] = useState<"approval" | "reliever">("approval");
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [detailRequest, setDetailRequest] = useState<LeaveRequest | null>(null);
   const [calendarMonth, setCalendarMonth] = useState<{
@@ -140,6 +143,15 @@ export default function LeavePage() {
   // My requests
   const { data: myRequestsData, isLoading: myRequestsLoading } =
     useLeaveRequests({ page: myPage, limit: 10 });
+
+  // Reliever requests (where I'm the relieve officer)
+  const { data: relieverData, isLoading: relieverLoading } = useLeaveRequests({
+    status: "Pending",
+    stage: "reliever",
+    page: 1,
+    limit: 10,
+  });
+  const hasRelieverRequests = (relieverData?.data?.length ?? 0) > 0;
 
   // Approval queue (pending requests) — scoped by role stage
   const approvalStage = isAdmin ? "hr" as const : "supervisor" as const;
@@ -183,6 +195,7 @@ export default function LeavePage() {
   const cancelLeave = useCancelLeaveRequest();
   const supervisorAction = useSupervisorAction();
   const hrAction = useHrAction();
+  const relieverActionMutation = useRelieverAction();
   const sendReminder = useSendApprovalReminder();
 
   const form = useForm<CreateLeaveFormData>({
@@ -206,6 +219,9 @@ export default function LeavePage() {
 
   const tabs = [
     { id: "my-requests", label: "My Requests" },
+    ...(hasRelieverRequests
+      ? [{ id: "reliever-queue", label: `Reliever Requests (${relieverData?.data?.length || 0})` }]
+      : []),
     ...(canApprove
       ? [{ id: "approval-queue", label: "Approval Queue" }]
       : []),
@@ -223,6 +239,7 @@ export default function LeavePage() {
         startDate: data.startDate,
         endDate: data.endDate,
         reason: data.reason || undefined,
+        handoverNote: data.handoverNote || undefined,
         relieveOfficerId: data.relieveOfficerId,
         attachments,
       });
@@ -264,18 +281,23 @@ export default function LeavePage() {
   const handleRejectConfirm = async () => {
     if (!rejectTargetId) return;
     try {
-      if (isAdmin) {
+      if (rejectType === "reliever") {
+        await relieverActionMutation.mutateAsync({ id: rejectTargetId, action: "Rejected", note: rejectNote || undefined });
+        toast.success("Reliever request declined");
+      } else if (isAdmin) {
         await hrAction.mutateAsync({ id: rejectTargetId, action: "Rejected", note: rejectNote || undefined });
+        toast.success("Leave request rejected");
       } else {
         await supervisorAction.mutateAsync({ id: rejectTargetId, action: "Rejected", note: rejectNote || undefined });
+        toast.success("Leave request rejected");
       }
-      toast.success("Leave request rejected");
     } catch {
-      toast.error("Failed to reject request");
+      toast.error("Failed to process action");
     } finally {
       setRejectModalOpen(false);
       setRejectTargetId(null);
       setRejectNote("");
+      setRejectType("approval");
     }
   };
 
@@ -491,6 +513,103 @@ export default function LeavePage() {
                         />
                       </div>
                     )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Reliever Queue Tab */}
+            {activeTab === "reliever-queue" && (
+              <Card className="mt-4">
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Employee</TableHead>
+                        <TableHead>Leave Type</TableHead>
+                        <TableHead>Start Date</TableHead>
+                        <TableHead>End Date</TableHead>
+                        <TableHead>Days</TableHead>
+                        <TableHead>Handover Note</TableHead>
+                        <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {relieverLoading ? (
+                        Array.from({ length: 3 }).map((_, i) => (
+                          <TableRow key={i}>
+                            {Array.from({ length: 7 }).map((_, j) => (
+                              <TableCell key={j}>
+                                <Skeleton className="h-4 w-full" />
+                              </TableCell>
+                            ))}
+                          </TableRow>
+                        ))
+                      ) : !relieverData?.data.length ? (
+                        <TableRow>
+                          <TableCell colSpan={7} className="py-8 text-center text-sm text-gray-500">
+                            No pending reliever requests
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        relieverData.data.map((req) => (
+                          <TableRow key={req.id}>
+                            <TableCell>
+                              <div className="flex flex-col">
+                                <span className="font-medium text-gray-900">{req.employee?.fullName}</span>
+                                <span className="text-xs text-gray-500">{req.employee?.jobTitle}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <span className={cn(
+                                "inline-flex w-fit items-center rounded-full px-2 py-0.5 text-xs font-medium",
+                                LEAVE_TYPE_COLORS[req.leaveType?.name || ""] || "bg-gray-100 text-gray-700"
+                              )}>
+                                {req.leaveType?.name || "Leave"}
+                              </span>
+                            </TableCell>
+                            <TableCell>{formatDate(req.startDate)}</TableCell>
+                            <TableCell>{formatDate(req.endDate)}</TableCell>
+                            <TableCell>{req.daysCount}</TableCell>
+                            <TableCell>
+                              <span className="text-sm text-gray-500 whitespace-normal break-words">
+                                {req.handoverNote || "-"}
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 px-2 text-green-600 hover:text-green-700 hover:bg-green-50"
+                                  onClick={async () => {
+                                    try {
+                                      await relieverActionMutation.mutateAsync({ id: req.id, action: "Approved" });
+                                    } catch { /* handled by hook */ }
+                                  }}
+                                >
+                                  <Check className="h-3.5 w-3.5 mr-1" />
+                                  Accept
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  onClick={() => {
+                                    setRejectTargetId(req.id);
+                                    setRejectType("reliever");
+                                    setRejectModalOpen(true);
+                                  }}
+                                >
+                                  <X className="h-3.5 w-3.5 mr-1" />
+                                  Decline
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
                 </CardContent>
               </Card>
             )}
@@ -936,7 +1055,14 @@ export default function LeavePage() {
               error={form.formState.errors.relieveOfficerId?.message}
               {...form.register("relieveOfficerId")}
             />
-            
+
+            <Textarea
+              label="Handover Note (optional)"
+              rows={3}
+              placeholder="Describe tasks or responsibilities to hand over..."
+              {...form.register("handoverNote")}
+            />
+
             <div className="w-full">
               <label
                 className="mb-1.5 block text-sm font-medium text-gray-700"
@@ -1076,13 +1202,65 @@ export default function LeavePage() {
                     <p className="font-medium text-gray-900">{detailRequest.reason}</p>
                   </div>
                 )}
+                {detailRequest.handoverNote && (
+                  <div className="col-span-2">
+                    <span className="text-gray-500">Handover Note</span>
+                    <p className="font-medium text-gray-900">{detailRequest.handoverNote}</p>
+                  </div>
+                )}
+                {detailRequest.relieveOfficer && (
+                  <div>
+                    <span className="text-gray-500">Relieve Officer</span>
+                    <p className="font-medium text-gray-900">{detailRequest.relieveOfficer.fullName}</p>
+                  </div>
+                )}
               </div>
 
-              {/* Approval Progress */}
+              {/* Approval Progress — 3 steps */}
               <div className="border-t pt-4">
                 <h4 className="mb-3 text-sm font-semibold text-gray-900">Approval Progress</h4>
                 <div className="space-y-3">
-                  {/* Supervisor Step */}
+                  {/* Step 1: Reliever */}
+                  {detailRequest.relieveOfficerId && (
+                  <div className="flex items-start gap-3">
+                    <div className={cn(
+                      "mt-0.5 flex h-6 w-6 items-center justify-center rounded-full",
+                      detailRequest.relieverAction === "Approved" ? "bg-green-100 text-green-600" :
+                      detailRequest.relieverAction === "Rejected" ? "bg-red-100 text-red-600" :
+                      "bg-gray-100 text-gray-400"
+                    )}>
+                      {detailRequest.relieverAction === "Approved" ? <Check className="h-3.5 w-3.5" /> :
+                       detailRequest.relieverAction === "Rejected" ? <X className="h-3.5 w-3.5" /> :
+                       <span className="text-xs font-medium">1</span>}
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-gray-900">Relieve Officer</p>
+                      {detailRequest.relieverAction ? (
+                        <div className="mt-0.5">
+                          <p className="text-xs text-gray-500">
+                            <StatusBadge status={detailRequest.relieverAction === "Approved" ? "Approved" : "Rejected"} />
+                            {detailRequest.relieveOfficer && (
+                              <span className="ml-1">by {detailRequest.relieveOfficer.fullName}</span>
+                            )}
+                            {detailRequest.relieverActionAt && (
+                              <span className="ml-1">on {formatDate(detailRequest.relieverActionAt)}</span>
+                            )}
+                          </p>
+                          {detailRequest.relieverNote && (
+                            <div className="mt-1.5 flex items-start gap-1.5 rounded-md bg-red-50 px-3 py-2">
+                              <MessageSquare className="mt-0.5 h-3.5 w-3.5 text-red-400 shrink-0" />
+                              <p className="text-xs text-red-700">{detailRequest.relieverNote}</p>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="mt-0.5 text-xs text-gray-400">Awaiting reliever response</p>
+                      )}
+                    </div>
+                  </div>
+                  )}
+
+                  {/* Step 2: Supervisor */}
                   <div className="flex items-start gap-3">
                     <div className={cn(
                       "mt-0.5 flex h-6 w-6 items-center justify-center rounded-full",
@@ -1092,7 +1270,7 @@ export default function LeavePage() {
                     )}>
                       {detailRequest.supervisorAction === "Approved" ? <Check className="h-3.5 w-3.5" /> :
                        detailRequest.supervisorAction === "Rejected" ? <X className="h-3.5 w-3.5" /> :
-                       <span className="text-xs font-medium">1</span>}
+                       <span className="text-xs font-medium">{detailRequest.relieveOfficerId ? "2" : "1"}</span>}
                     </div>
                     <div className="flex-1">
                       <p className="text-sm font-medium text-gray-900">Supervisor Review</p>
@@ -1115,12 +1293,15 @@ export default function LeavePage() {
                           )}
                         </div>
                       ) : (
-                        <p className="mt-0.5 text-xs text-gray-400">Pending</p>
+                        <p className="mt-0.5 text-xs text-gray-400">
+                          {detailRequest.relieverAction === "Approved" ? "Awaiting supervisor review" :
+                           !detailRequest.relieveOfficerId ? "Pending" : "Waiting for reliever"}
+                        </p>
                       )}
                     </div>
                   </div>
 
-                  {/* HR Step */}
+                  {/* Step 3: HR */}
                   <div className="flex items-start gap-3">
                     <div className={cn(
                       "mt-0.5 flex h-6 w-6 items-center justify-center rounded-full",
@@ -1130,7 +1311,7 @@ export default function LeavePage() {
                     )}>
                       {detailRequest.hrAction === "Approved" ? <Check className="h-3.5 w-3.5" /> :
                        detailRequest.hrAction === "Rejected" ? <X className="h-3.5 w-3.5" /> :
-                       <span className="text-xs font-medium">2</span>}
+                       <span className="text-xs font-medium">{detailRequest.relieveOfficerId ? "3" : "2"}</span>}
                     </div>
                     <div className="flex-1">
                       <p className="text-sm font-medium text-gray-900">HR Review</p>

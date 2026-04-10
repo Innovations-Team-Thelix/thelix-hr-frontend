@@ -220,7 +220,13 @@ export interface LeaveRequest {
   endDate: string;
   daysCount: number;
   reason: string | null;
+  handoverNote: string | null;
   status: LeaveStatus;
+
+  // Reliever action
+  relieverAction: LeaveStatus | null;
+  relieverActionAt: string | null;
+  relieverNote: string | null;
 
   // Return to work
   actualReturnDate: string | null;
@@ -415,7 +421,7 @@ export interface LeaveRequestFilters {
   limit?: number;
   employeeId?: string;
   status?: LeaveStatus;
-  stage?: 'supervisor' | 'hr';
+  stage?: 'reliever' | 'supervisor' | 'hr';
   startDate?: string;
   endDate?: string;
 }

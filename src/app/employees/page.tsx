@@ -1,8 +1,8 @@
 "use client";
 
-import React, { Suspense, useState, useCallback, useRef } from "react";
+import React, { Suspense, useState, useCallback, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import {
   Plus, Users, Upload, Download, X, FileSpreadsheet,
   AlertCircle, CheckCircle2, Trash2, Search, SlidersHorizontal,
@@ -46,9 +46,8 @@ export default function EmployeesPage() {
 
 function EmployeesPageContent() {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
-  const joinedParam = searchParams.get("joined") as "this_month" | "last_month" | "this_year" | null;
-  const statusParam = searchParams.get("status") as EmployeeFilters["status"] | null;
 
   const { user } = useAuth();
   const effectiveRole = useEffectiveRole();
@@ -56,13 +55,50 @@ function EmployeesPageContent() {
   const isSbuHead = effectiveRole === "SBUHead";
   const sbuHeadScopeId = isSbuHead ? (user?.sbuScopeId ?? undefined) : undefined;
 
-  const [filters, setFilters] = useState<EmployeeFilters>({
-    page: 1,
-    limit: 10,
-    joined: joinedParam || undefined,
-    status: statusParam || undefined,
-    sbuId: sbuHeadScopeId,
-  });
+  // Initialize filters from URL search params
+  const [filters, setFilters] = useState<EmployeeFilters>(() => ({
+    page: parseInt(searchParams.get("page") || "1", 10),
+    limit: parseInt(searchParams.get("limit") || "10", 10),
+    joined: (searchParams.get("joined") as EmployeeFilters["joined"]) || undefined,
+    status: (searchParams.get("status") as EmployeeFilters["status"]) || undefined,
+    sbuId: searchParams.get("sbuId") || sbuHeadScopeId,
+    departmentId: searchParams.get("departmentId") || undefined,
+    search: searchParams.get("search") || undefined,
+  }));
+
+  // Sync filters to URL search params (using replaceState to avoid re-renders)
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (filters.page && filters.page > 1) params.set("page", String(filters.page));
+    if (filters.sbuId && filters.sbuId !== sbuHeadScopeId) params.set("sbuId", filters.sbuId);
+    if (filters.departmentId) params.set("departmentId", filters.departmentId);
+    if (filters.status) params.set("status", filters.status);
+    if (filters.search) params.set("search", filters.search);
+    if (filters.joined) params.set("joined", filters.joined);
+
+    const qs = params.toString();
+    const newUrl = qs ? `${pathname}?${qs}` : pathname;
+    window.history.replaceState(null, "", newUrl);
+  }, [filters, pathname, sbuHeadScopeId]);
+
+  // Restore filters on back/forward navigation
+  useEffect(() => {
+    const handlePopState = () => {
+      const params = new URLSearchParams(window.location.search);
+      setFilters({
+        page: parseInt(params.get("page") || "1", 10),
+        limit: 10,
+        joined: (params.get("joined") as EmployeeFilters["joined"]) || undefined,
+        status: (params.get("status") as EmployeeFilters["status"]) || undefined,
+        sbuId: params.get("sbuId") || sbuHeadScopeId,
+        departmentId: params.get("departmentId") || undefined,
+        search: params.get("search") || undefined,
+      });
+      setSearchInput(params.get("search") || "");
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [sbuHeadScopeId]);
 
   const [searchInput, setSearchInput] = useState(filters.search || "");
   const [showFilters, setShowFilters] = useState(false);

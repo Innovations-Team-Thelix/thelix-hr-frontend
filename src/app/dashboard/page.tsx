@@ -540,13 +540,15 @@ export default function DashboardPage() {
                           <p className="text-sm font-semibold text-gray-900 truncate">{p.employeeName}</p>
                           <p className="text-xs text-gray-400">{p.department}</p>
                         </div>
-                        {p.isToday && (
+                        {p.isToday ? (
                           <span
                             className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold"
                             style={{ backgroundColor: B.orangeBg, color: B.orange }}
                           >
                             <Cake className="h-3 w-3" /> Today!
                           </span>
+                        ) : (
+                          <span className="text-xs font-medium text-pink-600 flex-shrink-0">{p.date}</span>
                         )}
                       </div>
                     )) : (
@@ -566,6 +568,9 @@ export default function DashboardPage() {
                           <p className="text-sm font-semibold text-gray-900 truncate">{p.employeeName}</p>
                           <p className="text-xs text-gray-400">{p.department}</p>
                         </div>
+                        {!p.isToday && (
+                          <span className="text-xs font-medium text-amber-600 flex-shrink-0">{p.date}</span>
+                        )}
                         <div className="text-right">
                           <span
                             className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold"
