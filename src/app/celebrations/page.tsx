@@ -194,6 +194,7 @@ export default function CelebrationsPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Employee</TableHead>
+                      <TableHead>Date</TableHead>
                       <TableHead>Department</TableHead>
                       <TableHead>SBU</TableHead>
                     </TableRow>
@@ -208,6 +209,9 @@ export default function CelebrationsPage() {
                               {person.employeeName}
                             </span>
                           </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm font-medium text-pink-600">{person.date}</span>
                         </TableCell>
                         <TableCell>{person.department}</TableCell>
                         <TableCell>{person.sbu}</TableCell>
@@ -237,6 +241,7 @@ export default function CelebrationsPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Employee</TableHead>
+                      <TableHead>Date</TableHead>
                       <TableHead>Department</TableHead>
                       <TableHead>SBU</TableHead>
                       <TableHead>Years</TableHead>
@@ -253,6 +258,9 @@ export default function CelebrationsPage() {
                               {person.employeeName}
                             </span>
                           </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm font-medium text-amber-600">{person.date}</span>
                         </TableCell>
                         <TableCell>{person.department}</TableCell>
                         <TableCell>{person.sbu}</TableCell>
