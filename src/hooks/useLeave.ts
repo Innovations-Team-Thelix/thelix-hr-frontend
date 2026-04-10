@@ -103,6 +103,7 @@ export function useCreateLeaveRequest() {
       startDate: string;
       endDate: string;
       reason?: string;
+      handoverNote?: string;
       relieveOfficerId: string;
       attachments?: File[];
     }) => {
@@ -112,6 +113,7 @@ export function useCreateLeaveRequest() {
       formData.append('endDate', data.endDate);
       formData.append('relieveOfficerId', data.relieveOfficerId);
       if (data.reason) formData.append('reason', data.reason);
+      if (data.handoverNote) formData.append('handoverNote', data.handoverNote);
       if (data.attachments) {
         data.attachments.forEach((file) => {
           formData.append('attachments', file);
@@ -210,6 +212,42 @@ export function useHrAction() {
     onError: (error: any) => {
       const message =
         error?.response?.data?.message || 'Failed to process HR action.';
+      toast.error(message);
+    },
+  });
+}
+
+// ─── Reliever action (Accept / Decline) ───────────────────
+
+export function useRelieverAction() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+      action,
+      note,
+    }: {
+      id: string;
+      action: 'Approved' | 'Rejected';
+      note?: string;
+    }) => {
+      const response = await api.post<LeaveRequest>(
+        `/leave-requests/${id}/reliever-action`,
+        { action, note },
+      );
+      return response.data;
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: leaveKeys.requests() });
+      queryClient.invalidateQueries({
+        queryKey: leaveKeys.requestDetail(variables.id),
+      });
+      const actionLabel = variables.action === 'Approved' ? 'accepted' : 'declined';
+      toast.success(`Relieve officer request ${actionLabel}.`);
+    },
+    onError: (error: any) => {
+      const message = error?.response?.data?.message || 'Failed to process reliever action.';
       toast.error(message);
     },
   });
