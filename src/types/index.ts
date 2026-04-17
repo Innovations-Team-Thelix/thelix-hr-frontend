@@ -348,6 +348,7 @@ export interface CelebrationPerson {
   employeeName: string;
   department: string;
   sbu: string;
+  date: string;
   yearsOfService?: number;
 }
 

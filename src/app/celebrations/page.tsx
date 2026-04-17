@@ -109,6 +109,11 @@ export default function CelebrationsPage() {
                               <p className="text-sm text-gray-500">
                                 {person.department} | {person.sbu}
                               </p>
+                              {person.date && (
+                                <p className="text-xs font-medium text-pink-600 mt-0.5">
+                                  {person.date}
+                                </p>
+                              )}
                             </div>
                             <Cake className="h-6 w-6 text-pink-400" />
                           </div>
@@ -148,6 +153,11 @@ export default function CelebrationsPage() {
                                 {person.yearsOfService !== 1 ? "s" : ""} of
                                 service
                               </p>
+                              {person.date && (
+                                <p className="text-xs font-medium text-amber-600 mt-0.5">
+                                  {person.date}
+                                </p>
+                              )}
                             </div>
                             <div className="flex flex-col items-center">
                               <Award className="h-6 w-6 text-amber-500" />
@@ -303,6 +313,11 @@ export default function CelebrationsPage() {
                           <p className="text-xs text-gray-500">
                             {person.department}
                           </p>
+                          {person.date && (
+                            <p className="text-xs font-medium text-amber-600 mt-0.5">
+                              {person.date}
+                            </p>
+                          )}
                         </div>
                         <div className="text-center">
                           <p className="text-2xl font-bold text-amber-600">
