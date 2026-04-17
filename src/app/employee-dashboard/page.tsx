@@ -373,7 +373,9 @@ export default function EmployeeDashboardPage() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-gray-900 truncate">{p.employeeName}</p>
-                          <p className="text-xs text-gray-500">Birthday Today 🎂</p>
+                          <p className="text-xs text-gray-500">
+                            Birthday Today 🎂{p.date ? ` · ${p.date}` : ""}
+                          </p>
                         </div>
                         <span className="shrink-0 rounded-full bg-pink-50 px-2 py-0.5 text-[10px] font-semibold text-pink-600">
                           Today
@@ -390,7 +392,9 @@ export default function EmployeeDashboardPage() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-gray-900 truncate">{p.employeeName}</p>
-                          <p className="text-xs text-gray-500">{p.yearsOfService}-Year Anniversary 🎉</p>
+                          <p className="text-xs text-gray-500">
+                            {p.yearsOfService}-Year Anniversary 🎉{p.date ? ` · ${p.date}` : ""}
+                          </p>
                         </div>
                         <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
                           Today
@@ -409,6 +413,11 @@ export default function EmployeeDashboardPage() {
                           <p className="text-sm font-medium text-gray-900 truncate">{p.employeeName}</p>
                           <p className="text-xs text-gray-500">{p.yearsOfService}-Year Milestone 🏆</p>
                         </div>
+                        {p.date && (
+                          <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-600">
+                            {p.date}
+                          </span>
+                        )}
                       </div>
                     );
                   });
@@ -423,6 +432,11 @@ export default function EmployeeDashboardPage() {
                           <p className="text-sm font-medium text-gray-900 truncate">{p.employeeName}</p>
                           <p className="text-xs text-gray-500">Birthday coming up</p>
                         </div>
+                        {p.date && (
+                          <span className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-600">
+                            {p.date}
+                          </span>
+                        )}
                       </div>
                     );
                   });
@@ -439,6 +453,11 @@ export default function EmployeeDashboardPage() {
                             {p.yearsOfService}-Year Anniversary coming up
                           </p>
                         </div>
+                        {p.date && (
+                          <span className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-600">
+                            {p.date}
+                          </span>
+                        )}
                       </div>
                     );
                   });
