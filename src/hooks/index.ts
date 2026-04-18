@@ -539,48 +539,54 @@ export function useSalaryStats(sbuId?: string) {
 
 export function useCelebrations() {
   return useQuery<{
-    todayBirthdays: Array<{ employeeName: string; department: string; sbu: string }>;
-    upcomingBirthdays: Array<{ employeeName: string; department: string; sbu: string }>;
+    todayBirthdays: Array<{ employeeName: string; department: string; sbu: string; date: string }>;
+    upcomingBirthdays: Array<{ employeeName: string; department: string; sbu: string; date: string }>;
     todayAnniversaries: Array<{
       employeeName: string;
       department: string;
       sbu: string;
+      date: string;
       yearsOfService: number;
     }>;
     upcomingAnniversaries: Array<{
       employeeName: string;
       department: string;
       sbu: string;
+      date: string;
       yearsOfService: number;
     }>;
     milestoneAnniversaries: Array<{
       employeeName: string;
       department: string;
       sbu: string;
+      date: string;
       yearsOfService: number;
     }>;
   }>({
     queryKey: ["celebrations"],
     queryFn: async () => {
       const res = await api.get<{
-        todayBirthdays: Array<{ employeeName: string; department: string; sbu: string }>;
-        upcomingBirthdays: Array<{ employeeName: string; department: string; sbu: string }>;
+        todayBirthdays: Array<{ employeeName: string; department: string; sbu: string; date: string }>;
+        upcomingBirthdays: Array<{ employeeName: string; department: string; sbu: string; date: string }>;
         todayAnniversaries: Array<{
           employeeName: string;
           department: string;
           sbu: string;
+          date: string;
           yearsOfService: number;
         }>;
         upcomingAnniversaries: Array<{
           employeeName: string;
           department: string;
           sbu: string;
+          date: string;
           yearsOfService: number;
         }>;
         milestoneAnniversaries: Array<{
           employeeName: string;
           department: string;
           sbu: string;
+          date: string;
           yearsOfService: number;
         }>;
       }>("/dashboard/celebrations");
