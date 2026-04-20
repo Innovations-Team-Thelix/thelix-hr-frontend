@@ -125,7 +125,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
       try {
         await loginWithRedirect({
           authorizationParams: { prompt: "none" },
-          appState: { returnTo: "/employee-dashboard" },
+          appState: { returnTo: "/" },
         });
       } catch (err) {
         console.error("Silent authentication failed:", err);

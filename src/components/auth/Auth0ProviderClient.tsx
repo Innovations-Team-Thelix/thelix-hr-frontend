@@ -187,7 +187,8 @@ export function Auth0ProviderClient({ domain, clientId, audience, children }: Pr
       onRedirectCallback={(appState) => {
         // Use client-side navigation — avoids a full page reload which would
         // wipe Zustand state and race checkAuth() against Auth0 re-initialising.
-        router.replace(appState?.returnTo ?? "/employee-dashboard");
+        // Fall back to "/" so RootPage can route by role once ssoLogin resolves.
+        router.replace(appState?.returnTo ?? "/");
       }}
     >
       <Auth0Guard>{children}</Auth0Guard>
