@@ -51,6 +51,7 @@ export function useLeaveRequests(
       if (filters.limit) params.set('limit', String(filters.limit));
       if (filters.employeeId) params.set('employeeId', filters.employeeId);
       if (filters.status) params.set('status', filters.status);
+      if (filters.stage) params.set('stage', filters.stage);
       if (filters.startDate) params.set('startDate', filters.startDate);
       if (filters.endDate) params.set('endDate', filters.endDate);
 
@@ -102,6 +103,7 @@ export function useCreateLeaveRequest() {
       startDate: string;
       endDate: string;
       reason?: string;
+      handoverNote?: string;
       relieveOfficerId: string;
       attachments?: File[];
     }) => {
@@ -111,6 +113,7 @@ export function useCreateLeaveRequest() {
       formData.append('endDate', data.endDate);
       formData.append('relieveOfficerId', data.relieveOfficerId);
       if (data.reason) formData.append('reason', data.reason);
+      if (data.handoverNote) formData.append('handoverNote', data.handoverNote);
       if (data.attachments) {
         data.attachments.forEach((file) => {
           formData.append('attachments', file);
@@ -146,13 +149,15 @@ export function useSupervisorAction() {
     mutationFn: async ({
       id,
       action,
+      note,
     }: {
       id: string;
       action: 'Approved' | 'Rejected';
+      note?: string;
     }) => {
       const response = await api.post<LeaveRequest>(
         `/leave-requests/${id}/supervisor-action`,
-        { action },
+        { action, note },
       );
       return response.data;
     },
@@ -182,13 +187,15 @@ export function useHrAction() {
     mutationFn: async ({
       id,
       action,
+      note,
     }: {
       id: string;
       action: 'Approved' | 'Rejected';
+      note?: string;
     }) => {
       const response = await api.post<LeaveRequest>(
         `/leave-requests/${id}/hr-action`,
-        { action },
+        { action, note },
       );
       return response.data;
     },
@@ -205,6 +212,57 @@ export function useHrAction() {
     onError: (error: any) => {
       const message =
         error?.response?.data?.message || 'Failed to process HR action.';
+      toast.error(message);
+    },
+  });
+}
+
+// ─── Reliever action (Accept / Decline) ───────────────────
+
+export function useRelieverAction() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+      action,
+      note,
+    }: {
+      id: string;
+      action: 'Approved' | 'Rejected';
+      note?: string;
+    }) => {
+      const response = await api.post<LeaveRequest>(
+        `/leave-requests/${id}/reliever-action`,
+        { action, note },
+      );
+      return response.data;
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: leaveKeys.requests() });
+      queryClient.invalidateQueries({
+        queryKey: leaveKeys.requestDetail(variables.id),
+      });
+      const actionLabel = variables.action === 'Approved' ? 'accepted' : 'declined';
+      toast.success(`Relieve officer request ${actionLabel}.`);
+    },
+    onError: (error: any) => {
+      const message = error?.response?.data?.message || 'Failed to process reliever action.';
+      toast.error(message);
+    },
+  });
+}
+
+// ─── Send approval reminder ───────────────────────────────
+
+export function useSendApprovalReminder() {
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const response = await api.post<{ sentTo: string }>(`/leave-requests/${id}/send-reminder`);
+      return response.data;
+    },
+    onError: (error: any) => {
+      const message = error?.response?.data?.message || 'Failed to send reminder.';
       toast.error(message);
     },
   });

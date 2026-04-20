@@ -220,7 +220,13 @@ export interface LeaveRequest {
   endDate: string;
   daysCount: number;
   reason: string | null;
+  handoverNote: string | null;
   status: LeaveStatus;
+
+  // Reliever action
+  relieverAction: LeaveStatus | null;
+  relieverActionAt: string | null;
+  relieverNote: string | null;
 
   // Return to work
   actualReturnDate: string | null;
@@ -231,15 +237,19 @@ export interface LeaveRequest {
   supervisorAction: LeaveStatus | null;
   supervisorActionById: string | null;
   supervisorActionAt: string | null;
+  supervisorNote: string | null;
 
   // HR action
   hrAction: LeaveStatus | null;
   hrActionById: string | null;
   hrActionAt: string | null;
+  hrNote: string | null;
 
   createdAt: string;
 
   // Relations
+  relieveOfficerId?: string | null;
+  relieveOfficer?: Pick<Employee, 'id' | 'fullName'> | null;
   employee?: Pick<Employee, 'id' | 'employeeId' | 'fullName' | 'jobTitle' | 'sbuId'> & {
     sbu?: Sbu;
   };
@@ -402,6 +412,7 @@ export interface EmployeeFilters {
   sbuId?: string;
   departmentId?: string;
   status?: EmploymentStatus;
+  scope?: 'all';
   search?: string;
   joined?: 'this_month' | 'last_month' | 'this_year';
   sortBy?: 'fullName' | 'employeeId' | 'dateOfHire' | 'jobTitle' | 'employmentStatus' | 'createdAt';
@@ -413,6 +424,7 @@ export interface LeaveRequestFilters {
   limit?: number;
   employeeId?: string;
   status?: LeaveStatus;
+  stage?: 'reliever' | 'supervisor' | 'hr';
   startDate?: string;
   endDate?: string;
 }
