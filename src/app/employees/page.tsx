@@ -100,6 +100,38 @@ function EmployeesPageContent() {
     return () => window.removeEventListener("popstate", handlePopState);
   }, [sbuHeadScopeId]);
 
+  // Sync URL search params -> filters when the URL changes via Next.js
+  // navigation (e.g. clicking a sidebar submenu link to /employees?status=…).
+  // The component is already mounted, so the useState initializer doesn't
+  // re-run; we need to react to searchParams updates here.
+  // Note: in-app filter changes use window.history.replaceState (above), which
+  // does NOT update Next.js's `useSearchParams`, so this effect won't fire on
+  // user-driven filter edits — no feedback loop.
+  const lastAppliedSearchRef = useRef(searchParams.toString());
+  useEffect(() => {
+    const current = searchParams.toString();
+    if (current === lastAppliedSearchRef.current) return;
+    lastAppliedSearchRef.current = current;
+
+    const nextStatus = (searchParams.get("status") as EmployeeFilters["status"]) || undefined;
+    const nextJoined = (searchParams.get("joined") as EmployeeFilters["joined"]) || undefined;
+    const nextSbuId = searchParams.get("sbuId") || sbuHeadScopeId;
+    const nextDeptId = searchParams.get("departmentId") || undefined;
+    const nextSearch = searchParams.get("search") || undefined;
+    const nextPage = parseInt(searchParams.get("page") || "1", 10);
+
+    setFilters((prev) => ({
+      ...prev,
+      status: nextStatus,
+      joined: nextJoined,
+      sbuId: nextSbuId,
+      departmentId: nextDeptId,
+      search: nextSearch,
+      page: nextPage,
+    }));
+    setSearchInput(nextSearch || "");
+  }, [searchParams, sbuHeadScopeId]);
+
   const [searchInput, setSearchInput] = useState(filters.search || "");
   const [showFilters, setShowFilters] = useState(false);
   const [showBulkUpload, setShowBulkUpload] = useState(false);
@@ -750,7 +782,7 @@ function EmployeesPageContent() {
                                       <Eye className="h-3.5 w-3.5 text-gray-400" /> View Profile
                                     </button>
                                     <button
-                                      onClick={() => { router.push(`/employees/${emp.id}/edit`); setActiveDropdown(null); }}
+                                      onClick={() => { router.push(`/employees/${emp.id}?edit=1`); setActiveDropdown(null); }}
                                       className="flex w-full items-center gap-2.5 px-3 py-2 text-gray-700 hover:bg-gray-50"
                                     >
                                       <Pencil className="h-3.5 w-3.5 text-gray-400" /> Edit Employee

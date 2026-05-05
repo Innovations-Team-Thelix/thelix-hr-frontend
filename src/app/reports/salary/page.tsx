@@ -1,13 +1,19 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   DollarSign,
   TrendingUp,
   Users,
   Building2,
   Download,
+  Upload,
+  FileSpreadsheet,
+  CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { Modal } from "@/components/ui/modal";
 import {
   BarChart,
   Bar,
@@ -37,6 +43,7 @@ import {
 import { useSbus } from "@/hooks";
 import { useSalaryStats } from "@/hooks/useDashboard";
 import api from "@/lib/api";
+import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 
 const SBU_COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4"];
@@ -50,16 +57,126 @@ function formatCurrency(amount: number): string {
   }).format(amount);
 }
 
+const MONTHS = [
+  { value: 1, label: "January" },
+  { value: 2, label: "February" },
+  { value: 3, label: "March" },
+  { value: 4, label: "April" },
+  { value: 5, label: "May" },
+  { value: 6, label: "June" },
+  { value: 7, label: "July" },
+  { value: 8, label: "August" },
+  { value: 9, label: "September" },
+  { value: 10, label: "October" },
+  { value: 11, label: "November" },
+  { value: 12, label: "December" },
+];
+
 export default function SalaryAnalyticsPage() {
+  const queryClient = useQueryClient();
   const [sbuFilter, setSbuFilter] = useState("");
+  const now = new Date();
+  const [month, setMonth] = useState<number>(now.getMonth() + 1);
+  const [year, setYear] = useState<number>(now.getFullYear());
+
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadResult, setUploadResult] = useState<{
+    created: number;
+    errors: Array<{ row: number; message: string }>;
+  } | null>(null);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
+  const [downloadingTemplate, setDownloadingTemplate] = useState(false);
 
   const { data: sbus } = useSbus();
-  const { data: salary, isLoading } = useSalaryStats(sbuFilter || undefined);
+  const { data: salary, isLoading } = useSalaryStats(
+    sbuFilter || undefined,
+    month,
+    year,
+  );
 
   const sbuOptions = [
     { label: "All SBUs", value: "" },
     ...(sbus?.map((s) => ({ label: s.name, value: s.id })) || []),
   ];
+
+  const yearOptions = (() => {
+    const current = now.getFullYear();
+    const range: { label: string; value: string }[] = [];
+    for (let y = current + 1; y >= current - 4; y--) {
+      range.push({ label: String(y), value: String(y) });
+    }
+    return range;
+  })();
+  const monthOptions = MONTHS.map((m) => ({
+    label: m.label,
+    value: String(m.value),
+  }));
+  const monthLabel = MONTHS.find((m) => m.value === month)?.label ?? "";
+
+  const handleDownloadTemplate = async () => {
+    setDownloadingTemplate(true);
+    try {
+      const res = await api.instance.get("/payroll/template", {
+        params: { month, year },
+        responseType: "blob",
+      });
+      const url = URL.createObjectURL(res.data);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `salary-template-${monthLabel}-${year}.xlsx`;
+      link.click();
+      URL.revokeObjectURL(url);
+      toast.success("Template downloaded");
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } };
+      toast.error(e.response?.data?.message || "Failed to download template");
+    } finally {
+      setDownloadingTemplate(false);
+    }
+  };
+
+  const handleUpload = async () => {
+    if (!uploadFile) {
+      toast.error("Please select a file first");
+      return;
+    }
+    setUploading(true);
+    setUploadResult(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", uploadFile);
+      formData.append("month", String(month));
+      formData.append("year", String(year));
+
+      const res = await api.instance.post("/payroll/upload-month", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      const data = res.data?.data ?? res.data;
+      setUploadResult({
+        created: data.created ?? 0,
+        errors: data.errors ?? [],
+      });
+      toast.success(
+        `Uploaded ${data.created ?? 0} payslip(s) for ${monthLabel} ${year}`,
+      );
+      // Refresh analytics
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } };
+      toast.error(e.response?.data?.message || "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const closeUpload = () => {
+    setUploadOpen(false);
+    setUploadFile(null);
+    setUploadResult(null);
+    if (uploadInputRef.current) uploadInputRef.current.value = "";
+  };
 
   const payoutData = salary?.payoutBySbu?.map((item) => ({
     name: item.sbuName,
@@ -112,8 +229,22 @@ export default function SalaryAnalyticsPage() {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="w-48">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="w-36">
+              <Select
+                options={monthOptions}
+                value={String(month)}
+                onChange={(e) => setMonth(Number(e.target.value))}
+              />
+            </div>
+            <div className="w-24">
+              <Select
+                options={yearOptions}
+                value={String(year)}
+                onChange={(e) => setYear(Number(e.target.value))}
+              />
+            </div>
+            <div className="w-40">
               <Select
                 options={sbuOptions}
                 value={sbuFilter}
@@ -121,12 +252,58 @@ export default function SalaryAnalyticsPage() {
                 placeholder="All SBUs"
               />
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDownloadTemplate}
+              loading={downloadingTemplate}
+            >
+              <FileSpreadsheet className="h-4 w-4" />
+              Template
+            </Button>
+            <Button size="sm" onClick={() => setUploadOpen(true)}>
+              <Upload className="h-4 w-4" />
+              Upload Payments
+            </Button>
             <Button variant="outline" size="sm" onClick={handleExport}>
               <Download className="h-4 w-4" />
               Export
             </Button>
           </div>
         </div>
+
+        {/* Data source banner */}
+        {!isLoading && salary && (
+          <div
+            className={cn(
+              "flex items-center justify-between rounded-lg border px-4 py-3 text-sm",
+              salary.source === "actual"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                : "border-amber-200 bg-amber-50 text-amber-800",
+            )}
+          >
+            <div className="flex items-center gap-2">
+              {salary.source === "actual" ? (
+                <CheckCircle2 className="h-4 w-4" />
+              ) : (
+                <AlertCircle className="h-4 w-4" />
+              )}
+              <span>
+                {salary.source === "actual"
+                  ? `Showing actual payments uploaded by Finance for ${monthLabel} ${year}.`
+                  : `No payments uploaded for ${monthLabel} ${year} yet — showing theoretical payout from each employee's configured monthly salary.`}
+              </span>
+            </div>
+            {salary.source === "theoretical" && (
+              <button
+                onClick={() => setUploadOpen(true)}
+                className="text-xs font-semibold underline underline-offset-2 hover:no-underline"
+              >
+                Upload now →
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Stat cards */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -365,6 +542,104 @@ export default function SalaryAnalyticsPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Upload Payments Modal */}
+      <Modal
+        isOpen={uploadOpen}
+        onClose={closeUpload}
+        title={`Upload Payments — ${monthLabel} ${year}`}
+        size="md"
+        footer={
+          <div className="flex items-center justify-end gap-2">
+            <Button variant="outline" onClick={closeUpload} disabled={uploading}>
+              {uploadResult ? "Done" : "Cancel"}
+            </Button>
+            {!uploadResult && (
+              <Button
+                onClick={handleUpload}
+                loading={uploading}
+                disabled={!uploadFile}
+              >
+                <Upload className="h-4 w-4" />
+                Upload
+              </Button>
+            )}
+          </div>
+        }
+      >
+        <div className="space-y-4 text-sm">
+          {!uploadResult && (
+            <>
+              <div className="rounded-md border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800">
+                <p className="font-semibold">How this works</p>
+                <ol className="mt-1 list-decimal space-y-0.5 pl-4">
+                  <li>
+                    Click <span className="font-semibold">Template</span> on the
+                    page header to download the {monthLabel} {year} template.
+                  </li>
+                  <li>
+                    Fill in the <em>Basic Salary</em>, <em>Allowances</em>, and{" "}
+                    <em>Deductions</em> columns. Don&apos;t change the Email
+                    column.
+                  </li>
+                  <li>Save and upload the file below.</li>
+                </ol>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                  Filled template (.xlsx) <span className="text-red-500">*</span>
+                </label>
+                <input
+                  ref={uploadInputRef}
+                  type="file"
+                  accept=".xlsx"
+                  onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
+                  className="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 file:mr-4 file:rounded-full file:border-0 file:bg-primary/10 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-primary hover:file:bg-primary/20"
+                />
+                {uploadFile && (
+                  <p className="mt-1 text-xs text-gray-500">
+                    Selected: {uploadFile.name}
+                  </p>
+                )}
+              </div>
+
+              <p className="text-xs text-gray-500">
+                If a payroll run for {monthLabel} {year} already exists in
+                Draft, this will update the existing payslips. Approved or sent
+                runs cannot be modified.
+              </p>
+            </>
+          )}
+
+          {uploadResult && (
+            <div className="space-y-3">
+              <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3">
+                <div className="flex items-center gap-2 text-sm font-semibold text-emerald-800">
+                  <CheckCircle2 className="h-4 w-4" />
+                  {uploadResult.created} payslip(s) recorded for {monthLabel}{" "}
+                  {year}
+                </div>
+              </div>
+              {uploadResult.errors.length > 0 && (
+                <div className="rounded-md border border-red-200 bg-red-50 p-3">
+                  <p className="flex items-center gap-2 text-sm font-semibold text-red-800">
+                    <AlertCircle className="h-4 w-4" />
+                    {uploadResult.errors.length} row(s) skipped
+                  </p>
+                  <ul className="mt-2 max-h-40 space-y-0.5 overflow-y-auto text-xs text-red-700">
+                    {uploadResult.errors.map((e, i) => (
+                      <li key={i}>
+                        Row {e.row}: {e.message}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </Modal>
     </AppLayout>
   );
 }

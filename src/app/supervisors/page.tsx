@@ -54,17 +54,33 @@ function getRoleLabel(role: string) {
   return ROLE_OPTIONS.find((r) => r.value === role)?.label ?? role;
 }
 
+type RoleTab = "all" | "Admin" | "SBUHead" | "Director" | "Manager" | "Finance" | "Employee" | "NoAccess";
+
+const ROLE_TABS: { id: RoleTab; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "Admin", label: "Admins" },
+  { id: "SBUHead", label: "Supervisors (VP)" },
+  { id: "Director", label: "Directors" },
+  { id: "Manager", label: "Managers" },
+  { id: "Finance", label: "HR / Finance" },
+  { id: "Employee", label: "Team Members" },
+  { id: "NoAccess", label: "No Access" },
+];
+
 export default function SupervisorsPage() {
   const queryClient = useQueryClient();
   const { data: sbus } = useSbus();
 
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
+  const [activeRoleTab, setActiveRoleTab] = useState<RoleTab>("all");
   const limit = 10;
 
   const { data: employeesData, isLoading } = useEmployees({
     page,
     limit,
+    status: "Active",
+    role: activeRoleTab === "all" ? undefined : activeRoleTab,
     sortBy: "createdAt",
     sortOrder: "desc",
   });
@@ -79,7 +95,6 @@ export default function SupervisorsPage() {
       u.jobTitle?.toLowerCase().includes(search.toLowerCase())
   );
 
-  const activeCount = users.filter((u: any) => u.employmentStatus === "Active").length;
   const withAccountCount = users.filter((u: any) => u.userAccount).length;
 
   // Modal state
@@ -219,34 +234,34 @@ export default function SupervisorsPage() {
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
           <div className="rounded-xl border border-gray-200 bg-white p-4">
             <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-50">
-                <Users className="h-4 w-4 text-primary-600" />
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-green-50">
+                <UserCheck className="h-4 w-4 text-green-500" />
               </div>
               <div>
-                <p className="text-xs text-gray-500">Total Users</p>
+                <p className="text-xs text-gray-500">Active Users</p>
                 <p className="text-xl font-semibold text-gray-900">{pagination?.total ?? users.length}</p>
               </div>
             </div>
           </div>
           <div className="rounded-xl border border-gray-200 bg-white p-4">
             <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-green-50">
-                <UserCheck className="h-4 w-4 text-green-500" />
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-purple-50">
+                <ShieldCheck className="h-4 w-4 text-purple-500" />
               </div>
               <div>
-                <p className="text-xs text-gray-500">Active</p>
-                <p className="text-xl font-semibold text-gray-900">{activeCount}</p>
+                <p className="text-xs text-gray-500">With Portal Access (this page)</p>
+                <p className="text-xl font-semibold text-gray-900">{withAccountCount}</p>
               </div>
             </div>
           </div>
           <div className="col-span-2 sm:col-span-1 rounded-xl border border-gray-200 bg-white p-4">
             <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-purple-50">
-                <ShieldCheck className="h-4 w-4 text-purple-500" />
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-50">
+                <Users className="h-4 w-4 text-amber-500" />
               </div>
               <div>
-                <p className="text-xs text-gray-500">With Portal Access</p>
-                <p className="text-xl font-semibold text-gray-900">{withAccountCount}</p>
+                <p className="text-xs text-gray-500">Without Portal Access (this page)</p>
+                <p className="text-xl font-semibold text-gray-900">{users.length - withAccountCount}</p>
               </div>
             </div>
           </div>
@@ -267,6 +282,35 @@ export default function SupervisorsPage() {
                 className="w-full rounded-lg border border-gray-200 bg-gray-50 py-1.5 pl-8 pr-3 text-sm text-gray-700 placeholder:text-gray-400 focus:border-primary-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary-400"
               />
             </div>
+          </div>
+
+          {/* Role tabs */}
+          <div className="flex gap-1 overflow-x-auto border-b border-gray-100 px-2 py-2">
+            {ROLE_TABS.map((tab) => {
+              const isActive = activeRoleTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => {
+                    setActiveRoleTab(tab.id);
+                    setPage(1);
+                  }}
+                  className={
+                    "shrink-0 rounded-md px-3 py-1.5 text-xs font-medium transition-colors " +
+                    (isActive
+                      ? "bg-primary text-white"
+                      : "text-gray-600 hover:bg-gray-50")
+                  }
+                >
+                  {tab.label}
+                  {isActive && pagination?.total !== undefined && (
+                    <span className="ml-1.5 text-[11px] opacity-80">
+                      ({pagination.total})
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
 
           {isLoading ? (

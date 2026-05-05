@@ -249,9 +249,11 @@ export interface LeaveRequest {
 
   // Relations
   relieveOfficerId?: string | null;
-  relieveOfficer?: Pick<Employee, 'id' | 'fullName'> | null;
+  relieveOfficer?: Pick<Employee, 'id' | 'fullName' | 'jobTitle'> | null;
   employee?: Pick<Employee, 'id' | 'employeeId' | 'fullName' | 'jobTitle' | 'sbuId'> & {
     sbu?: Sbu;
+    department?: { id: string; name: string };
+    supervisor?: Pick<Employee, 'id' | 'fullName' | 'jobTitle'> | null;
   };
   leaveType?: LeaveType;
   supervisorActionBy?: Pick<Employee, 'id' | 'fullName'> | null;
@@ -342,6 +344,9 @@ export interface LeaveStats {
 export interface SalaryStats {
   totalMonthlyPayout: number;
   payoutBySbu: Array<{ sbuName: string; total: number; averageSalary: number; headcount: number }>;
+  source: 'actual' | 'theoretical';
+  month?: number;
+  year?: number;
 }
 
 export interface CelebrationPerson {
@@ -415,6 +420,9 @@ export interface EmployeeFilters {
   scope?: 'all';
   search?: string;
   joined?: 'this_month' | 'last_month' | 'this_year';
+  // Filter by the role on the linked user account.
+  // 'NoAccess' selects employees who have no portal account at all.
+  role?: 'Admin' | 'SBUHead' | 'Director' | 'Manager' | 'Finance' | 'Employee' | 'NoAccess';
   sortBy?: 'fullName' | 'employeeId' | 'dateOfHire' | 'jobTitle' | 'employmentStatus' | 'createdAt';
   sortOrder?: 'asc' | 'desc';
 }

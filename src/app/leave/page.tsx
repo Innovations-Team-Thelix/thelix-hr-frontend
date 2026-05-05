@@ -140,9 +140,19 @@ export default function LeavePage() {
   const { data: leaveTypes } = useLeaveTypes();
   const { data: myBalances, isLoading: balancesLoading } = useMyLeaveBalances();
 
-  // My requests
+  // My requests / All requests
+  // - In Employee view (including admins/SBUHeads using "View as Employee"),
+  //   restrict to the viewer's own requests by passing an explicit employeeId
+  //   filter — the backend would otherwise also return direct-report requests.
+  const myRequestsData_filters: LeaveRequestFilters = {
+    page: myPage,
+    limit: 10,
+    ...(isEmployee && profile?.id ? { employeeId: profile.id } : {}),
+  };
   const { data: myRequestsData, isLoading: myRequestsLoading } =
-    useLeaveRequests({ page: myPage, limit: 10 });
+    useLeaveRequests(myRequestsData_filters, {
+      enabled: !isEmployee || !!profile?.id,
+    });
 
   // Reliever requests (where I'm the relieve officer)
   const { data: relieverData, isLoading: relieverLoading } = useLeaveRequests({
@@ -217,12 +227,17 @@ export default function LeavePage() {
   const selectedLeaveTypeId = form.watch("leaveTypeId");
   const selectedLeaveType = leaveTypes?.find(lt => lt.id === selectedLeaveTypeId);
 
+  // Admins approve/reject inline from the All Requests detail modal, so the
+  // Approval Queue tab is hidden for them. Supervisors / SBUHeads still need
+  // it as their focused "awaiting my action" list.
+  const showApprovalQueue = canApprove && !isAdmin;
+
   const tabs = [
-    { id: "my-requests", label: "My Requests" },
+    { id: "my-requests", label: isAdmin ? "All Requests" : "My Requests" },
     ...(hasRelieverRequests
       ? [{ id: "reliever-queue", label: `Reliever Requests (${relieverData?.data?.length || 0})` }]
       : []),
-    ...(canApprove
+    ...(showApprovalQueue
       ? [{ id: "approval-queue", label: "Approval Queue" }]
       : []),
     { id: "calendar", label: "Calendar" },
@@ -377,14 +392,16 @@ export default function LeavePage() {
           <div className="lg:col-span-3">
             <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
 
-            {/* My Requests Tab */}
+            {/* My Requests / All Requests Tab */}
             {activeTab === "my-requests" && (
               <Card className="mt-4">
                 <CardContent className="p-0">
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        {isAdmin && <TableHead>Employee</TableHead>}
                         <TableHead>Leave Type</TableHead>
+                        {isAdmin && <TableHead>Reliever</TableHead>}
                         <TableHead>Start Date</TableHead>
                         <TableHead>End Date</TableHead>
                         <TableHead>Days</TableHead>
@@ -397,7 +414,7 @@ export default function LeavePage() {
                       {myRequestsLoading ? (
                         Array.from({ length: 3 }).map((_, i) => (
                           <TableRow key={i}>
-                            {Array.from({ length: 7 }).map((_, j) => (
+                            {Array.from({ length: isAdmin ? 9 : 7 }).map((_, j) => (
                               <TableCell key={j}>
                                 <Skeleton className="h-4 w-full" />
                               </TableCell>
@@ -407,14 +424,16 @@ export default function LeavePage() {
                       ) : !myRequestsData?.data.length ? (
                         <TableRow>
                           <TableCell
-                            colSpan={7}
+                            colSpan={isAdmin ? 9 : 7}
                             className="py-8 text-center text-sm text-gray-500"
                           >
                             No leave requests found
                           </TableCell>
                         </TableRow>
                       ) : (
-                        myRequestsData.data.map((req) => (
+                        myRequestsData.data.map((req) => {
+                          const isOwnRequest = req.employeeId === profile?.id;
+                          return (
                           <TableRow
                             key={req.id}
                             className="cursor-pointer hover:bg-gray-50"
@@ -423,6 +442,20 @@ export default function LeavePage() {
                               setDetailModalOpen(true);
                             }}
                           >
+                            {isAdmin && (
+                              <TableCell>
+                                <div className="flex flex-col">
+                                  <span className="font-medium text-gray-900">
+                                    {req.employee?.fullName || "—"}
+                                  </span>
+                                  {req.employee?.jobTitle && (
+                                    <span className="text-xs text-gray-500">
+                                      {req.employee.jobTitle}
+                                    </span>
+                                  )}
+                                </div>
+                              </TableCell>
+                            )}
                             <TableCell>
                               <div className="flex flex-col gap-1">
                                 <span
@@ -443,6 +476,26 @@ export default function LeavePage() {
                                 )}
                               </div>
                             </TableCell>
+                            {isAdmin && (
+                              <TableCell>
+                                {req.relieveOfficer ? (
+                                  <div className="flex flex-col">
+                                    <span className="text-sm font-medium text-gray-900">
+                                      {req.relieveOfficer.fullName}
+                                    </span>
+                                    <span className="text-[10px] text-gray-500">
+                                      {req.relieverAction === "Approved"
+                                        ? "Accepted"
+                                        : req.relieverAction === "Rejected"
+                                          ? "Declined"
+                                          : "Awaiting response"}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span className="text-xs text-gray-400">—</span>
+                                )}
+                              </TableCell>
+                            )}
                             <TableCell>{formatDate(req.startDate)}</TableCell>
                             <TableCell>{formatDate(req.endDate)}</TableCell>
                             <TableCell>{req.daysCount}</TableCell>
@@ -468,7 +521,7 @@ export default function LeavePage() {
                             </TableCell>
                             <TableCell onClick={(e) => e.stopPropagation()}>
                               <div className="flex items-center gap-2">
-                                {req.status === "Pending" && (
+                                {req.status === "Pending" && (isOwnRequest || !isAdmin) && (
                                   <Button
                                     variant="ghost"
                                     size="sm"
@@ -482,7 +535,7 @@ export default function LeavePage() {
                                     Cancel
                                   </Button>
                                 )}
-                                {req.status === "Approved" && !req.returnedAt && (
+                                {req.status === "Approved" && !req.returnedAt && isOwnRequest && (
                                   <Button
                                     variant="ghost"
                                     size="sm"
@@ -496,23 +549,56 @@ export default function LeavePage() {
                                     Return
                                   </Button>
                                 )}
+                                {isAdmin && !isOwnRequest && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 px-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100"
+                                    onClick={() => {
+                                      setDetailRequest(req);
+                                      setDetailModalOpen(true);
+                                    }}
+                                  >
+                                    View
+                                  </Button>
+                                )}
                               </div>
                             </TableCell>
                           </TableRow>
-                        ))
+                          );
+                        })
                       )}
                     </TableBody>
                   </Table>
-                  {myRequestsData?.pagination &&
-                    myRequestsData.pagination.totalPages > 1 && (
-                      <div className="border-t border-gray-100 px-4 py-3">
+                  {myRequestsData?.pagination && myRequestsData.data.length > 0 && (
+                    <div className="flex flex-col items-center justify-between gap-2 border-t border-gray-100 px-4 py-3 sm:flex-row">
+                      <p className="text-xs text-gray-500">
+                        Showing{" "}
+                        <span className="font-medium text-gray-700">
+                          {(myPage - 1) * myRequestsData.pagination.limit + 1}
+                        </span>
+                        {"–"}
+                        <span className="font-medium text-gray-700">
+                          {Math.min(
+                            myPage * myRequestsData.pagination.limit,
+                            myRequestsData.pagination.total,
+                          )}
+                        </span>{" "}
+                        of{" "}
+                        <span className="font-medium text-gray-700">
+                          {myRequestsData.pagination.total}
+                        </span>{" "}
+                        request{myRequestsData.pagination.total === 1 ? "" : "s"}
+                      </p>
+                      {myRequestsData.pagination.totalPages > 1 && (
                         <Pagination
                           currentPage={myPage}
                           totalPages={myRequestsData.pagination.totalPages}
                           onPageChange={setMyPage}
                         />
-                      </div>
-                    )}
+                      )}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             )}
@@ -871,20 +957,30 @@ export default function LeavePage() {
                                 {day.date}
                               </span>
                               <div className="mt-1 space-y-0.5">
-                                {entries.slice(0, 3).map((entry, i) => (
-                                  <div
-                                    key={i}
-                                    className={cn(
-                                      "truncate rounded px-1 py-0.5 text-[10px] font-medium",
-                                      LEAVE_TYPE_COLORS[
-                                        entry.leaveType.name
-                                      ] || "bg-gray-100 text-gray-700"
-                                    )}
-                                    title={`${entry.employee.fullName} - ${entry.leaveType.name}`}
-                                  >
-                                    {entry.employee.fullName.split(" ")[0]}
-                                  </div>
-                                ))}
+                                {entries.slice(0, 3).map((entry, i) => {
+                                  const isPending = entry.status === "Pending";
+                                  return (
+                                    <div
+                                      key={i}
+                                      className={cn(
+                                        "truncate rounded px-1 py-0.5 text-[10px] font-medium",
+                                        LEAVE_TYPE_COLORS[
+                                          entry.leaveType.name
+                                        ] || "bg-gray-100 text-gray-700",
+                                        isPending &&
+                                          "border border-dashed opacity-70",
+                                      )}
+                                      title={`${entry.employee.fullName} – ${entry.leaveType.name}${
+                                        isPending ? " (Pending approval)" : ""
+                                      }`}
+                                    >
+                                      {entry.employee.fullName.split(" ")[0]}
+                                      {isPending && (
+                                        <span className="ml-0.5 text-[8px] opacity-80">•</span>
+                                      )}
+                                    </div>
+                                  );
+                                })}
                                 {entries.length > 3 && (
                                   <div className="text-[10px] text-gray-400 pl-1">
                                     +{entries.length - 3} more
@@ -898,7 +994,7 @@ export default function LeavePage() {
                     })}
                   </div>
                   {/* Legend */}
-                  <div className="mt-4 flex flex-wrap gap-3">
+                  <div className="mt-4 flex flex-wrap items-center gap-3">
                     {Object.entries(LEAVE_TYPE_COLORS).map(
                       ([type, color]) => (
                         <div
@@ -917,6 +1013,10 @@ export default function LeavePage() {
                         </div>
                       )
                     )}
+                    <div className="ml-2 flex items-center gap-1.5 border-l border-gray-200 pl-3">
+                      <div className="h-3 w-3 rounded border border-dashed border-gray-400 bg-gray-100 opacity-70" />
+                      <span className="text-xs text-gray-600">Pending approval</span>
+                    </div>
                   </div>
                 </CardContent>
                   </>
@@ -1174,6 +1274,24 @@ export default function LeavePage() {
         >
           {detailRequest && (
             <div className="space-y-5">
+              {/* Employee block (admin / approver context) */}
+              {detailRequest.employee && detailRequest.employeeId !== profile?.id && (
+                <div className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+                  <span className="text-xs uppercase tracking-wide text-gray-500">Employee</span>
+                  <p className="mt-0.5 text-sm font-semibold text-gray-900">
+                    {detailRequest.employee.fullName}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {[
+                      detailRequest.employee.jobTitle,
+                      detailRequest.employee.department?.name,
+                    ]
+                      .filter(Boolean)
+                      .join(" • ") || "—"}
+                  </p>
+                </div>
+              )}
+
               {/* Basic Info */}
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
@@ -1208,12 +1326,28 @@ export default function LeavePage() {
                     <p className="font-medium text-gray-900">{detailRequest.handoverNote}</p>
                   </div>
                 )}
-                {detailRequest.relieveOfficer && (
-                  <div>
-                    <span className="text-gray-500">Relieve Officer</span>
-                    <p className="font-medium text-gray-900">{detailRequest.relieveOfficer.fullName}</p>
-                  </div>
-                )}
+                <div>
+                  <span className="text-gray-500">Relieve Officer</span>
+                  <p className="font-medium text-gray-900">
+                    {detailRequest.relieveOfficer?.fullName || "—"}
+                  </p>
+                  {detailRequest.relieveOfficer?.jobTitle && (
+                    <p className="text-xs text-gray-500">{detailRequest.relieveOfficer.jobTitle}</p>
+                  )}
+                </div>
+                <div>
+                  <span className="text-gray-500">Supervisor</span>
+                  <p className="font-medium text-gray-900">
+                    {detailRequest.employee?.supervisor?.fullName ||
+                      detailRequest.supervisorActionBy?.fullName ||
+                      "—"}
+                  </p>
+                  {detailRequest.employee?.supervisor?.jobTitle && (
+                    <p className="text-xs text-gray-500">
+                      {detailRequest.employee.supervisor.jobTitle}
+                    </p>
+                  )}
+                </div>
               </div>
 
               {/* Approval Progress — 3 steps */}
@@ -1234,14 +1368,18 @@ export default function LeavePage() {
                        <span className="text-xs font-medium">1</span>}
                     </div>
                     <div className="flex-1">
-                      <p className="text-sm font-medium text-gray-900">Relieve Officer</p>
+                      <p className="text-sm font-medium text-gray-900">
+                        Relieve Officer
+                        {detailRequest.relieveOfficer && (
+                          <span className="ml-1 text-gray-500 font-normal">
+                            — {detailRequest.relieveOfficer.fullName}
+                          </span>
+                        )}
+                      </p>
                       {detailRequest.relieverAction ? (
                         <div className="mt-0.5">
                           <p className="text-xs text-gray-500">
                             <StatusBadge status={detailRequest.relieverAction === "Approved" ? "Approved" : "Rejected"} />
-                            {detailRequest.relieveOfficer && (
-                              <span className="ml-1">by {detailRequest.relieveOfficer.fullName}</span>
-                            )}
                             {detailRequest.relieverActionAt && (
                               <span className="ml-1">on {formatDate(detailRequest.relieverActionAt)}</span>
                             )}
@@ -1273,14 +1411,21 @@ export default function LeavePage() {
                        <span className="text-xs font-medium">{detailRequest.relieveOfficerId ? "2" : "1"}</span>}
                     </div>
                     <div className="flex-1">
-                      <p className="text-sm font-medium text-gray-900">Supervisor Review</p>
+                      <p className="text-sm font-medium text-gray-900">
+                        Supervisor Review
+                        {(detailRequest.supervisorActionBy?.fullName ||
+                          detailRequest.employee?.supervisor?.fullName) && (
+                          <span className="ml-1 text-gray-500 font-normal">
+                            —{" "}
+                            {detailRequest.supervisorActionBy?.fullName ||
+                              detailRequest.employee?.supervisor?.fullName}
+                          </span>
+                        )}
+                      </p>
                       {detailRequest.supervisorAction ? (
                         <div className="mt-0.5">
                           <p className="text-xs text-gray-500">
                             <StatusBadge status={detailRequest.supervisorAction} />
-                            {detailRequest.supervisorActionBy && (
-                              <span className="ml-1">by {detailRequest.supervisorActionBy.fullName}</span>
-                            )}
                             {detailRequest.supervisorActionAt && (
                               <span className="ml-1">on {formatDate(detailRequest.supervisorActionAt)}</span>
                             )}
@@ -1314,14 +1459,18 @@ export default function LeavePage() {
                        <span className="text-xs font-medium">{detailRequest.relieveOfficerId ? "3" : "2"}</span>}
                     </div>
                     <div className="flex-1">
-                      <p className="text-sm font-medium text-gray-900">HR Review</p>
+                      <p className="text-sm font-medium text-gray-900">
+                        HR Review
+                        {detailRequest.hrActionBy?.fullName && (
+                          <span className="ml-1 text-gray-500 font-normal">
+                            — {detailRequest.hrActionBy.fullName}
+                          </span>
+                        )}
+                      </p>
                       {detailRequest.hrAction ? (
                         <div className="mt-0.5">
                           <p className="text-xs text-gray-500">
                             <StatusBadge status={detailRequest.hrAction} />
-                            {detailRequest.hrActionBy && (
-                              <span className="ml-1">by {detailRequest.hrActionBy.fullName}</span>
-                            )}
                             {detailRequest.hrActionAt && (
                               <span className="ml-1">on {formatDate(detailRequest.hrActionAt)}</span>
                             )}
@@ -1342,6 +1491,54 @@ export default function LeavePage() {
                   </div>
                 </div>
               </div>
+
+              {/* Admin / HR review actions */}
+              {isAdmin &&
+                detailRequest.status === "Pending" &&
+                detailRequest.hrAction === null &&
+                detailRequest.employeeId !== profile?.id && (
+                  <div className="border-t pt-4">
+                    <p className="mb-2 text-xs font-medium text-gray-700">
+                      Review as HR
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        className="flex-1"
+                        loading={hrAction.isPending}
+                        onClick={async () => {
+                          try {
+                            await hrAction.mutateAsync({
+                              id: detailRequest.id,
+                              action: "Approved",
+                            });
+                            toast.success("Leave request approved");
+                            setDetailModalOpen(false);
+                          } catch {
+                            // handled in hook
+                          }
+                        }}
+                      >
+                        <Check className="mr-1 h-3.5 w-3.5" />
+                        Approve
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        className="flex-1"
+                        onClick={() => {
+                          setRejectTargetId(detailRequest.id);
+                          setRejectType("approval");
+                          setDetailModalOpen(false);
+                          setRejectModalOpen(true);
+                        }}
+                      >
+                        <X className="mr-1 h-3.5 w-3.5" />
+                        Reject
+                      </Button>
+                    </div>
+                  </div>
+                )}
 
               {/* Send Reminder Button — only for pending requests owned by the current user */}
               {detailRequest.status === "Pending" && detailRequest.employeeId === profile?.id && (
