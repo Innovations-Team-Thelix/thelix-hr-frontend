@@ -103,7 +103,16 @@ export default function ReportsPage() {
   const effectiveRole = useEffectiveRole();
   const { data: sbus } = useSbus();
 
-  const [filters, setFilters] = useState<Record<string, { sbuId: string; dateFrom: string; dateTo: string }>>({});
+  type ReportFilters = {
+    sbuId: string;
+    dateFrom: string;
+    dateTo: string;
+    status?: string;
+    employmentType?: string;
+    month?: string;
+    year?: string;
+  };
+  const [filters, setFilters] = useState<Record<string, ReportFilters>>({});
   const [downloading, setDownloading] = useState<Record<string, boolean>>({});
 
   const userRole = (effectiveRole || "Employee") as string;
@@ -117,13 +126,13 @@ export default function ReportsPage() {
     ...(sbus?.map((s) => ({ label: s.name, value: s.id })) || []),
   ];
 
-  const getFilters = (reportId: string) => {
+  const getFilters = (reportId: string): ReportFilters => {
     return filters[reportId] || { sbuId: "", dateFrom: "", dateTo: "" };
   };
 
   const updateFilter = (
     reportId: string,
-    key: string,
+    key: keyof ReportFilters,
     value: string
   ) => {
     setFilters((prev) => ({
@@ -150,6 +159,12 @@ export default function ReportsPage() {
       if (reportFilters.sbuId) params.sbuId = reportFilters.sbuId;
       if (reportFilters.dateFrom) params.dateFrom = reportFilters.dateFrom;
       if (reportFilters.dateTo) params.dateTo = reportFilters.dateTo;
+      if (reportFilters.status && reportFilters.status !== "")
+        params.status = reportFilters.status;
+      if (reportFilters.employmentType)
+        params.employmentType = reportFilters.employmentType;
+      if (reportFilters.month) params.month = reportFilters.month;
+      if (reportFilters.year) params.year = reportFilters.year;
 
       const response = await api.instance.get(endpoint, {
         params,
@@ -258,7 +273,7 @@ export default function ReportsPage() {
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-2">
                             <label className="text-sm font-medium text-gray-700">
-                              From
+                              {report.id === "payroll" ? "Hire Date From" : "From"}
                             </label>
                             <Input
                               type="date"
@@ -270,7 +285,7 @@ export default function ReportsPage() {
                           </div>
                           <div className="space-y-2">
                             <label className="text-sm font-medium text-gray-700">
-                              To
+                              {report.id === "payroll" ? "Hire Date To" : "To"}
                             </label>
                             <Input
                               type="date"
@@ -281,6 +296,108 @@ export default function ReportsPage() {
                             />
                           </div>
                         </div>
+
+                        {report.id === "payroll" && (
+                          <>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <label className="text-sm font-medium text-gray-700">
+                                  Employment Status
+                                </label>
+                                <Select
+                                  options={[
+                                    { label: "Active (default)", value: "" },
+                                    { label: "All", value: "All" },
+                                    { label: "Suspended", value: "Suspended" },
+                                    { label: "Resigned", value: "Resigned" },
+                                    { label: "Terminated", value: "Terminated" },
+                                  ]}
+                                  value={reportFilters.status ?? ""}
+                                  onChange={(e) =>
+                                    updateFilter(report.id, "status", e.target.value)
+                                  }
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <label className="text-sm font-medium text-gray-700">
+                                  Employment Type
+                                </label>
+                                <Select
+                                  options={[
+                                    { label: "All", value: "" },
+                                    { label: "Full Time", value: "FullTime" },
+                                    { label: "Contract", value: "Contract" },
+                                    { label: "Intern", value: "Intern" },
+                                  ]}
+                                  value={reportFilters.employmentType ?? ""}
+                                  onChange={(e) =>
+                                    updateFilter(
+                                      report.id,
+                                      "employmentType",
+                                      e.target.value,
+                                    )
+                                  }
+                                />
+                              </div>
+                            </div>
+
+                            <div>
+                              <p className="mb-2 text-xs font-medium text-gray-500">
+                                Optional — include actual paid amounts for a
+                                specific month (uploaded via Salary Analytics).
+                              </p>
+                              <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                  <label className="text-sm font-medium text-gray-700">
+                                    Month
+                                  </label>
+                                  <Select
+                                    options={[
+                                      { label: "—", value: "" },
+                                      { label: "January", value: "1" },
+                                      { label: "February", value: "2" },
+                                      { label: "March", value: "3" },
+                                      { label: "April", value: "4" },
+                                      { label: "May", value: "5" },
+                                      { label: "June", value: "6" },
+                                      { label: "July", value: "7" },
+                                      { label: "August", value: "8" },
+                                      { label: "September", value: "9" },
+                                      { label: "October", value: "10" },
+                                      { label: "November", value: "11" },
+                                      { label: "December", value: "12" },
+                                    ]}
+                                    value={reportFilters.month ?? ""}
+                                    onChange={(e) =>
+                                      updateFilter(
+                                        report.id,
+                                        "month",
+                                        e.target.value,
+                                      )
+                                    }
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  <label className="text-sm font-medium text-gray-700">
+                                    Year
+                                  </label>
+                                  <Input
+                                    type="number"
+                                    placeholder="e.g. 2026"
+                                    value={reportFilters.year ?? ""}
+                                    onChange={(e) =>
+                                      updateFilter(
+                                        report.id,
+                                        "year",
+                                        e.target.value,
+                                      )
+                                    }
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          </>
+                        )}
                       </CardContent>
                       <CardFooter className="flex gap-3 pt-4">
                         <Button

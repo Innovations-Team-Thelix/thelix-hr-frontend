@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   LayoutDashboard,
   Users,
@@ -43,6 +43,10 @@ import {
   BookOpen as BookOpenIcon,
   FolderTree,
   UserCog,
+  UserCheck,
+  UserMinus,
+  UserX,
+  PauseCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -71,6 +75,14 @@ const performanceChildren: NavChild[] = [
   { label: "My Notes",       href: "/performance/notes",       icon: BookOpenIcon,   roles: ["Admin", "SBUHead", "Director", "Manager", "Finance", "Employee"] },
   { label: "Review Cycles",  href: "/performance/cycles",      icon: CalendarDays,   roles: ["Admin", "SBUHead", "Director", "Manager", "Finance", "Employee"] },
   { label: "Analytics",      href: "/performance/analytics",   icon: BarChart3,      roles: ["Admin", "Finance", "SBUHead"] },
+];
+
+const employeeChildren: NavChild[] = [
+  { label: "All Employees", href: "/employees",                    icon: Users,        roles: ["Admin", "SBUHead"] },
+  { label: "Active",        href: "/employees?status=Active",      icon: UserCheck,    roles: ["Admin", "SBUHead"] },
+  { label: "Suspended",     href: "/employees?status=Suspended",   icon: PauseCircle,  roles: ["Admin", "SBUHead"] },
+  { label: "Resigned",      href: "/employees?status=Resigned",    icon: UserMinus,    roles: ["Admin", "SBUHead"] },
+  { label: "Terminated",    href: "/employees?status=Terminated",  icon: UserX,        roles: ["Admin", "SBUHead"] },
 ];
 
 const kpiChildren: NavChild[] = [
@@ -103,6 +115,7 @@ const navItems: NavItem[] = [
     href: "/employees",
     icon: Users,
     roles: ["Admin", "SBUHead", "Employee"],
+    children: employeeChildren,
   },
   {
     label: "SBU",
@@ -248,6 +261,7 @@ interface SidebarProps {
 
 export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { user, profile, logout, viewAs, setViewAs } = useAuth();
 
   const displayName = profile?.fullName || "User";
@@ -257,12 +271,14 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
   const canPreview = actualRole === "Admin" || actualRole === "SBUHead";
   const effectiveRole = (viewAs ?? actualRole) as UserRole | undefined;
 
-  // Track which expandable sections are open; auto-open KPI/Performance if on those routes
+  // Track which expandable sections are open; auto-open groups when on those routes
   const isOnKpi = pathname.startsWith("/kpi");
   const isOnPerformance = pathname.startsWith("/performance");
+  const isOnEmployees = pathname.startsWith("/employees");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
     "/kpi": isOnKpi,
     "/performance": isOnPerformance,
+    "/employees": isOnEmployees,
   });
 
   const filteredNavItems = navItems.filter(
@@ -270,12 +286,27 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
   );
 
   const isActive = (href: string): boolean => {
-    if (href === "/dashboard" || href === "/attendance") {
-      return pathname === href;
+    // Split path and query so we can match each independently.
+    const [hrefPath, hrefQuery] = href.split("?");
+    const currentStatus = searchParams?.get("status") ?? null;
+
+    // Child links that filter by status match only when both path and the
+    // status query match. The "All Employees" entry (no query) matches when
+    // we're on /employees with no status filter applied.
+    if (hrefPath === "/employees") {
+      if (pathname !== "/employees") return false;
+      const hrefStatus = hrefQuery
+        ? new URLSearchParams(hrefQuery).get("status")
+        : null;
+      return currentStatus === hrefStatus;
+    }
+
+    if (hrefPath === "/dashboard" || hrefPath === "/attendance") {
+      return pathname === hrefPath;
     }
     // Exact match for /kpi (dashboard) so it doesn't stay active on sub-pages
-    if (href === "/kpi") return pathname === "/kpi";
-    return pathname === href || pathname.startsWith(href + "/");
+    if (hrefPath === "/kpi") return pathname === "/kpi";
+    return pathname === hrefPath || pathname.startsWith(hrefPath + "/");
   };
 
   const isGroupActive = (item: NavItem): boolean => {
@@ -326,13 +357,12 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
             const Icon = item.icon;
             const active = isActive(item.href);
             const groupActive = isGroupActive(item);
-            const hasChildren = item.children && item.children.length > 0;
+            // Filter children by role first; only render as a group if at least
+            // one child is visible to the current role.
+            const visibleChildren =
+              item.children?.filter((c) => effectiveRole && c.roles.includes(effectiveRole)) ?? [];
+            const hasChildren = visibleChildren.length > 0;
             const isOpen = expanded[item.href] ?? false;
-
-            // Filter children by role
-            const visibleChildren = hasChildren
-              ? item.children!.filter((c) => effectiveRole && c.roles.includes(effectiveRole))
-              : [];
 
             return (
               <li key={item.href}>
