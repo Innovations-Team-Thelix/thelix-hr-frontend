@@ -17,8 +17,8 @@ export const dashboardKeys = {
     [...dashboardKeys.all, 'workforce', { sbuId }] as const,
   leave: (sbuId?: string) =>
     [...dashboardKeys.all, 'leave', { sbuId }] as const,
-  salary: (sbuId?: string) =>
-    [...dashboardKeys.all, 'salary', { sbuId }] as const,
+  salary: (sbuId?: string, month?: number, year?: number) =>
+    [...dashboardKeys.all, 'salary', { sbuId, month, year }] as const,
   celebrations: () => [...dashboardKeys.all, 'celebrations'] as const,
 };
 
@@ -73,13 +73,17 @@ export function useLeaveStats(
 
 export function useSalaryStats(
   sbuId?: string,
+  month?: number,
+  year?: number,
   options?: Omit<UseQueryOptions<SalaryStats>, 'queryKey' | 'queryFn'>,
 ) {
   return useQuery<SalaryStats>({
-    queryKey: dashboardKeys.salary(sbuId),
+    queryKey: dashboardKeys.salary(sbuId, month, year),
     queryFn: async () => {
       const params = new URLSearchParams();
       if (sbuId) params.set('sbuId', sbuId);
+      if (month) params.set('month', String(month));
+      if (year) params.set('year', String(year));
 
       const response = await api.get<SalaryStats>('/dashboard/salary', {
         params,

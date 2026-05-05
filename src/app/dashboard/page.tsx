@@ -371,8 +371,8 @@ export default function DashboardPage() {
         {/* ── Bento row 1: 3 hero cards ── */}
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
 
-          {/* Card 1: Workforce summary */}
-          <Link href="/employees" className="group">
+          {/* Card 1: Workforce summary — counts only active employees */}
+          <Link href="/employees?status=Active" className="group">
             <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm hover:shadow-md transition-shadow h-full">
               <div className="flex items-start justify-between">
                 <div>
@@ -383,10 +383,10 @@ export default function DashboardPage() {
                     <Skeleton className="mt-2 h-12 w-24" />
                   ) : (
                     <p className="font-display mt-1 text-6xl font-bold tracking-tight" style={{ color: B.navy }}>
-                      {workforce?.totalHeadcount ?? 0}
+                      {workforce?.activeCount ?? 0}
                     </p>
                   )}
-                  <p className="mt-1 text-sm text-gray-400">employees across all SBUs</p>
+                  <p className="mt-1 text-sm text-gray-400">active employees across all SBUs</p>
                 </div>
                 <div className="rounded-2xl p-3" style={{ backgroundColor: B.orangeBg }}>
                   <Users className="h-7 w-7" style={{ color: B.orange }} />
@@ -395,7 +395,14 @@ export default function DashboardPage() {
 
               <div className="mt-6 grid grid-cols-3 gap-3">
                 {[
-                  { label: "Active", value: workforce?.activeCount ?? 0, icon: UserCheck },
+                  {
+                    label: "Inactive",
+                    value: Math.max(
+                      (workforce?.totalHeadcount ?? 0) - (workforce?.activeCount ?? 0),
+                      0,
+                    ),
+                    icon: UserCheck,
+                  },
                   { label: "New Hires", value: workforce?.newHiresThisMonth ?? 0, icon: UserPlus },
                   { label: "On Leave", value: leaveStats?.currentlyOnLeave ?? 0, icon: CalendarOff },
                 ].map(({ label, value, icon: Icon }) => (

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   Edit,
@@ -168,6 +168,7 @@ function InfoField({
 export default function EmployeeProfilePage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useAuthStore();
   const employeeId = params.id as string;
 
@@ -199,7 +200,12 @@ export default function EmployeeProfilePage() {
 
   const [activeTab, setActiveTab] = useState("personal");
   const [editActiveTab, setEditActiveTab] = useState("personal");
-  const [editModalOpen, setEditModalOpen] = useState(false);
+  // Open the edit modal automatically when arriving via ?edit=1 (e.g. clicked
+  // "Edit Employee" from the row dropdown on /employees). Lazy-initialize so
+  // the modal isn't re-opened every render after the user closes it.
+  const [editModalOpen, setEditModalOpen] = useState(
+    () => searchParams?.get("edit") === "1",
+  );
   const [eventModalOpen, setEventModalOpen] = useState(false);
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [probationModalOpen, setProbationModalOpen] = useState(false);
