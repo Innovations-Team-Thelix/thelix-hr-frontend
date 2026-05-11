@@ -205,11 +205,9 @@ export const useAuth = create<AuthState>((set, get) => ({
 
     if (typeof window !== 'undefined') {
       if (isSsoSession) {
-        // Redirect to Auth0 logout endpoint — this terminates the SSO browser session
-        // so the user is also signed out of the Thelix SSO dashboard.
-        const domain = process.env.NEXT_PUBLIC_AUTH0_DOMAIN;
-        const clientId = process.env.NEXT_PUBLIC_AUTH0_CLIENT_ID;
-        const returnTo = encodeURIComponent(`${window.location.origin}/login`);
+        const domain = 'auth.thelixholdings.com';
+        const clientId = 'a7KNF7CvA4sbYw8Ckwn7gKFvc1WVNDp3';
+        const returnTo = encodeURIComponent('https://sso.thelixholdings.com');
         window.location.href = `https://${domain}/v2/logout?client_id=${clientId}&returnTo=${returnTo}`;
       } else {
         window.location.href = '/login';

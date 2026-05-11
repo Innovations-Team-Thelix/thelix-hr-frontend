@@ -153,7 +153,7 @@ function Auth0Guard({ children }: { children: React.ReactNode }) {
             <a href="mailto:hr@thelixholdings.com" className="inline-flex items-center justify-center rounded-lg px-4 py-2.5 text-sm font-semibold text-white bg-[#C8622A]">
               Contact HR Support
             </a>
-            <button type="button" onClick={() => { logout(); auth0Logout({ logoutParams: { returnTo: window.location.origin + "/login" } }); }}
+            <button type="button" onClick={() => { logout(); auth0Logout({ logoutParams: { returnTo: 'https://sso.thelixholdings.com' } }); }}
               className="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700">
               Sign out
             </button>

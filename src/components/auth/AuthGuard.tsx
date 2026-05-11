@@ -162,7 +162,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
         email={noAccount || undefined}
         onLogout={() => {
           logout();
-          auth0Logout({ logoutParams: { returnTo: window.location.origin + "/login" } });
+          auth0Logout({ logoutParams: { returnTo: 'https://sso.thelixholdings.com' } });
         }}
       />
     );
