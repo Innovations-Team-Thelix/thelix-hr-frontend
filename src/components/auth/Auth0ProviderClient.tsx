@@ -54,12 +54,17 @@ function Auth0Guard({ children }: { children: React.ReactNode }) {
           await ssoLogin(token);
           setTokenReady(true);
         } catch (err: unknown) {
-          const e = err as { error?: string };
+          const e = err as { error?: string; response?: { status?: number } };
           sessionStorage.setItem('auth0guard_ssologin_err', JSON.stringify(e));
-          if (e?.error === "consent_required") {
-            loginWithRedirect();
+
+          // Auth0 SDK errors (login_required, invalid_grant, consent_required, etc.)
+          // mean the session expired or needs interaction — redirect to log in again.
+          // Only backend errors (e.response exists, no e.error) mean "no HRIS account."
+          if (e?.error) {
+            loginWithRedirect({ appState: { returnTo: window.location.pathname } });
             return;
           }
+
           setNoAccount(auth0User?.email ?? "unknown");
           setTokenReady(true);
         }
