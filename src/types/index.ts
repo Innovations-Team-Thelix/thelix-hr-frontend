@@ -55,6 +55,8 @@ export interface SalaryRecord {
   grossPay: number;
   netPay: number;
   pension: number;
+  employerPension: number;
+  nhf: number;
   tax: number;
   allowances: SalaryComponent[];
   deductions: SalaryComponent[];
@@ -601,6 +603,7 @@ export interface Payslip {
   taxableIncome: number;
   paye: number;
   pension: number;
+  employerPension: number;
   nhf: number;
   loanRepayment: number;
   bonusesTotal: number;

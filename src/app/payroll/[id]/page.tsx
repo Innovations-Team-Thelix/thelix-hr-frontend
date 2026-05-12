@@ -617,7 +617,8 @@ export default function PayrollDetailPage() {
                       <th className="px-3 py-3">Employee</th>
                       <th className="px-3 py-3 text-right">Gross</th>
                       <th className="px-3 py-3 text-right">PAYE</th>
-                      <th className="px-3 py-3 text-right">Pension</th>
+                      <th className="px-3 py-3 text-right">Emp. Pension</th>
+                      <th className="px-3 py-3 text-right">Empl. Pension</th>
                       <th className="px-3 py-3 text-right">NHF</th>
                       <th className="px-3 py-3 text-right">Other Ded.</th>
                       <th className="px-3 py-3 text-right">Net Pay</th>
@@ -645,6 +646,7 @@ export default function PayrollDetailPage() {
                           <td className="px-3 py-3 text-right">{formatCurrency(payslip.grossPay || 0)}</td>
                           <td className="px-3 py-3 text-right text-red-600">({formatCurrency(payslip.paye || 0)})</td>
                           <td className="px-3 py-3 text-right text-red-600">({formatCurrency(payslip.pension || 0)})</td>
+                          <td className="px-3 py-3 text-right text-blue-600">{formatCurrency(payslip.employerPension || 0)}</td>
                           <td className="px-3 py-3 text-right text-red-600">({formatCurrency(payslip.nhf || 0)})</td>
                           <td className="px-3 py-3 text-right text-red-600">
                             ({formatCurrency(otherDed > 0 ? otherDed : 0)})
