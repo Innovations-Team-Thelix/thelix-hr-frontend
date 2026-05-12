@@ -9,6 +9,8 @@ interface SalaryBreakdown {
   netPay: number;
   tax: number;
   pension: number;
+  employerPension?: number;
+  nhf?: number;
   allowances: { name: string; amount: number }[];
   deductions: { name: string; amount: number }[];
 }
@@ -221,16 +223,27 @@ export function CompensationSummary({
             </CardHeader>
             <CardContent>
               <div>
-                <LineItem
-                  label="Tax"
-                  value={`-${formatCurrency(salaryBreakdown.tax, cur)}`}
-                  variant="negative"
-                />
-                <LineItem
-                  label="Pension"
-                  value={`-${formatCurrency(salaryBreakdown.pension, cur)}`}
-                  variant="negative"
-                />
+                {salaryBreakdown.tax > 0 && (
+                  <LineItem
+                    label="PAYE"
+                    value={`-${formatCurrency(salaryBreakdown.tax, cur)}`}
+                    variant="negative"
+                  />
+                )}
+                {salaryBreakdown.pension > 0 && (
+                  <LineItem
+                    label="Employee Pension (8%)"
+                    value={`-${formatCurrency(salaryBreakdown.pension, cur)}`}
+                    variant="negative"
+                  />
+                )}
+                {(salaryBreakdown.nhf ?? 0) > 0 && (
+                  <LineItem
+                    label="NHF (2.5%)"
+                    value={`-${formatCurrency(salaryBreakdown.nhf!, cur)}`}
+                    variant="negative"
+                  />
+                )}
                 {salaryBreakdown.deductions.map((deduction, i) => (
                   <LineItem
                     key={i}
@@ -254,6 +267,46 @@ export function CompensationSummary({
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {/* ── Employer Pension contribution ── */}
+      {salaryBreakdown && (salaryBreakdown.employerPension ?? 0) > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50">
+                <DollarSign className="h-3.5 w-3.5 text-blue-600" />
+              </div>
+              Pension Contributions
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div>
+              {salaryBreakdown.pension > 0 && (
+                <LineItem
+                  label="Employee Contribution (8%)"
+                  value={`-${formatCurrency(salaryBreakdown.pension, cur)}`}
+                  variant="negative"
+                />
+              )}
+              <LineItem
+                label="Employer Contribution (10%)"
+                value={formatCurrency(salaryBreakdown.employerPension!, cur)}
+                variant="positive"
+              />
+              <div className="mt-1 border-t border-gray-100 pt-2">
+                <LineItem
+                  label="Total Pension"
+                  value={formatCurrency(
+                    (salaryBreakdown.pension ?? 0) + (salaryBreakdown.employerPension ?? 0),
+                    cur
+                  )}
+                  bold
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* ── Bank Details ── */}

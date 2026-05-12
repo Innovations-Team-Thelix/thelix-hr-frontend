@@ -23,6 +23,7 @@ import {
 import { formatDate } from "@/lib/utils";
 import toast from "react-hot-toast";
 import type { AssetCondition, AssetFilters } from "@/types";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 
 const EQUIPMENT_TYPES = [
   "Laptop", "Desktop Computer", "Monitor", "Keyboard", "Mouse",
@@ -60,6 +61,7 @@ export default function AssetsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
 
   const { data, isLoading } = useAssets(filters);
   const assets = data?.data || [];
@@ -141,9 +143,10 @@ export default function AssetsPage() {
     setEditingId(null);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Delete this asset record? This cannot be undone.")) return;
-    await deleteAsset.mutateAsync(id);
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    await deleteAsset.mutateAsync(deleteTarget.id);
+    setDeleteTarget(null);
   };
 
   return (
@@ -296,7 +299,7 @@ export default function AssetsPage() {
                               </button>
                               {isAdmin && (
                                 <button
-                                  onClick={() => handleDelete(asset.id)}
+                                  onClick={() => setDeleteTarget({ id: asset.id, name: asset.equipmentType })}
                                   className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
                                   title="Delete"
                                 >
@@ -419,6 +422,17 @@ export default function AssetsPage() {
           </div>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+        title="Delete asset record"
+        message={`Delete "${deleteTarget?.name}"? This will permanently remove the asset record and cannot be undone.`}
+        confirmLabel="Delete"
+        variant="danger"
+        loading={deleteAsset.isPending}
+      />
     </AppLayout>
   );
 }
