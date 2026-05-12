@@ -560,6 +560,7 @@ export default function ProfilePage() {
             accountName={profile.accountName}
             accountNumber={profile.accountNumber}
             bankName={profile.bankName}
+            leaveBalances={leaveBalances}
           />
         )}
 

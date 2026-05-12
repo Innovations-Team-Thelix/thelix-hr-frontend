@@ -1,7 +1,8 @@
 import React from "react";
-import { DollarSign, TrendingUp, TrendingDown, Landmark } from "lucide-react";
+import { DollarSign, TrendingUp, TrendingDown, Landmark, Building2, CalendarDays } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import type { LeaveBalance } from "@/types";
 
 interface SalaryBreakdown {
   baseSalary: number;
@@ -26,6 +27,7 @@ export interface CompensationSummaryProps {
   accountName?: string | null;
   accountNumber?: string | null;
   bankName?: string | null;
+  leaveBalances?: LeaveBalance[];
 }
 
 function InfoField({ label, value }: { label: string; value?: React.ReactNode }) {
@@ -54,19 +56,13 @@ function LineItem({
         bold ? "" : "border-b border-gray-50 last:border-0"
       }`}
     >
-      <span
-        className={`text-sm ${
-          bold ? "font-semibold text-gray-900" : "text-gray-600"
-        }`}
-      >
+      <span className={`text-sm ${bold ? "font-semibold text-gray-900" : "text-gray-600"}`}>
         {label}
       </span>
       <span
         className={`text-sm font-semibold ${
           bold
-            ? variant === "negative"
-              ? "text-danger-600"
-              : "text-gray-900"
+            ? variant === "negative" ? "text-danger-600" : "text-gray-900"
             : variant === "negative"
               ? "text-danger-500"
               : variant === "positive"
@@ -91,8 +87,22 @@ export function CompensationSummary({
   accountName,
   accountNumber,
   bankName,
+  leaveBalances = [],
 }: CompensationSummaryProps) {
   const cur = currency || "NGN";
+
+  // Compute total deductions from actual line items to avoid the grossPay-netPay sign bug
+  const totalDeductions = salaryBreakdown
+    ? (salaryBreakdown.tax > 0 ? salaryBreakdown.tax : 0)
+      + (salaryBreakdown.pension > 0 ? salaryBreakdown.pension : 0)
+      + ((salaryBreakdown.nhf ?? 0) > 0 ? (salaryBreakdown.nhf ?? 0) : 0)
+      + salaryBreakdown.deductions.reduce((s, d) => s + d.amount, 0)
+    : 0;
+
+  // Company contributions
+  const emplrPension = salaryBreakdown?.employerPension ?? 0;
+  const itf = salaryBreakdown ? Math.round(salaryBreakdown.baseSalary * 0.01 * 100) / 100 : 0;
+  const totalCompanyContrib = emplrPension + itf;
 
   return (
     <div className="space-y-6">
@@ -107,65 +117,34 @@ export function CompensationSummary({
         <CardContent>
           {salaryBreakdown ? (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              {/* Base Salary — dark brand card */}
               <div className="relative overflow-hidden rounded-2xl bg-[#412003] p-5 text-white">
                 <div className="pointer-events-none absolute -right-4 -top-4 h-24 w-24 rounded-full bg-primary/20 blur-2xl" />
-                <p className="text-xs font-semibold uppercase tracking-widest text-primary/80">
-                  Base Salary
-                </p>
-                <p className="mt-3 text-2xl font-bold">
-                  {formatCurrency(salaryBreakdown.baseSalary, cur)}
-                </p>
+                <p className="text-xs font-semibold uppercase tracking-widest text-primary/80">Base Salary</p>
+                <p className="mt-3 text-2xl font-bold">{formatCurrency(salaryBreakdown.baseSalary, cur)}</p>
               </div>
-
-              {/* Gross Pay — green tint */}
               <div className="rounded-2xl bg-emerald-50 p-5">
                 <div className="mb-3 flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-100">
                   <TrendingUp className="h-4 w-4 text-emerald-600" />
                 </div>
-                <p className="text-xs font-semibold uppercase tracking-widest text-emerald-600">
-                  Gross Pay
-                </p>
-                <p className="mt-1 text-2xl font-bold text-emerald-900">
-                  {formatCurrency(salaryBreakdown.grossPay, cur)}
-                </p>
+                <p className="text-xs font-semibold uppercase tracking-widest text-emerald-600">Gross Pay</p>
+                <p className="mt-1 text-2xl font-bold text-emerald-900">{formatCurrency(salaryBreakdown.grossPay, cur)}</p>
               </div>
-
-              {/* Net Pay — orange tint */}
               <div className="rounded-2xl bg-primary/5 p-5">
                 <div className="mb-3 flex h-8 w-8 items-center justify-center rounded-xl bg-primary/15">
                   <DollarSign className="h-4 w-4 text-primary" />
                 </div>
-                <p className="text-xs font-semibold uppercase tracking-widest text-primary">
-                  Net Pay
-                </p>
-                <p className="mt-1 text-2xl font-bold text-[#412003]">
-                  {formatCurrency(salaryBreakdown.netPay, cur)}
-                </p>
+                <p className="text-xs font-semibold uppercase tracking-widest text-primary">Net Pay</p>
+                <p className="mt-1 text-2xl font-bold text-[#412003]">{formatCurrency(salaryBreakdown.netPay, cur)}</p>
               </div>
             </div>
           ) : (
             <dl className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              <InfoField
-                label="Gross Pay"
-                value={formatCurrency(monthlySalary, cur)}
-              />
-              {netPay != null && (
-                <InfoField
-                  label="Net Pay"
-                  value={formatCurrency(netPay, cur)}
-                />
-              )}
+              <InfoField label="Gross Pay" value={formatCurrency(monthlySalary, cur)} />
+              {netPay != null && <InfoField label="Net Pay" value={formatCurrency(netPay, cur)} />}
               <InfoField label="Salary Band" value={salaryBand} />
               <InfoField label="Currency" value={currency} />
-              <InfoField
-                label="Salary Effective Date"
-                value={formatDate(salaryEffectiveDate)}
-              />
-              <InfoField
-                label="Last Salary Review"
-                value={formatDate(lastSalaryReview)}
-              />
+              <InfoField label="Salary Effective Date" value={formatDate(salaryEffectiveDate)} />
+              <InfoField label="Last Salary Review" value={formatDate(lastSalaryReview)} />
             </dl>
           )}
         </CardContent>
@@ -185,28 +164,23 @@ export function CompensationSummary({
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div>
+              <LineItem
+                label="Basic Salary"
+                value={formatCurrency(salaryBreakdown.baseSalary, cur)}
+                variant="positive"
+              />
+              {salaryBreakdown.allowances.map((a, i) => (
+                <LineItem key={i} label={a.name} value={formatCurrency(a.amount, cur)} variant="positive" />
+              ))}
+              {salaryBreakdown.allowances.length === 0 && salaryBreakdown.grossPay > salaryBreakdown.baseSalary && (
                 <LineItem
-                  label="Base Salary"
-                  value={formatCurrency(salaryBreakdown.baseSalary, cur)}
+                  label="Allowances"
+                  value={formatCurrency(salaryBreakdown.grossPay - salaryBreakdown.baseSalary, cur)}
                   variant="positive"
                 />
-                {salaryBreakdown.allowances.map((allowance, i) => (
-                  <LineItem
-                    key={i}
-                    label={allowance.name}
-                    value={formatCurrency(allowance.amount, cur)}
-                    variant="positive"
-                  />
-                ))}
-                <div className="mt-1 border-t border-gray-100 pt-2">
-                  <LineItem
-                    label="Total Earnings"
-                    value={formatCurrency(salaryBreakdown.grossPay, cur)}
-                    variant="positive"
-                    bold
-                  />
-                </div>
+              )}
+              <div className="mt-1 border-t border-gray-100 pt-2">
+                <LineItem label="Gross Pay" value={formatCurrency(salaryBreakdown.grossPay, cur)} variant="positive" bold />
               </div>
             </CardContent>
           </Card>
@@ -222,91 +196,105 @@ export function CompensationSummary({
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div>
-                {salaryBreakdown.tax > 0 && (
-                  <LineItem
-                    label="PAYE"
-                    value={`-${formatCurrency(salaryBreakdown.tax, cur)}`}
-                    variant="negative"
-                  />
-                )}
-                {salaryBreakdown.pension > 0 && (
-                  <LineItem
-                    label="Employee Pension (8%)"
-                    value={`-${formatCurrency(salaryBreakdown.pension, cur)}`}
-                    variant="negative"
-                  />
-                )}
-                {(salaryBreakdown.nhf ?? 0) > 0 && (
-                  <LineItem
-                    label="NHF (2.5%)"
-                    value={`-${formatCurrency(salaryBreakdown.nhf!, cur)}`}
-                    variant="negative"
-                  />
-                )}
-                {salaryBreakdown.deductions.map((deduction, i) => (
-                  <LineItem
-                    key={i}
-                    label={deduction.name}
-                    value={`-${formatCurrency(deduction.amount, cur)}`}
-                    variant="negative"
-                  />
-                ))}
-                <div className="mt-1 border-t border-gray-100 pt-2">
-                  <LineItem
-                    label="Total Deductions"
-                    value={`-${formatCurrency(
-                      salaryBreakdown.grossPay - salaryBreakdown.netPay,
-                      cur
-                    )}`}
-                    variant="negative"
-                    bold
-                  />
-                </div>
+              {salaryBreakdown.tax > 0 && (
+                <LineItem label="PAYE" value={`-${formatCurrency(salaryBreakdown.tax, cur)}`} variant="negative" />
+              )}
+              {salaryBreakdown.pension > 0 && (
+                <LineItem label="Employee Pension (8%)" value={`-${formatCurrency(salaryBreakdown.pension, cur)}`} variant="negative" />
+              )}
+              {(salaryBreakdown.nhf ?? 0) > 0 && (
+                <LineItem label="NHF (2.5%)" value={`-${formatCurrency(salaryBreakdown.nhf!, cur)}`} variant="negative" />
+              )}
+              {salaryBreakdown.deductions.map((d, i) => (
+                <LineItem key={i} label={d.name} value={`-${formatCurrency(d.amount, cur)}`} variant="negative" />
+              ))}
+              {totalDeductions === 0 && (
+                <p className="py-3 text-sm text-gray-400">No deductions recorded</p>
+              )}
+              <div className="mt-1 border-t border-gray-100 pt-2">
+                <LineItem
+                  label="Total Deductions"
+                  value={`-${formatCurrency(totalDeductions, cur)}`}
+                  variant="negative"
+                  bold
+                />
               </div>
             </CardContent>
           </Card>
         </div>
       )}
 
-      {/* ── Employer Pension contribution ── */}
-      {salaryBreakdown && (salaryBreakdown.employerPension ?? 0) > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50">
-                <DollarSign className="h-3.5 w-3.5 text-blue-600" />
-              </div>
-              Pension Contributions
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div>
-              {salaryBreakdown.pension > 0 && (
+      {/* ── Company Contributions + Leave Balance ── */}
+      {salaryBreakdown && (
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          {/* Company Contributions */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50">
+                  <Building2 className="h-3.5 w-3.5 text-blue-600" />
+                </div>
+                Company Contributions
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {emplrPension > 0 && (
                 <LineItem
-                  label="Employee Contribution (8%)"
-                  value={`-${formatCurrency(salaryBreakdown.pension, cur)}`}
-                  variant="negative"
+                  label="Employer Pension (10%)"
+                  value={formatCurrency(emplrPension, cur)}
+                  variant="positive"
                 />
               )}
-              <LineItem
-                label="Employer Contribution (10%)"
-                value={formatCurrency(salaryBreakdown.employerPension!, cur)}
-                variant="positive"
-              />
-              <div className="mt-1 border-t border-gray-100 pt-2">
+              {itf > 0 && (
                 <LineItem
-                  label="Total Pension"
-                  value={formatCurrency(
-                    (salaryBreakdown.pension ?? 0) + (salaryBreakdown.employerPension ?? 0),
-                    cur
-                  )}
-                  bold
+                  label="ITF (1%)"
+                  value={formatCurrency(itf, cur)}
+                  variant="positive"
                 />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+              )}
+              {totalCompanyContrib === 0 && (
+                <p className="py-3 text-sm text-gray-400">No contributions recorded</p>
+              )}
+              {totalCompanyContrib > 0 && (
+                <div className="mt-1 border-t border-gray-100 pt-2">
+                  <LineItem
+                    label="Total Contributions"
+                    value={formatCurrency(totalCompanyContrib, cur)}
+                    bold
+                  />
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Leave Balance */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet-50">
+                  <CalendarDays className="h-3.5 w-3.5 text-violet-600" />
+                </div>
+                Leave Balance
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {leaveBalances.length === 0 ? (
+                <p className="py-3 text-sm text-gray-400">No leave balances recorded</p>
+              ) : (
+                leaveBalances.map((lb) => {
+                  const remaining = (lb.remainingDays ?? (lb.totalDays - lb.usedDays));
+                  return (
+                    <LineItem
+                      key={lb.id}
+                      label={lb.leaveType?.name ?? "Leave"}
+                      value={`${remaining % 1 === 0 ? remaining.toFixed(0) : remaining.toFixed(1)} days`}
+                    />
+                  );
+                })
+              )}
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {/* ── Bank Details ── */}
