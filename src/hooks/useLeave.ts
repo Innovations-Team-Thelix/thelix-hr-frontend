@@ -69,6 +69,28 @@ export function useLeaveRequests(
   });
 }
 
+// ─── Employee leave balances (admin) ──────────────────────
+
+export function useEmployeeLeaveBalances(
+  employeeId: string | null | undefined,
+  year?: number,
+  options?: Omit<UseQueryOptions<LeaveBalance[]>, 'queryKey' | 'queryFn'>,
+) {
+  return useQuery<LeaveBalance[]>({
+    queryKey: [...leaveKeys.balances(), 'employee', employeeId, year] as const,
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (employeeId) params.set('employeeId', employeeId);
+      if (year) params.set('year', String(year));
+      const response = await api.get<LeaveBalance[]>('/leave-balances', { params });
+      return response.data;
+    },
+    enabled: !!employeeId,
+    staleTime: 2 * 60 * 1000,
+    ...options,
+  });
+}
+
 // ─── My leave balances ─────────────────────────────────────
 
 export function useMyLeaveBalances(

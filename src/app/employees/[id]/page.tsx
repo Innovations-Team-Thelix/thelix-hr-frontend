@@ -71,6 +71,7 @@ import {
   useCreateDepartment,
 } from "@/hooks";
 import { useDownloadOfferLetter } from "@/hooks/useOfferLetters";
+import { useEmployeeLeaveBalances } from "@/hooks/useLeave";
 import { ProbationActionModal } from "@/components/employees/probation-action-modal";
 import AuditLogList from "@/components/audit/audit-log-list";
 import { EmployeeTags } from "@/components/employees/employee-tags";
@@ -238,6 +239,7 @@ export default function EmployeeProfilePage() {
   const { data: disciplinaryActions, isLoading: disciplineLoading } =
     useEmployeeDisciplinaryActions(employeeId);
   const { data: salaryHistory } = useSalaryHistory(employeeId, { enabled: canViewCompensation });
+  const { data: employeeLeaveBalances } = useEmployeeLeaveBalances(employeeId, undefined, { enabled: canViewCompensation });
   const { data: assets, isLoading: assetsLoading } = useEmployeeAssets(employeeId);
   const { data: employeesData } = useEmployees({ limit: 1000 });
   const { data: sbus } = useSbus();
@@ -884,6 +886,7 @@ export default function EmployeeProfilePage() {
                 accountName={employee.accountName}
                 accountNumber={employee.accountNumber}
                 bankName={employee.bankName}
+                leaveBalances={employeeLeaveBalances}
               />
             )}
 
