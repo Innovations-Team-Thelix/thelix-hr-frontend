@@ -14,6 +14,7 @@ import {
   PartyPopper,
   FileSpreadsheet,
   DollarSign,
+  Gift,
   Bell,
   Shield,
   ShieldAlert,
@@ -213,6 +214,12 @@ const navItems: NavItem[] = [
     label: "Payroll",
     href: "/payroll",
     icon: Wallet,
+    roles: ["Admin", "Finance"],
+  },
+  {
+    label: "Bonuses",
+    href: "/bonuses",
+    icon: Gift,
     roles: ["Admin", "Finance"],
   },
   {

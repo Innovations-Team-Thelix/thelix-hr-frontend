@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { useAuthStore, useEffectiveRole } from "@/hooks";
 import { usePolicies, useUploadPolicy, useDeletePolicy, useDownloadPolicy } from "@/hooks/usePolicies";
 import { formatDate } from "@/lib/utils";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1";
 
@@ -23,6 +24,7 @@ export default function PolicyPage() {
 
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [previewPolicy, setPreviewPolicy] = useState<any | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
   const [title, setTitle] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -57,12 +59,12 @@ export default function PolicyPage() {
     }
   };
 
-  const handleDelete = async (id: string, policyTitle: string) => {
-    if (!confirm(`Are you sure you want to delete "${policyTitle}"?`)) return;
-
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
     try {
-      await deletePolicy.mutateAsync(id);
+      await deletePolicy.mutateAsync(deleteTarget.id);
       toast.success("Policy deleted successfully");
+      setDeleteTarget(null);
     } catch {
       toast.error("Failed to delete policy");
     }
@@ -189,7 +191,7 @@ export default function PolicyPage() {
                           variant="outline"
                           size="sm"
                           onClick={() =>
-                            handleDelete(policy.id, policy.title)
+                            setDeleteTarget({ id: policy.id, title: policy.title })
                           }
                         >
                           <Trash2 className="h-4 w-4 text-red-500" />
@@ -287,6 +289,16 @@ export default function PolicyPage() {
             )}
           </div>
         </Modal>
+      <ConfirmDialog
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+        title="Delete policy"
+        message={`Are you sure you want to delete "${deleteTarget?.title}"? This will permanently remove the document and cannot be undone.`}
+        confirmLabel="Delete"
+        variant="danger"
+        loading={deletePolicy.isPending}
+      />
       </div>
     </AppLayout>
   );

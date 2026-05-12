@@ -59,6 +59,7 @@ import { formatDate } from "@/lib/utils";
 import api from "@/lib/api";
 import toast from "react-hot-toast";
 import { useQueryClient } from "@tanstack/react-query";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 
 // ─── Brand tokens ──────────────────────────────────────
 const B = {
@@ -126,6 +127,7 @@ function SbuManagementPanel() {
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
 
   const openCreate = () => { setEditingId(null); setName(""); setCode(""); setShowForm(true); };
   const openEdit = (sbu: { id: string; name: string; code: string }) => {
@@ -153,11 +155,12 @@ function SbuManagementPanel() {
     } finally { setSubmitting(false); }
   };
 
-  const handleDelete = async (id: string, sbuName: string) => {
-    if (!confirm(`Delete "${sbuName}"? SBUs with departments or employees cannot be deleted.`)) return;
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
     try {
-      await api.delete(`/sbus/${id}`);
+      await api.delete(`/sbus/${deleteTarget.id}`);
       toast.success("SBU deleted");
+      setDeleteTarget(null);
       queryClient.invalidateQueries({ queryKey: ["sbus"] });
       queryClient.invalidateQueries({ queryKey: ["workforce-stats"] });
     } catch (err: unknown) {
@@ -250,7 +253,7 @@ function SbuManagementPanel() {
                         <Button variant="outline" size="sm" onClick={() => openEdit(sbu)}>
                           <Pencil className="h-3 w-3" />Edit
                         </Button>
-                        <Button variant="danger" size="sm" onClick={() => handleDelete(sbu.id, sbu.name)}>
+                        <Button variant="danger" size="sm" onClick={() => setDeleteTarget({ id: sbu.id, name: sbu.name })}>
                           <Trash2 className="h-3 w-3" />Delete
                         </Button>
                       </div>
@@ -268,6 +271,16 @@ function SbuManagementPanel() {
           </Table>
         )}
       </div>
+
+      <ConfirmDialog
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+        title="Delete SBU"
+        message={`Delete "${deleteTarget?.name}"? SBUs with departments or employees cannot be deleted.`}
+        confirmLabel="Delete"
+        variant="danger"
+      />
     </div>
   );
 }
