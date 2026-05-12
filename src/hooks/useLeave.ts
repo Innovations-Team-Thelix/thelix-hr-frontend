@@ -293,6 +293,27 @@ export function useCancelLeave() {
   });
 }
 
+// ─── Hard delete leave request (admin only) ───────────────
+
+export function useDeleteLeave() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await api.delete(`/leave-requests/${id}/hard`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: leaveKeys.requests() });
+      toast.success('Leave request deleted.');
+    },
+    onError: (error: any) => {
+      const message =
+        error?.response?.data?.message || 'Failed to delete leave request.';
+      toast.error(message);
+    },
+  });
+}
+
 // ─── Submit Return to Work ─────────────────────────────────
 
 export function useSubmitReturnToWork() {
