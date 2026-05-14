@@ -96,6 +96,8 @@ const payslipSchema = z.object({
   wardrobe: z.coerce.number().min(0).default(0),
   meal: z.coerce.number().min(0).default(0),
   utility: z.coerce.number().min(0).default(0),
+  commission: z.coerce.number().min(0).default(0),
+  withholdingTax: z.coerce.number().min(0).default(0),
   otherAllowances: z.array(allowanceItemSchema).default([]),
   deductions: z.array(allowanceItemSchema).default([]),
   netPay40: z.coerce.number().min(0).default(0),
@@ -177,6 +179,7 @@ export default function PayrollDetailPage() {
     resolver: zodResolver(payslipSchema),
     defaultValues: {
       basicSalary: 0, housing: 0, transport: 0, wardrobe: 0, meal: 0, utility: 0,
+      commission: 0, withholdingTax: 0,
       otherAllowances: [], deductions: [], netPay40: 0, nhfOptIn: false,
     },
   });
@@ -192,23 +195,34 @@ export default function PayrollDetailPage() {
     form.setValue("wardrobe", find("wardrobe"));
     form.setValue("meal", find("meal"));
     form.setValue("utility", find("utility"));
-    const known = ["housing", "transport", "wardrobe", "meal", "utility"];
+    form.setValue("commission", salaryDefaults.commission ?? 0);
+    form.setValue("withholdingTax", salaryDefaults.withholdingTax ?? 0);
+    const known = ["housing", "transport", "wardrobe", "meal", "utility", "commission"];
     const others = salaryDefaults.allowances.filter(
       (a) => !known.some((k) => a.name.toLowerCase().includes(k)),
     );
     form.setValue("otherAllowances", others);
-    form.setValue("deductions", salaryDefaults.deductions);
+    const nonWithholding = (salaryDefaults.deductions ?? []).filter(
+      (d) => !d.name.toLowerCase().includes("withholding"),
+    );
+    form.setValue("deductions", nonWithholding);
   }, [salaryDefaults, form]);
 
   const handleAddPayslip = async (data: PayslipFormData) => {
     const allowances = [
-      { name: "Housing", amount: data.housing },
-      { name: "Transport", amount: data.transport },
-      { name: "Wardrobe", amount: data.wardrobe },
-      { name: "Meal", amount: data.meal },
-      { name: "Utility", amount: data.utility },
+      { name: "Housing",    amount: data.housing },
+      { name: "Transport",  amount: data.transport },
+      { name: "Wardrobe",   amount: data.wardrobe },
+      { name: "Meal",       amount: data.meal },
+      { name: "Utility",    amount: data.utility },
+      ...(data.commission > 0 ? [{ name: "Commission", amount: data.commission }] : []),
       ...data.otherAllowances,
     ].filter((a) => a.amount > 0);
+
+    const deductions = [
+      ...(data.withholdingTax > 0 ? [{ name: "Withholding Tax", amount: data.withholdingTax }] : []),
+      ...data.deductions,
+    ];
 
     try {
       await createPayslip.mutateAsync({
@@ -217,7 +231,7 @@ export default function PayrollDetailPage() {
           employeeId: data.employeeId,
           basicSalary: data.basicSalary,
           allowances,
-          deductions: data.deductions,
+          deductions,
           netPay40: data.netPay40,
           nhfOptIn: data.nhfOptIn,
         },
@@ -753,47 +767,94 @@ export default function PayrollDetailPage() {
               {salaryDefaults && !salaryDefaults.hasSalaryRecord && (
                 <p className="mt-1 text-xs text-amber-600">No salary record found — enter values manually.</p>
               )}
-              {salaryDefaults?.hasSalaryRecord && salaryDefaults.hasBreakdown && (
-                <p className="mt-1 text-xs text-green-600">Salary record loaded and pre-filled.</p>
-              )}
-              {salaryDefaults?.hasSalaryRecord && !salaryDefaults.hasBreakdown && (
-                <p className="mt-1 text-xs text-amber-600">
-                  Salary record found but breakdown not set — enter components manually.
-                  {salaryDefaults.referenceNetPay > 0 && (
-                    <span className="ml-1 font-medium">
-                      Reference net pay: ₦{salaryDefaults.referenceNetPay.toLocaleString("en-NG", { minimumFractionDigits: 2 })}
-                    </span>
-                  )}
-                </p>
+              {salaryDefaults?.hasSalaryRecord && (
+                <p className="mt-1 text-xs text-green-600">✓ Salary record loaded and pre-filled.</p>
               )}
             </div>
 
-            {/* Earnings */}
+            {/* Gross Pay summary (read-only from salary record) */}
+            {salaryDefaults?.grossPay ? (
+              <div className="flex items-center justify-between rounded-lg border border-orange-200 bg-orange-50 px-4 py-2.5">
+                <span className="text-sm font-semibold text-gray-700">Gross Pay</span>
+                <span className="text-sm font-bold text-orange-700">
+                  ₦{formatCurrency(salaryDefaults.grossPay)}
+                </span>
+              </div>
+            ) : null}
+
+            {/* Salary Structure */}
             <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Earnings</p>
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Salary Structure</p>
               <div className="grid grid-cols-2 gap-3">
-                <Input label="Basic Salary *" type="number" step="0.01"
+                <Input label="Basic Salary (35%) *" type="number" step="0.01"
                   error={form.formState.errors.basicSalary?.message} {...form.register("basicSalary")} />
-                <Input label="Housing Allowance" type="number" step="0.01" {...form.register("housing")} />
-                <Input label="Transport Allowance" type="number" step="0.01" {...form.register("transport")} />
-                <Input label="Wardrobe Allowance" type="number" step="0.01" {...form.register("wardrobe")} />
-                <Input label="Meal Allowance" type="number" step="0.01" {...form.register("meal")} />
-                <Input label="Utility Allowance" type="number" step="0.01" {...form.register("utility")} />
+                <Input label="Housing (20%)" type="number" step="0.01" {...form.register("housing")} />
+                <Input label="Transport (15%)" type="number" step="0.01" {...form.register("transport")} />
+                <Input label="Wardrobe (10%)" type="number" step="0.01" {...form.register("wardrobe")} />
+                <Input label="Meal (10%)" type="number" step="0.01" {...form.register("meal")} />
+                <Input label="Utility (10%)" type="number" step="0.01" {...form.register("utility")} />
               </div>
             </div>
 
-            {/* Statutory deductions note */}
-            <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-xs text-blue-700">
-              PAYE, Employee Pension (8%), and Employer Pension (10%) are calculated automatically from the tax engine — no need to enter them.
+            {/* Additional Compensation */}
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Additional Compensation</p>
+              <div className="grid grid-cols-2 gap-3">
+                <Input label="Commission" type="number" step="0.01" {...form.register("commission")} />
+                <Input label="Withholding Tax" type="number" step="0.01" {...form.register("withholdingTax")} />
+              </div>
             </div>
 
-            {/* Optional: Net Pay 40% split */}
-            <Input
-              label="Net Pay 40% (Manual complement, if split disbursement)"
-              type="number"
-              step="0.01"
-              {...form.register("netPay40")}
-            />
+            {/* Computed statutory values */}
+            {salaryDefaults?.computed && (() => {
+              const c = salaryDefaults.computed!;
+              const StatRow = ({ label, value }: { label: string; value: number }) => (
+                <div className="flex items-center justify-between py-1">
+                  <span className="text-xs text-gray-500">{label}</span>
+                  <span className="text-xs font-semibold text-gray-800">₦{formatCurrency(value)}</span>
+                </div>
+              );
+              return (
+                <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-blue-600">
+                    Statutory &amp; Net Pay (Auto-Calculated)
+                  </p>
+                  <div className="grid grid-cols-2 gap-x-6">
+                    <div>
+                      <StatRow label="Employee Pension (8%)" value={c.pension} />
+                      <StatRow label="Employer Pension (10%)" value={c.employerPension} />
+                      <StatRow label="Total Pension" value={c.totalPension} />
+                    </div>
+                    <div>
+                      <StatRow label="PAYE Tax (Monthly)" value={c.paye} />
+                      <StatRow label="Total Deductions" value={c.totalDeductions} />
+                      <StatRow label="Net Pay 60%" value={c.netPay60} />
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Net Pay split */}
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                label="Net Pay 40% (Manual Input)"
+                type="number"
+                step="0.01"
+                {...form.register("netPay40")}
+              />
+              {salaryDefaults?.computed && (
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-gray-500">Net Pay 100% (60% + 40%)</label>
+                  <div className="flex items-center rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-bold text-gray-800">
+                    ₦{formatCurrency(
+                      salaryDefaults.computed.netPay60 +
+                      (parseFloat(String(form.watch("netPay40") || "0")) || 0)
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </Modal>
 

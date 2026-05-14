@@ -817,10 +817,21 @@ export function useUploadPayslips() {
 interface SalaryDefaults {
   hasSalaryRecord: boolean;
   hasBreakdown: boolean;
+  grossPay: number;
   basicSalary: number;
   referenceNetPay: number;
+  commission: number;
+  withholdingTax: number;
   allowances: Array<{ name: string; amount: number }>;
   deductions: Array<{ name: string; amount: number }>;
+  computed: {
+    pension: number;
+    employerPension: number;
+    totalPension: number;
+    paye: number;
+    totalDeductions: number;
+    netPay60: number;
+  } | null;
 }
 
 export function useEmployeeSalaryDefaults(employeeId: string | null) {
