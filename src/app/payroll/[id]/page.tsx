@@ -40,6 +40,8 @@ import {
   useDeletePayslip,
   useAllEmployees,
   useEffectiveRole,
+  useWalletBalance,
+  useTransferHistory,
 } from "@/hooks";
 import { formatDate } from "@/lib/utils";
 import type {
@@ -116,7 +118,8 @@ export default function PayrollDetailPage() {
   const params = useParams();
   const router = useRouter();
   const effectiveRole = useEffectiveRole();
-  const isAdmin = effectiveRole === "Admin";
+  const isAdmin = effectiveRole === "Admin" || effectiveRole === "CVO";
+  const isCVO = effectiveRole === "CVO";
   const isFinance = effectiveRole === "Finance";
   const payrollRunId = params.id as string;
 
@@ -162,6 +165,10 @@ export default function PayrollDetailPage() {
   const disburseRun = useDisbursePayroll();
   const cancelRun = useCancelPayrollRun();
   const deletePayslip = useDeletePayslip();
+  const { data: walletBalances } = useWalletBalance();
+  const isDisbursingRun = run?.status === "Disbursing";
+  const { data: transferHistory } = useTransferHistory(payrollRunId, isDisbursingRun);
+  const ngnBalance = walletBalances?.find((b) => b.currency === "NGN");
 
   const handleDeletePayslip = async () => {
     if (!deletePayslipTarget) return;
@@ -483,6 +490,15 @@ export default function PayrollDetailPage() {
               {run.createdBy && (
                 <span className="text-sm text-gray-500">Created by {run.createdBy.fullName}</span>
               )}
+              {isDisbursingRun && (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-medium text-indigo-700">
+                  <span className="relative flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-indigo-400 opacity-75" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-indigo-500" />
+                  </span>
+                  Live — updating every 5s
+                </span>
+              )}
             </div>
           </div>
 
@@ -524,7 +540,7 @@ export default function PayrollDetailPage() {
                 </Button>
               </>
             )}
-            {run.status === "PendingCVO" && isAdmin && (
+            {run.status === "PendingCVO" && isCVO && (
               <>
                 <Button variant="outline" onClick={() => setRejectModalOpen(true)}>
                   <X className="h-4 w-4" />
@@ -992,6 +1008,26 @@ export default function PayrollDetailPage() {
           }
         >
           <div className="space-y-4">
+            {/* Wallet balance pre-flight check */}
+            {ngnBalance !== undefined && (
+              <div className={`rounded-lg border px-4 py-3 text-sm ${
+                ngnBalance.balance >= Number(run.totalNet || 0)
+                  ? "border-green-200 bg-green-50 text-green-800"
+                  : "border-red-200 bg-red-50 text-red-800"
+              }`}>
+                <div className="flex items-center justify-between">
+                  <span className="font-medium">Paystack NGN Balance</span>
+                  <span className="font-bold">
+                    ₦{Number(ngnBalance.balance).toLocaleString("en-NG", { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                {ngnBalance.balance < Number(run.totalNet || 0) && (
+                  <p className="mt-1 text-xs">
+                    Balance is insufficient to cover total net pay of ₦{formatCurrency(run.totalNet || 0)}. Top up before disbursing.
+                  </p>
+                )}
+              </div>
+            )}
             <p className="text-sm text-gray-600">
               {run.payslips?.length || 0} employees · Total to be paid:{" "}
               <strong>₦{formatCurrency(run.totalNet || 0)}</strong>
@@ -1008,10 +1044,66 @@ export default function PayrollDetailPage() {
               </div>
             )}
             <p className="text-xs text-gray-500">
-              Transfers are initiated via Paystack with each payslip ID as the idempotency key. Status updates arrive via webhook; the run will move to Sent automatically once every transfer settles.
+              Transfers use each payslip ID as the idempotency key — concurrent or duplicate requests are safely rejected. Status updates arrive via Paystack webhook; the run moves to Sent once every transfer settles.
             </p>
           </div>
         </Modal>
+
+        {/* ── Transfer History ─────────────────────────────── */}
+        {(run.status === "Disbursing" || run.status === "Sent") && transferHistory && transferHistory.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Transfer History</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100 bg-gray-50">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Employee</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Amount</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Status</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Transfer Code</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Attempted</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Settled</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Failure Reason</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {transferHistory.map((t) => (
+                      <tr key={t.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3">
+                          <p className="font-medium text-gray-900">{t.employee.fullName}</p>
+                          <p className="text-xs text-gray-400">{t.employee.employeeId}</p>
+                        </td>
+                        <td className="px-4 py-3 font-medium text-gray-800">
+                          ₦{Number(t.netPayTotal || t.netPay).toLocaleString("en-NG", { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${PAY_STATUS_COLORS[t.paymentStatus as keyof typeof PAY_STATUS_COLORS] ?? "bg-gray-100 text-gray-600"}`}>
+                            {t.paymentStatus}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 font-mono text-xs text-gray-500">
+                          {t.paystackTransferCode ?? "—"}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-gray-500">
+                          {t.paymentAttemptedAt ? formatDate(t.paymentAttemptedAt) : "—"}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-gray-500">
+                          {t.paymentCompletedAt ? formatDate(t.paymentCompletedAt) : "—"}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-red-600 max-w-[200px] truncate" title={t.paymentFailureReason ?? ""}>
+                          {t.paymentFailureReason ?? "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </AppLayout>
   );

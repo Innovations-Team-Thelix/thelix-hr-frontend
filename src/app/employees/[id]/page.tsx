@@ -80,6 +80,7 @@ import { formatDate, formatCurrency, getInitials, formatBirthDate,
 import api from "@/lib/api";
 import { AttendanceHistoryTab } from "@/components/employees/attendance-history-tab";
 import { CompensationSummary } from "@/components/employees/compensation-summary";
+import { BankAccountFields } from "@/components/shared/bank-account-fields";
 import type { LifecycleEventType, ViolationType, DisciplinarySeverity, SalaryRecord, SalaryComponent, AssetCondition } from "@/types";
 
 const EVENT_ICONS: Record<string, React.ElementType> = {
@@ -2053,22 +2054,20 @@ export default function EmployeeProfilePage() {
                       error={editForm.formState.errors.currency?.message}
                       {...editForm.register("currency")}
                     />
-                    <Input
-                      label="Account Name"
-                      error={editForm.formState.errors.accountName?.message}
-                      {...editForm.register("accountName")}
-                    />
-                    <Input
-                      label="Account Number"
-                      error={editForm.formState.errors.accountNumber?.message}
-                      {...editForm.register("accountNumber")}
-                    />
-                    <Input
-                      label="Bank Name"
-                      error={editForm.formState.errors.bankName?.message}
-                      {...editForm.register("bankName")}
-                    />
                   </div>
+                  <BankAccountFields
+                    accountNumber={editForm.watch("accountNumber") || ""}
+                    accountName={editForm.watch("accountName") || ""}
+                    bankName={editForm.watch("bankName") || ""}
+                    onAccountNumberChange={(v) => editForm.setValue("accountNumber", v)}
+                    onAccountNameChange={(v) => editForm.setValue("accountName", v)}
+                    onBankNameChange={(v) => editForm.setValue("bankName", v)}
+                    errors={{
+                      accountNumber: editForm.formState.errors.accountNumber?.message,
+                      accountName: editForm.formState.errors.accountName?.message,
+                      bankName: editForm.formState.errors.bankName?.message,
+                    }}
+                  />
                 </div>
               );
             })()}

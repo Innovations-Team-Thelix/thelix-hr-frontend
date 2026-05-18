@@ -24,7 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { Modal } from "@/components/ui/modal";
 import { Skeleton } from "@/components/ui/loading";
-import { usePayrollRuns, useCreatePayrollRun } from "@/hooks";
+import { usePayrollRuns, useCreatePayrollRun, useWalletBalance, useEffectiveRole } from "@/hooks";
 import { formatDate } from "@/lib/utils";
 import { downloadSalaryTemplate } from "@/lib/payroll-utils";
 import type { PayrollStatus } from "@/types";
@@ -111,7 +111,10 @@ export default function PayrollPage() {
     status?: PayrollStatus;
   }>({ page: 1 });
 
+  const effectiveRole = useEffectiveRole();
+  const canSeeBalance = effectiveRole === "CVO" || effectiveRole === "Admin" || effectiveRole === "Finance";
   const { data: result, isLoading } = usePayrollRuns(filters);
+  const { data: walletBalances, isLoading: balanceLoading } = useWalletBalance();
   const createRun = useCreatePayrollRun();
 
   const stats = useMemo(() => {
@@ -198,6 +201,35 @@ export default function PayrollPage() {
             </Button>
           </div>
         </div>
+
+        {/* ── Paystack Wallet Balance ───────────────────── */}
+        {canSeeBalance && (
+          <div className="rounded-xl border border-indigo-200 bg-indigo-50 px-5 py-4">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div className="flex items-center gap-2.5">
+                <Wallet className="h-5 w-5 text-indigo-600 shrink-0" />
+                <span className="text-sm font-semibold text-indigo-900">Paystack Wallet Balance</span>
+              </div>
+              <div className="flex items-center gap-6 flex-wrap">
+                {balanceLoading ? (
+                  <span className="text-sm text-indigo-400 animate-pulse">Loading balance…</span>
+                ) : walletBalances && walletBalances.length > 0 ? (
+                  walletBalances.map((b) => (
+                    <div key={b.currency} className="text-right">
+                      <p className="text-xs text-indigo-500 font-medium">{b.currency}</p>
+                      <p className="text-lg font-bold text-indigo-900">
+                        {b.currency === "NGN" ? "₦" : b.currency === "USD" ? "$" : b.currency + " "}
+                        {Number(b.balance).toLocaleString("en-NG", { minimumFractionDigits: 2 })}
+                      </p>
+                    </div>
+                  ))
+                ) : (
+                  <span className="text-sm text-indigo-400">Unable to fetch balance</span>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── Stat cards ────────────────────────────────── */}
         {isLoading ? (

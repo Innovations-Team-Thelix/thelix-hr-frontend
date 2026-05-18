@@ -782,6 +782,13 @@ export function usePayrollRun(id: string) {
       return res.data;
     },
     enabled: !!id,
+    // Automatically poll every 5 s while the run is Disbursing so the UI
+    // reflects webhook / cron-poll updates without a manual page refresh.
+    refetchInterval: (query) => {
+      const status = (query.state.data as PayrollRun | undefined)?.status;
+      return status === "Disbursing" ? 5_000 : false;
+    },
+    refetchIntervalInBackground: true,
   });
 }
 
@@ -1031,6 +1038,53 @@ export function useCancelPayrollRun() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["payroll-runs"] });
     },
+  });
+}
+
+export function useBanks() {
+  return useQuery<{ name: string; code: string; slug: string }[]>({
+    queryKey: ["paystack-banks"],
+    queryFn: async () => {
+      const res = await api.get<{ name: string; code: string; slug: string }[]>("/payroll/banks");
+      return res.data;
+    },
+    staleTime: 24 * 60 * 60 * 1000, // bank list rarely changes — cache for 24h
+  });
+}
+
+export function useWalletBalance() {
+  return useQuery<{ currency: string; balance: number }[]>({
+    queryKey: ["payroll-wallet-balance"],
+    queryFn: async () => {
+      const res = await api.get<{ currency: string; balance: number }[]>("/payroll/wallet-balance");
+      return res.data;
+    },
+    staleTime: 60_000, // refresh every 60s
+    retry: false,
+  });
+}
+
+export function useTransferHistory(payrollRunId: string, disbursing = false) {
+  return useQuery({
+    queryKey: ["payroll-transfers", payrollRunId],
+    queryFn: async () => {
+      const res = await api.get(`/payroll/${payrollRunId}/transfers`);
+      return res.data as Array<{
+        id: string;
+        paymentStatus: string;
+        paystackTransferCode: string | null;
+        paystackReference: string | null;
+        paymentAttemptedAt: string | null;
+        paymentCompletedAt: string | null;
+        paymentFailureReason: string | null;
+        netPayTotal: number;
+        netPay: number;
+        employee: { id: string; fullName: string; employeeId: string };
+      }>;
+    },
+    enabled: !!payrollRunId,
+    refetchInterval: disbursing ? 5_000 : false,
+    refetchIntervalInBackground: disbursing,
   });
 }
 
