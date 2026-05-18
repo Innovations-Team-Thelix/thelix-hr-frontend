@@ -70,32 +70,32 @@ interface NavItem {
 }
 
 const performanceChildren: NavChild[] = [
-  { label: "My Dashboard",   href: "/performance",             icon: Activity,       roles: ["Admin", "SBUHead", "Director", "Manager", "Finance", "Employee"] },
-  { label: "Praise Wall",    href: "/performance/praise",      icon: Star,           roles: ["Admin", "SBUHead", "Director", "Manager", "Finance", "Employee"] },
-  { label: "Feedback",       href: "/performance/feedback",    icon: MessageSquare,  roles: ["Admin", "SBUHead", "Director", "Manager", "Finance", "Employee"] },
-  { label: "My Notes",       href: "/performance/notes",       icon: BookOpenIcon,   roles: ["Admin", "SBUHead", "Director", "Manager", "Finance", "Employee"] },
-  { label: "Review Cycles",  href: "/performance/cycles",      icon: CalendarDays,   roles: ["Admin", "SBUHead", "Director", "Manager", "Finance", "Employee"] },
-  { label: "Analytics",      href: "/performance/analytics",   icon: BarChart3,      roles: ["Admin", "Finance", "SBUHead"] },
+  { label: "My Dashboard",   href: "/performance",             icon: Activity,       roles: ["CVO", "Admin", "SBUHead", "Director", "Manager", "Finance", "Employee"] },
+  { label: "Praise Wall",    href: "/performance/praise",      icon: Star,           roles: ["CVO", "Admin", "SBUHead", "Director", "Manager", "Finance", "Employee"] },
+  { label: "Feedback",       href: "/performance/feedback",    icon: MessageSquare,  roles: ["CVO", "Admin", "SBUHead", "Director", "Manager", "Finance", "Employee"] },
+  { label: "My Notes",       href: "/performance/notes",       icon: BookOpenIcon,   roles: ["CVO", "Admin", "SBUHead", "Director", "Manager", "Finance", "Employee"] },
+  { label: "Review Cycles",  href: "/performance/cycles",      icon: CalendarDays,   roles: ["CVO", "Admin", "SBUHead", "Director", "Manager", "Finance", "Employee"] },
+  { label: "Analytics",      href: "/performance/analytics",   icon: BarChart3,      roles: ["CVO", "Admin", "Finance", "SBUHead"] },
 ];
 
 const employeeChildren: NavChild[] = [
-  { label: "All Employees", href: "/employees",                    icon: Users,        roles: ["Admin", "SBUHead"] },
-  { label: "Active",        href: "/employees?status=Active",      icon: UserCheck,    roles: ["Admin", "SBUHead"] },
-  { label: "Suspended",     href: "/employees?status=Suspended",   icon: PauseCircle,  roles: ["Admin", "SBUHead"] },
-  { label: "Resigned",      href: "/employees?status=Resigned",    icon: UserMinus,    roles: ["Admin", "SBUHead"] },
-  { label: "Terminated",    href: "/employees?status=Terminated",  icon: UserX,        roles: ["Admin", "SBUHead"] },
+  { label: "All Employees", href: "/employees",                    icon: Users,        roles: ["CVO", "Admin", "SBUHead"] },
+  { label: "Active",        href: "/employees?status=Active",      icon: UserCheck,    roles: ["CVO", "Admin", "SBUHead"] },
+  { label: "Suspended",     href: "/employees?status=Suspended",   icon: PauseCircle,  roles: ["CVO", "Admin", "SBUHead"] },
+  { label: "Resigned",      href: "/employees?status=Resigned",    icon: UserMinus,    roles: ["CVO", "Admin", "SBUHead"] },
+  { label: "Terminated",    href: "/employees?status=Terminated",  icon: UserX,        roles: ["CVO", "Admin", "SBUHead"] },
 ];
 
 const kpiChildren: NavChild[] = [
-  { label: "Dashboard",           href: "/kpi",            icon: BarChart3,      roles: ["Admin", "SBUHead", "Finance", "Employee"] },
-  { label: "KPI List",            href: "/kpi/list",       icon: Target,         roles: ["Admin", "SBUHead", "Finance", "Employee"] },
-  { label: "My OKRs",             href: "/kpi/my-okrs",    icon: Zap,            roles: ["Admin", "SBUHead", "Finance", "Employee"] },
-  { label: "Team OKRs",           href: "/kpi/team-okrs",  icon: Users,          roles: ["Admin", "SBUHead", "Finance", "Employee"] },
-  { label: "Cascade View",        href: "/kpi/cascade",    icon: GitBranch,      roles: ["Admin", "SBUHead", "Finance", "Employee"] },
-  { label: "Cycles",              href: "/kpi/cycles",     icon: CalendarDays,   roles: ["Admin", "SBUHead"] },
-  { label: "HR Review",           href: "/kpi/hr-review",  icon: Briefcase,      roles: ["Admin", "SBUHead", "Finance"] },
-  { label: "Reports & Analytics", href: "/kpi/reports",    icon: TrendingUp,     roles: ["Admin", "SBUHead", "Finance", "Employee"] },
-  { label: "KPI Dictionary",      href: "/kpi/dictionary", icon: FileEdit,       roles: ["Admin", "SBUHead", "Finance", "Employee"] },
+  { label: "Dashboard",           href: "/kpi",            icon: BarChart3,      roles: ["CVO", "Admin", "SBUHead", "Finance", "Employee"] },
+  { label: "KPI List",            href: "/kpi/list",       icon: Target,         roles: ["CVO", "Admin", "SBUHead", "Finance", "Employee"] },
+  { label: "My OKRs",             href: "/kpi/my-okrs",    icon: Zap,            roles: ["CVO", "Admin", "SBUHead", "Finance", "Employee"] },
+  { label: "Team OKRs",           href: "/kpi/team-okrs",  icon: Users,          roles: ["CVO", "Admin", "SBUHead", "Finance", "Employee"] },
+  { label: "Cascade View",        href: "/kpi/cascade",    icon: GitBranch,      roles: ["CVO", "Admin", "SBUHead", "Finance", "Employee"] },
+  { label: "Cycles",              href: "/kpi/cycles",     icon: CalendarDays,   roles: ["CVO", "Admin", "SBUHead"] },
+  { label: "HR Review",           href: "/kpi/hr-review",  icon: Briefcase,      roles: ["CVO", "Admin", "SBUHead", "Finance"] },
+  { label: "Reports & Analytics", href: "/kpi/reports",    icon: TrendingUp,     roles: ["CVO", "Admin", "SBUHead", "Finance", "Employee"] },
+  { label: "KPI Dictionary",      href: "/kpi/dictionary", icon: FileEdit,       roles: ["CVO", "Admin", "SBUHead", "Finance", "Employee"] },
 ];
 
 const navItems: NavItem[] = [
@@ -103,7 +103,7 @@ const navItems: NavItem[] = [
     label: "Dashboard",
     href: "/dashboard",
     icon: LayoutDashboard,
-    roles: ["Admin", "SBUHead"],
+    roles: ["CVO", "Admin", "SBUHead"],
   },
   {
     label: "My Dashboard",
@@ -115,32 +115,32 @@ const navItems: NavItem[] = [
     label: "Employees",
     href: "/employees",
     icon: Users,
-    roles: ["Admin", "SBUHead", "Employee"],
+    roles: ["CVO", "Admin", "SBUHead", "Employee"],
     children: employeeChildren,
   },
   {
     label: "SBU",
     href: "/sbus",
     icon: Building2,
-    roles: ["Admin"],
+    roles: ["CVO", "Admin"],
   },
   {
     label: "My Profile",
     href: "/profile",
     icon: UserCircle,
-    roles: ["Admin", "SBUHead", "Finance", "Employee"],
+    roles: ["CVO", "Admin", "SBUHead", "Finance", "Employee"],
   },
   {
     label: "Leave",
     href: "/leave",
     icon: CalendarDays,
-    roles: ["Admin", "SBUHead", "Finance", "Employee"],
+    roles: ["CVO", "Admin", "SBUHead", "Finance", "Employee"],
   },
   {
     label: "Roster",
     href: "/roster",
     icon: CalendarCheck,
-    roles: ["Admin", "SBUHead", "Finance", "Employee"],
+    roles: ["CVO", "Admin", "SBUHead", "Finance", "Employee"],
   },
   {
     label: "My Attendance",
@@ -152,111 +152,111 @@ const navItems: NavItem[] = [
     label: "Attendance Approvals",
     href: "/attendance/approvals",
     icon: ClipboardCheck,
-    roles: ["Admin", "SBUHead"],
+    roles: ["CVO", "Admin", "SBUHead"],
   },
   {
     label: "Celebrations",
     href: "/celebrations",
     icon: PartyPopper,
-    roles: ["Admin", "SBUHead", "Finance", "Employee"],
+    roles: ["CVO", "Admin", "SBUHead", "Finance", "Employee"],
   },
   {
     label: "Reports",
     href: "/reports",
     icon: FileSpreadsheet,
-    roles: ["Admin", "Finance", "SBUHead"],
+    roles: ["CVO", "Admin", "Finance", "SBUHead"],
   },
   {
     label: "Performance Appraisal",
     href: "/performance",
     icon: Activity,
-    roles: ["Admin", "SBUHead", "Director", "Manager", "Finance", "Employee"],
+    roles: ["CVO", "Admin", "SBUHead", "Director", "Manager", "Finance", "Employee"],
     children: performanceChildren,
   },
   {
     label: "KPI & OKR",
     href: "/kpi",
     icon: Target,
-    roles: ["Admin", "SBUHead", "Finance", "Employee"],
+    roles: ["CVO", "Admin", "SBUHead", "Finance", "Employee"],
     children: kpiChildren,
   },
   {
     label: "Attendance Reports",
     href: "/reports/attendance",
     icon: BarChart3,
-    roles: ["Admin", "Finance", "SBUHead"],
+    roles: ["CVO", "Admin", "Finance", "SBUHead"],
   },
   {
     label: "Salary Analytics",
     href: "/reports/salary",
     icon: DollarSign,
-    roles: ["Admin", "Finance"],
+    roles: ["CVO", "Admin", "Finance"],
   },
   {
     label: "Discipline",
     href: "/discipline",
     icon: ShieldAlert,
-    roles: ["Admin", "SBUHead"],
+    roles: ["CVO", "Admin", "SBUHead"],
   },
   {
     label: "Assets",
     href: "/assets",
     icon: Package,
-    roles: ["Admin", "SBUHead"],
+    roles: ["CVO", "Admin", "SBUHead"],
   },
   {
     label: "Policy",
     href: "/policy",
     icon: BookOpen,
-    roles: ["Admin", "SBUHead", "Finance", "Employee"],
+    roles: ["CVO", "Admin", "SBUHead", "Finance", "Employee"],
   },
   {
     label: "Payroll",
     href: "/payroll",
     icon: Wallet,
-    roles: ["Admin", "Finance"],
+    roles: ["CVO", "Admin", "Finance"],
   },
   {
     label: "Bonuses",
     href: "/bonuses",
     icon: Gift,
-    roles: ["Admin", "Finance"],
+    roles: ["CVO", "Admin", "Finance"],
   },
   {
     label: "Payslips",
     href: "/payslips",
     icon: Receipt,
-    roles: ["Admin", "Finance", "SBUHead", "Employee"],
+    roles: ["CVO", "Admin", "Finance", "SBUHead", "Employee"],
   },
   {
     label: "Notifications",
     href: "/notifications",
     icon: Bell,
-    roles: ["Admin", "SBUHead", "Finance", "Employee"],
+    roles: ["CVO", "Admin", "SBUHead", "Finance", "Employee"],
   },
   {
     label: "Audit Logs",
     href: "/audit",
     icon: Shield,
-    roles: ["Admin"],
+    roles: ["CVO", "Admin"],
   },
   {
     label: "Departments",
     href: "/departments",
     icon: FolderTree,
-    roles: ["Admin"],
+    roles: ["CVO", "Admin"],
   },
   {
     label: "Supervisors",
     href: "/supervisors",
     icon: UserCog,
-    roles: ["Admin"],
+    roles: ["CVO", "Admin"],
   },
   {
     label: "Settings",
     href: "/settings",
     icon: Settings,
-    roles: ["Admin", "SBUHead", "Finance", "Employee", "Director", "Manager"],
+    roles: ["CVO", "Admin", "SBUHead", "Finance", "Employee", "Director", "Manager"],
   },
 ];
 
@@ -275,7 +275,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
   const displayRole = viewAs ?? user?.role ?? "";
 
   const actualRole = user?.role;
-  const canPreview = actualRole === "Admin" || actualRole === "SBUHead";
+  const canPreview = actualRole === "CVO" || actualRole === "Admin" || actualRole === "SBUHead";
   const effectiveRole = (viewAs ?? actualRole) as UserRole | undefined;
 
   // Track which expandable sections are open; auto-open groups when on those routes

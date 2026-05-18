@@ -77,8 +77,10 @@ import AuditLogList from "@/components/audit/audit-log-list";
 import { EmployeeTags } from "@/components/employees/employee-tags";
 import { formatDate, formatCurrency, getInitials, formatBirthDate,
 } from "@/lib/utils";
+import api from "@/lib/api";
 import { AttendanceHistoryTab } from "@/components/employees/attendance-history-tab";
 import { CompensationSummary } from "@/components/employees/compensation-summary";
+import { BankAccountFields } from "@/components/shared/bank-account-fields";
 import type { LifecycleEventType, ViolationType, DisciplinarySeverity, SalaryRecord, SalaryComponent, AssetCondition } from "@/types";
 
 const EVENT_ICONS: Record<string, React.ElementType> = {
@@ -130,6 +132,9 @@ const editEmployeeSchema = z.object({
   employmentStatus: z.enum(["Active", "Suspended", "Terminated", "Resigned"]),
 
   monthlySalary: z.string().optional(),
+  commission: z.string().optional(),
+  withholdingTax: z.string().optional(),
+  // kept in schema for backward-compat with submit handler; not shown in UI
   baseSalary: z.string().optional(),
   grossPay: z.string().optional(),
   netPay: z.string().optional(),
@@ -285,6 +290,45 @@ export default function EmployeeProfilePage() {
     name: "deductions",
   });
 
+  // Gross pay breakdown auto-computation state
+  interface GrossBreakdown {
+    basicSalary: number;
+    allowancesBreakdown: { name: string; amount: number }[];
+    grossPay: number;
+    pension: number;
+    employerPension: number;
+    totalPension: number;
+    paye: number;
+    totalDeductions: number;
+    netPay60: number;
+  }
+  const [grossBreakdown, setGrossBreakdown] = useState<GrossBreakdown | null>(null);
+  const [breakdownLoading, setBreakdownLoading] = useState(false);
+
+  const watchedGrossPay = editForm.watch("monthlySalary");
+
+  useEffect(() => {
+    const grossPay = parseFloat(watchedGrossPay || "0");
+    if (!grossPay || grossPay <= 0) {
+      setGrossBreakdown(null);
+      return;
+    }
+    setBreakdownLoading(true);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await api.get<GrossBreakdown>("/payroll/gross-breakdown", {
+          params: { grossPay },
+        });
+        setGrossBreakdown(res.data);
+      } catch {
+        // silently ignore — computed fields just won't populate
+      } finally {
+        setBreakdownLoading(false);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [watchedGrossPay]);
+
   const selectedSbuId = editForm.watch("sbuId");
   const { data: departments } = useDepartments(selectedSbuId);
 
@@ -332,24 +376,20 @@ export default function EmployeeProfilePage() {
         employmentStatus: employee.employmentStatus,
 
         monthlySalary: employee.monthlySalary?.toString() || undefined,
-        simpleNetPay: employee.netPay?.toString() || undefined,
-        baseSalary: breakdown?.baseSalary?.toString() || undefined,
-        grossPay: breakdown?.grossPay?.toString() || undefined,
-        netPay: breakdown?.netPay?.toString() || undefined,
-        pension: breakdown?.pension?.toString() || undefined,
-        tax: breakdown?.tax?.toString() || undefined,
-        allowances: (Array.isArray(breakdown?.allowances) ? breakdown.allowances : []).map(
-          (a) => ({
-            name: String(a.name ?? ""),
-            amount: String(a.amount ?? "0"),
-          })
-        ),
-        deductions: (Array.isArray(breakdown?.deductions) ? breakdown.deductions : []).map(
-          (d) => ({
-            name: String(d.name ?? ""),
-            amount: String(d.amount ?? "0"),
-          })
-        ),
+        // Extract commission from stored allowances; omit standard salary-structure items
+        commission: (Array.isArray(breakdown?.allowances)
+          ? (breakdown.allowances as { name: string; amount: number }[]).find(
+              (a) => a.name.toLowerCase() === "commission"
+            )?.amount?.toString()
+          : undefined),
+        // Extract withholding tax from stored deductions
+        withholdingTax: (Array.isArray(breakdown?.deductions)
+          ? (breakdown.deductions as { name: string; amount: number }[]).find(
+              (d) => d.name.toLowerCase().includes("withholding")
+            )?.amount?.toString()
+          : undefined),
+        allowances: [],
+        deductions: [],
         salaryBand: employee.salaryBand || undefined,
         accountName: employee.accountName || undefined,
         accountNumber: employee.accountNumber || undefined,
@@ -382,32 +422,42 @@ export default function EmployeeProfilePage() {
 
   const handleEditSubmit = async (data: EditEmployeeFormData) => {
     try {
-      // Remove form-only fields that the backend doesn't expect
-      const { simpleNetPay, ...rest } = data;
+      // Strip form-only / computed fields that the backend doesn't accept directly
+      const {
+        simpleNetPay, baseSalary: _bs, grossPay: _gp, netPay: _np,
+        pension: _pen, tax: _tax, commission, withholdingTax,
+        allowances: _all, deductions: _ded,
+        ...rest
+      } = data;
+
+      const grossPayNum = data.monthlySalary ? parseFloat(data.monthlySalary) : 0;
+      const commissionNum = commission ? parseFloat(commission) : 0;
+      const withholdingNum = withholdingTax ? parseFloat(withholdingTax) : 0;
+      const r2 = (n: number) => Math.round(n * 100) / 100;
+
+      // Build full allowances array: standard split + commission
+      const standardAllowances = grossPayNum > 0 ? [
+        { name: "Housing",   amount: r2(grossPayNum * 0.20) },
+        { name: "Transport", amount: r2(grossPayNum * 0.15) },
+        { name: "Wardrobe",  amount: r2(grossPayNum * 0.10) },
+        { name: "Meal",      amount: r2(grossPayNum * 0.10) },
+        { name: "Utility",   amount: r2(grossPayNum * 0.10) },
+      ] : [];
+      const allAllowances = [
+        ...standardAllowances,
+        ...(commissionNum > 0 ? [{ name: "Commission", amount: commissionNum }] : []),
+      ];
+      const allDeductions = withholdingNum > 0
+        ? [{ name: "Withholding Tax", amount: withholdingNum }]
+        : [];
 
       const payload: Record<string, unknown> = {
         ...rest,
-        // Parse numeric fields from strings to numbers
-        monthlySalary: data.monthlySalary ? parseFloat(data.monthlySalary) : undefined,
-        netPay: data.netPay
-          ? parseFloat(data.netPay)
-          : (simpleNetPay ? parseFloat(simpleNetPay) : undefined),
-        baseSalary: data.baseSalary ? parseFloat(data.baseSalary) : undefined,
-        grossPay: data.grossPay ? parseFloat(data.grossPay) : undefined,
-        pension: data.pension ? parseFloat(data.pension) : undefined,
-        tax: data.tax ? parseFloat(data.tax) : undefined,
-        allowances: data.allowances.length > 0
-          ? data.allowances.map((a) => ({
-              name: a.name,
-              amount: parseFloat(a.amount || "0"),
-            }))
-          : undefined,
-        deductions: data.deductions.length > 0
-          ? data.deductions.map((d) => ({
-              name: d.name,
-              amount: parseFloat(d.amount || "0"),
-            }))
-          : undefined,
+        monthlySalary: grossPayNum || undefined,
+        grossPay: grossPayNum || undefined,
+        baseSalary: grossPayNum ? r2(grossPayNum * 0.35) : undefined,
+        allowances: allAllowances.length > 0 ? allAllowances : undefined,
+        deductions: allDeductions.length > 0 ? allDeductions : undefined,
       };
 
       // Remove empty strings and undefined values
@@ -1850,188 +1900,177 @@ export default function EmployeeProfilePage() {
             )}
 
             {/* Compensation Tab */}
-            {editActiveTab === "compensation" && (
-              <div className="space-y-6">
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <CurrencyInput
-                    control={editForm.control}
-                    name="monthlySalary"
-                    label="Gross Pay"
-                    currencyCode={editForm.watch("currency")}
-                    error={editForm.formState.errors.monthlySalary?.message}
-                  />
-                  <CurrencyInput
-                    control={editForm.control}
-                    name="simpleNetPay"
-                    label="Net Pay"
-                    currencyCode={editForm.watch("currency")}
-                    error={editForm.formState.errors.simpleNetPay?.message}
-                  />
-                  <Input
-                    label="Salary Effective Date"
-                    type="date"
-                    error={editForm.formState.errors.salaryEffectiveDate?.message}
-                    {...editForm.register("salaryEffectiveDate")}
-                  />
-                  <CurrencyInput
-                    control={editForm.control}
-                    name="baseSalary"
-                    label="Base Salary (Breakdown)"
-                    currencyCode={editForm.watch("currency")}
-                    error={editForm.formState.errors.baseSalary?.message}
-                  />
-                  <CurrencyInput
-                    control={editForm.control}
-                    name="grossPay"
-                    label="Gross Pay (Breakdown)"
-                    currencyCode={editForm.watch("currency")}
-                    error={editForm.formState.errors.grossPay?.message}
-                  />
-                  <CurrencyInput
-                    control={editForm.control}
-                    name="netPay"
-                    label="Net Pay (Breakdown)"
-                    currencyCode={editForm.watch("currency")}
-                    error={editForm.formState.errors.netPay?.message}
-                  />
-                  <CurrencyInput
-                    control={editForm.control}
-                    name="pension"
-                    label="Pension"
-                    currencyCode={editForm.watch("currency")}
-                    error={editForm.formState.errors.pension?.message}
-                  />
-                  <CurrencyInput
-                    control={editForm.control}
-                    name="tax"
-                    label="Tax"
-                    currencyCode={editForm.watch("currency")}
-                    error={editForm.formState.errors.tax?.message}
-                  />
-                </div>
+            {editActiveTab === "compensation" && (() => {
+              const currency = editForm.watch("currency") || "NGN";
+              const bd = grossBreakdown;
+              const netPay60 = bd?.netPay60 ?? 0;
+              const watchedNetPay40 = editForm.watch("simpleNetPay");
+              const netPay40Val = parseFloat(watchedNetPay40 || "0") || 0;
+              const netPay100 = netPay60 + netPay40Val;
 
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-medium text-gray-900">Allowances</h3>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => appendAllowance({ name: "", amount: "" })}
-                    >
-                      <Plus className="mr-2 h-4 w-4" />
-                      Add Allowance
-                    </Button>
+              const CalcField = ({ label, value }: { label: string; value: number | undefined }) => (
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">{label}</label>
+                  <div className={`flex items-center gap-2 px-3 py-2 rounded-md border text-sm ${
+                    bd ? "bg-blue-50 border-blue-200 text-blue-900" : "bg-gray-50 border-gray-200 text-gray-400"
+                  }`}>
+                    {breakdownLoading ? (
+                      <span className="text-gray-400 italic text-xs">calculating…</span>
+                    ) : (
+                      <>
+                        <span className="text-gray-400 text-xs">auto</span>
+                        <span className="font-medium">
+                          {value !== undefined ? formatCurrency(value, currency) : "—"}
+                        </span>
+                      </>
+                    )}
                   </div>
-                  {allowanceFields.map((field, index) => (
-                    <div key={field.id} className="flex gap-4">
-                      <div className="flex-1">
-                        <Input
-                          placeholder="Name"
-                          error={editForm.formState.errors.allowances?.[index]?.name?.message}
-                          {...editForm.register(`allowances.${index}.name`)}
-                        />
-                      </div>
-                      <div className="flex-1">
-                        <CurrencyInput
-                          control={editForm.control}
-                          name={`allowances.${index}.amount`}
-                          currencyCode={editForm.watch("currency")}
-                          error={editForm.formState.errors.allowances?.[index]?.amount?.message}
-                        />
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 w-8 p-0 text-red-500 hover:text-red-700"
-                        onClick={() => removeAllowance(index)}
-                      >
-                        <UserX className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
                 </div>
+              );
 
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-medium text-gray-900">Deductions</h3>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => appendDeduction({ name: "", amount: "" })}
-                    >
-                      <Plus className="mr-2 h-4 w-4" />
-                      Add Deduction
-                    </Button>
+              return (
+                <div className="space-y-6">
+                  {/* ── Gross Pay ── */}
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <CurrencyInput
+                      control={editForm.control}
+                      name="monthlySalary"
+                      label="Gross Pay"
+                      currencyCode={currency}
+                      error={editForm.formState.errors.monthlySalary?.message}
+                    />
+                    <Input
+                      label="Salary Effective Date"
+                      type="date"
+                      error={editForm.formState.errors.salaryEffectiveDate?.message}
+                      {...editForm.register("salaryEffectiveDate")}
+                    />
                   </div>
-                  {deductionFields.map((field, index) => (
-                    <div key={field.id} className="flex gap-4">
-                      <div className="flex-1">
-                        <Input
-                          placeholder="Name"
-                          error={editForm.formState.errors.deductions?.[index]?.name?.message}
-                          {...editForm.register(`deductions.${index}.name`)}
-                        />
-                      </div>
-                      <div className="flex-1">
-                        <CurrencyInput
-                          control={editForm.control}
-                          name={`deductions.${index}.amount`}
-                          currencyCode={editForm.watch("currency")}
-                          error={editForm.formState.errors.deductions?.[index]?.amount?.message}
-                        />
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 w-8 p-0 text-red-500 hover:text-red-700"
-                        onClick={() => removeDeduction(index)}
-                      >
-                        <UserX className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
 
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <Input
-                    label="Salary Band"
-                    placeholder="e.g. L3, L4"
-                    error={editForm.formState.errors.salaryBand?.message}
-                    {...editForm.register("salaryBand")}
-                  />
-                  <Select
-                    label="Currency"
-                    options={[
-                      { label: "NGN - Nigerian Naira", value: "NGN" },
-                      { label: "USD - US Dollar", value: "USD" },
-                      { label: "GBP - British Pound", value: "GBP" },
-                      { label: "EUR - Euro", value: "EUR" },
-                    ]}
-                    error={editForm.formState.errors.currency?.message}
-                    {...editForm.register("currency")}
-                  />
-                  <Input
-                    label="Account Name"
-                    error={editForm.formState.errors.accountName?.message}
-                    {...editForm.register("accountName")}
-                  />
-                  <Input
-                    label="Account Number"
-                    error={editForm.formState.errors.accountNumber?.message}
-                    {...editForm.register("accountNumber")}
-                  />
-                  <Input
-                    label="Bank Name"
-                    error={editForm.formState.errors.bankName?.message}
-                    {...editForm.register("bankName")}
+                  {/* ── Salary Structure (auto-computed) ── */}
+                  <div>
+                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                      Salary Structure
+                    </h3>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <CalcField label="Basic Salary (35%)" value={bd?.basicSalary} />
+                      <CalcField
+                        label="Housing (20%)"
+                        value={bd?.allowancesBreakdown?.find((a) => a.name === "Housing")?.amount}
+                      />
+                      <CalcField
+                        label="Transport (15%)"
+                        value={bd?.allowancesBreakdown?.find((a) => a.name === "Transport")?.amount}
+                      />
+                      <CalcField
+                        label="Wardrobe (10%)"
+                        value={bd?.allowancesBreakdown?.find((a) => a.name === "Wardrobe")?.amount}
+                      />
+                      <CalcField
+                        label="Meal (10%)"
+                        value={bd?.allowancesBreakdown?.find((a) => a.name === "Meal")?.amount}
+                      />
+                      <CalcField
+                        label="Utility (10%)"
+                        value={bd?.allowancesBreakdown?.find((a) => a.name === "Utility")?.amount}
+                      />
+                    </div>
+                  </div>
+
+                  {/* ── Statutory Deductions (auto-computed) ── */}
+                  <div>
+                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                      Statutory Deductions
+                    </h3>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <CalcField label="Employee Pension (8%)" value={bd?.pension} />
+                      <CalcField label="Employer Pension (10%)" value={bd?.employerPension} />
+                      <CalcField label="Total Pension" value={bd?.totalPension} />
+                      <CalcField label="PAYE Tax (Monthly)" value={bd?.paye} />
+                      <CalcField label="Total Deductions" value={bd?.totalDeductions} />
+                    </div>
+                  </div>
+
+                  {/* ── Net Pay ── */}
+                  <div>
+                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                      Net Pay
+                    </h3>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <CalcField label="Net Pay 60% (Total - Deductions)" value={bd ? netPay60 : undefined} />
+                      <CurrencyInput
+                        control={editForm.control}
+                        name="simpleNetPay"
+                        label="Net Pay 40% (Manual Input)"
+                        currencyCode={currency}
+                        error={editForm.formState.errors.simpleNetPay?.message}
+                      />
+                      <CalcField
+                        label="Net Pay 100% (60% + 40%)"
+                        value={bd ? netPay100 : undefined}
+                      />
+                    </div>
+                  </div>
+
+                  {/* ── Additional Compensation ── */}
+                  <div>
+                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                      Additional Compensation
+                    </h3>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <CurrencyInput
+                        control={editForm.control}
+                        name="commission"
+                        label="Commission"
+                        currencyCode={currency}
+                        error={editForm.formState.errors.commission?.message}
+                      />
+                      <CurrencyInput
+                        control={editForm.control}
+                        name="withholdingTax"
+                        label="Withholding Tax"
+                        currencyCode={currency}
+                        error={editForm.formState.errors.withholdingTax?.message}
+                      />
+                    </div>
+                  </div>
+
+                  {/* ── Banking & Admin ── */}
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <Input
+                      label="Salary Band"
+                      placeholder="e.g. L3, L4"
+                      error={editForm.formState.errors.salaryBand?.message}
+                      {...editForm.register("salaryBand")}
+                    />
+                    <Select
+                      label="Currency"
+                      options={[
+                        { label: "NGN - Nigerian Naira", value: "NGN" },
+                        { label: "USD - US Dollar", value: "USD" },
+                        { label: "GBP - British Pound", value: "GBP" },
+                        { label: "EUR - Euro", value: "EUR" },
+                      ]}
+                      error={editForm.formState.errors.currency?.message}
+                      {...editForm.register("currency")}
+                    />
+                  </div>
+                  <BankAccountFields
+                    accountNumber={editForm.watch("accountNumber") || ""}
+                    accountName={editForm.watch("accountName") || ""}
+                    bankName={editForm.watch("bankName") || ""}
+                    onAccountNumberChange={(v) => editForm.setValue("accountNumber", v)}
+                    onAccountNameChange={(v) => editForm.setValue("accountName", v)}
+                    onBankNameChange={(v) => editForm.setValue("bankName", v)}
+                    errors={{
+                      accountNumber: editForm.formState.errors.accountNumber?.message,
+                      accountName: editForm.formState.errors.accountName?.message,
+                      bankName: editForm.formState.errors.bankName?.message,
+                    }}
                   />
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             <div className="flex justify-end gap-3 pt-6">
               <Button

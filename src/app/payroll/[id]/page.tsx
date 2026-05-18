@@ -40,6 +40,8 @@ import {
   useDeletePayslip,
   useAllEmployees,
   useEffectiveRole,
+  useWalletBalance,
+  useTransferHistory,
 } from "@/hooks";
 import { formatDate } from "@/lib/utils";
 import type {
@@ -96,6 +98,8 @@ const payslipSchema = z.object({
   wardrobe: z.coerce.number().min(0).default(0),
   meal: z.coerce.number().min(0).default(0),
   utility: z.coerce.number().min(0).default(0),
+  commission: z.coerce.number().min(0).default(0),
+  withholdingTax: z.coerce.number().min(0).default(0),
   otherAllowances: z.array(allowanceItemSchema).default([]),
   deductions: z.array(allowanceItemSchema).default([]),
   netPay40: z.coerce.number().min(0).default(0),
@@ -114,7 +118,8 @@ export default function PayrollDetailPage() {
   const params = useParams();
   const router = useRouter();
   const effectiveRole = useEffectiveRole();
-  const isAdmin = effectiveRole === "Admin";
+  const isAdmin = effectiveRole === "Admin" || effectiveRole === "CVO";
+  const isCVO = effectiveRole === "CVO";
   const isFinance = effectiveRole === "Finance";
   const payrollRunId = params.id as string;
 
@@ -160,6 +165,10 @@ export default function PayrollDetailPage() {
   const disburseRun = useDisbursePayroll();
   const cancelRun = useCancelPayrollRun();
   const deletePayslip = useDeletePayslip();
+  const { data: walletBalances } = useWalletBalance();
+  const isDisbursingRun = run?.status === "Disbursing";
+  const { data: transferHistory } = useTransferHistory(payrollRunId, isDisbursingRun);
+  const ngnBalance = walletBalances?.find((b) => b.currency === "NGN");
 
   const handleDeletePayslip = async () => {
     if (!deletePayslipTarget) return;
@@ -177,6 +186,7 @@ export default function PayrollDetailPage() {
     resolver: zodResolver(payslipSchema),
     defaultValues: {
       basicSalary: 0, housing: 0, transport: 0, wardrobe: 0, meal: 0, utility: 0,
+      commission: 0, withholdingTax: 0,
       otherAllowances: [], deductions: [], netPay40: 0, nhfOptIn: false,
     },
   });
@@ -192,23 +202,34 @@ export default function PayrollDetailPage() {
     form.setValue("wardrobe", find("wardrobe"));
     form.setValue("meal", find("meal"));
     form.setValue("utility", find("utility"));
-    const known = ["housing", "transport", "wardrobe", "meal", "utility"];
+    form.setValue("commission", salaryDefaults.commission ?? 0);
+    form.setValue("withholdingTax", salaryDefaults.withholdingTax ?? 0);
+    const known = ["housing", "transport", "wardrobe", "meal", "utility", "commission"];
     const others = salaryDefaults.allowances.filter(
       (a) => !known.some((k) => a.name.toLowerCase().includes(k)),
     );
     form.setValue("otherAllowances", others);
-    form.setValue("deductions", salaryDefaults.deductions);
+    const nonWithholding = (salaryDefaults.deductions ?? []).filter(
+      (d) => !d.name.toLowerCase().includes("withholding"),
+    );
+    form.setValue("deductions", nonWithholding);
   }, [salaryDefaults, form]);
 
   const handleAddPayslip = async (data: PayslipFormData) => {
     const allowances = [
-      { name: "Housing", amount: data.housing },
-      { name: "Transport", amount: data.transport },
-      { name: "Wardrobe", amount: data.wardrobe },
-      { name: "Meal", amount: data.meal },
-      { name: "Utility", amount: data.utility },
+      { name: "Housing",    amount: data.housing },
+      { name: "Transport",  amount: data.transport },
+      { name: "Wardrobe",   amount: data.wardrobe },
+      { name: "Meal",       amount: data.meal },
+      { name: "Utility",    amount: data.utility },
+      ...(data.commission > 0 ? [{ name: "Commission", amount: data.commission }] : []),
       ...data.otherAllowances,
     ].filter((a) => a.amount > 0);
+
+    const deductions = [
+      ...(data.withholdingTax > 0 ? [{ name: "Withholding Tax", amount: data.withholdingTax }] : []),
+      ...data.deductions,
+    ];
 
     try {
       await createPayslip.mutateAsync({
@@ -217,7 +238,7 @@ export default function PayrollDetailPage() {
           employeeId: data.employeeId,
           basicSalary: data.basicSalary,
           allowances,
-          deductions: data.deductions,
+          deductions,
           netPay40: data.netPay40,
           nhfOptIn: data.nhfOptIn,
         },
@@ -469,6 +490,15 @@ export default function PayrollDetailPage() {
               {run.createdBy && (
                 <span className="text-sm text-gray-500">Created by {run.createdBy.fullName}</span>
               )}
+              {isDisbursingRun && (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-medium text-indigo-700">
+                  <span className="relative flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-indigo-400 opacity-75" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-indigo-500" />
+                  </span>
+                  Live — updating every 5s
+                </span>
+              )}
             </div>
           </div>
 
@@ -510,7 +540,7 @@ export default function PayrollDetailPage() {
                 </Button>
               </>
             )}
-            {run.status === "PendingCVO" && isAdmin && (
+            {run.status === "PendingCVO" && isCVO && (
               <>
                 <Button variant="outline" onClick={() => setRejectModalOpen(true)}>
                   <X className="h-4 w-4" />
@@ -753,47 +783,94 @@ export default function PayrollDetailPage() {
               {salaryDefaults && !salaryDefaults.hasSalaryRecord && (
                 <p className="mt-1 text-xs text-amber-600">No salary record found — enter values manually.</p>
               )}
-              {salaryDefaults?.hasSalaryRecord && salaryDefaults.hasBreakdown && (
-                <p className="mt-1 text-xs text-green-600">Salary record loaded and pre-filled.</p>
-              )}
-              {salaryDefaults?.hasSalaryRecord && !salaryDefaults.hasBreakdown && (
-                <p className="mt-1 text-xs text-amber-600">
-                  Salary record found but breakdown not set — enter components manually.
-                  {salaryDefaults.referenceNetPay > 0 && (
-                    <span className="ml-1 font-medium">
-                      Reference net pay: ₦{salaryDefaults.referenceNetPay.toLocaleString("en-NG", { minimumFractionDigits: 2 })}
-                    </span>
-                  )}
-                </p>
+              {salaryDefaults?.hasSalaryRecord && (
+                <p className="mt-1 text-xs text-green-600">✓ Salary record loaded and pre-filled.</p>
               )}
             </div>
 
-            {/* Earnings */}
+            {/* Gross Pay summary (read-only from salary record) */}
+            {salaryDefaults?.grossPay ? (
+              <div className="flex items-center justify-between rounded-lg border border-orange-200 bg-orange-50 px-4 py-2.5">
+                <span className="text-sm font-semibold text-gray-700">Gross Pay</span>
+                <span className="text-sm font-bold text-orange-700">
+                  ₦{formatCurrency(salaryDefaults.grossPay)}
+                </span>
+              </div>
+            ) : null}
+
+            {/* Salary Structure */}
             <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Earnings</p>
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Salary Structure</p>
               <div className="grid grid-cols-2 gap-3">
-                <Input label="Basic Salary *" type="number" step="0.01"
+                <Input label="Basic Salary (35%) *" type="number" step="0.01"
                   error={form.formState.errors.basicSalary?.message} {...form.register("basicSalary")} />
-                <Input label="Housing Allowance" type="number" step="0.01" {...form.register("housing")} />
-                <Input label="Transport Allowance" type="number" step="0.01" {...form.register("transport")} />
-                <Input label="Wardrobe Allowance" type="number" step="0.01" {...form.register("wardrobe")} />
-                <Input label="Meal Allowance" type="number" step="0.01" {...form.register("meal")} />
-                <Input label="Utility Allowance" type="number" step="0.01" {...form.register("utility")} />
+                <Input label="Housing (20%)" type="number" step="0.01" {...form.register("housing")} />
+                <Input label="Transport (15%)" type="number" step="0.01" {...form.register("transport")} />
+                <Input label="Wardrobe (10%)" type="number" step="0.01" {...form.register("wardrobe")} />
+                <Input label="Meal (10%)" type="number" step="0.01" {...form.register("meal")} />
+                <Input label="Utility (10%)" type="number" step="0.01" {...form.register("utility")} />
               </div>
             </div>
 
-            {/* Statutory deductions note */}
-            <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-xs text-blue-700">
-              PAYE, Employee Pension (8%), and Employer Pension (10%) are calculated automatically from the tax engine — no need to enter them.
+            {/* Additional Compensation */}
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Additional Compensation</p>
+              <div className="grid grid-cols-2 gap-3">
+                <Input label="Commission" type="number" step="0.01" {...form.register("commission")} />
+                <Input label="Withholding Tax" type="number" step="0.01" {...form.register("withholdingTax")} />
+              </div>
             </div>
 
-            {/* Optional: Net Pay 40% split */}
-            <Input
-              label="Net Pay 40% (Manual complement, if split disbursement)"
-              type="number"
-              step="0.01"
-              {...form.register("netPay40")}
-            />
+            {/* Computed statutory values */}
+            {salaryDefaults?.computed && (() => {
+              const c = salaryDefaults.computed!;
+              const StatRow = ({ label, value }: { label: string; value: number }) => (
+                <div className="flex items-center justify-between py-1">
+                  <span className="text-xs text-gray-500">{label}</span>
+                  <span className="text-xs font-semibold text-gray-800">₦{formatCurrency(value)}</span>
+                </div>
+              );
+              return (
+                <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-blue-600">
+                    Statutory &amp; Net Pay (Auto-Calculated)
+                  </p>
+                  <div className="grid grid-cols-2 gap-x-6">
+                    <div>
+                      <StatRow label="Employee Pension (8%)" value={c.pension} />
+                      <StatRow label="Employer Pension (10%)" value={c.employerPension} />
+                      <StatRow label="Total Pension" value={c.totalPension} />
+                    </div>
+                    <div>
+                      <StatRow label="PAYE Tax (Monthly)" value={c.paye} />
+                      <StatRow label="Total Deductions" value={c.totalDeductions} />
+                      <StatRow label="Net Pay 60%" value={c.netPay60} />
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Net Pay split */}
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                label="Net Pay 40% (Manual Input)"
+                type="number"
+                step="0.01"
+                {...form.register("netPay40")}
+              />
+              {salaryDefaults?.computed && (
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-gray-500">Net Pay 100% (60% + 40%)</label>
+                  <div className="flex items-center rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-bold text-gray-800">
+                    ₦{formatCurrency(
+                      salaryDefaults.computed.netPay60 +
+                      (parseFloat(String(form.watch("netPay40") || "0")) || 0)
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </Modal>
 
@@ -931,6 +1008,26 @@ export default function PayrollDetailPage() {
           }
         >
           <div className="space-y-4">
+            {/* Wallet balance pre-flight check */}
+            {ngnBalance !== undefined && (
+              <div className={`rounded-lg border px-4 py-3 text-sm ${
+                ngnBalance.balance >= Number(run.totalNet || 0)
+                  ? "border-green-200 bg-green-50 text-green-800"
+                  : "border-red-200 bg-red-50 text-red-800"
+              }`}>
+                <div className="flex items-center justify-between">
+                  <span className="font-medium">Paystack NGN Balance</span>
+                  <span className="font-bold">
+                    ₦{Number(ngnBalance.balance).toLocaleString("en-NG", { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                {ngnBalance.balance < Number(run.totalNet || 0) && (
+                  <p className="mt-1 text-xs">
+                    Balance is insufficient to cover total net pay of ₦{formatCurrency(run.totalNet || 0)}. Top up before disbursing.
+                  </p>
+                )}
+              </div>
+            )}
             <p className="text-sm text-gray-600">
               {run.payslips?.length || 0} employees · Total to be paid:{" "}
               <strong>₦{formatCurrency(run.totalNet || 0)}</strong>
@@ -947,10 +1044,66 @@ export default function PayrollDetailPage() {
               </div>
             )}
             <p className="text-xs text-gray-500">
-              Transfers are initiated via Paystack with each payslip ID as the idempotency key. Status updates arrive via webhook; the run will move to Sent automatically once every transfer settles.
+              Transfers use each payslip ID as the idempotency key — concurrent or duplicate requests are safely rejected. Status updates arrive via Paystack webhook; the run moves to Sent once every transfer settles.
             </p>
           </div>
         </Modal>
+
+        {/* ── Transfer History ─────────────────────────────── */}
+        {(run.status === "Disbursing" || run.status === "Sent") && transferHistory && transferHistory.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Transfer History</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100 bg-gray-50">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Employee</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Amount</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Status</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Transfer Code</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Attempted</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Settled</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Failure Reason</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {transferHistory.map((t) => (
+                      <tr key={t.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3">
+                          <p className="font-medium text-gray-900">{t.employee.fullName}</p>
+                          <p className="text-xs text-gray-400">{t.employee.employeeId}</p>
+                        </td>
+                        <td className="px-4 py-3 font-medium text-gray-800">
+                          ₦{Number(t.netPayTotal || t.netPay).toLocaleString("en-NG", { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${PAY_STATUS_COLORS[t.paymentStatus as keyof typeof PAY_STATUS_COLORS] ?? "bg-gray-100 text-gray-600"}`}>
+                            {t.paymentStatus}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 font-mono text-xs text-gray-500">
+                          {t.paystackTransferCode ?? "—"}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-gray-500">
+                          {t.paymentAttemptedAt ? formatDate(t.paymentAttemptedAt) : "—"}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-gray-500">
+                          {t.paymentCompletedAt ? formatDate(t.paymentCompletedAt) : "—"}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-red-600 max-w-[200px] truncate" title={t.paymentFailureReason ?? ""}>
+                          {t.paymentFailureReason ?? "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </AppLayout>
   );

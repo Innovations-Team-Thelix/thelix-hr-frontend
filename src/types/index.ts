@@ -1,6 +1,6 @@
 // ─── Type unions ────────────────────────────────────────────
 
-export type UserRole = 'Admin' | 'SBUHead' | 'Director' | 'Manager' | 'Finance' | 'Employee';
+export type UserRole = 'CVO' | 'Admin' | 'SBUHead' | 'Director' | 'Manager' | 'Finance' | 'Employee';
 export type Gender = 'Male' | 'Female' | 'NonBinary' | 'PreferNotToSay';
 export type EmploymentType = 'FullTime' | 'Contract' | 'Intern';
 export type WorkArrangement = 'Remote' | 'Hybrid' | 'Onsite';
@@ -436,7 +436,7 @@ export interface EmployeeFilters {
   joined?: 'this_month' | 'last_month' | 'this_year';
   // Filter by the role on the linked user account.
   // 'NoAccess' selects employees who have no portal account at all.
-  role?: 'Admin' | 'SBUHead' | 'Director' | 'Manager' | 'Finance' | 'Employee' | 'NoAccess';
+  role?: 'CVO' | 'Admin' | 'SBUHead' | 'Director' | 'Manager' | 'Finance' | 'Employee' | 'NoAccess';
   sortBy?: 'fullName' | 'employeeId' | 'dateOfHire' | 'jobTitle' | 'employmentStatus' | 'createdAt';
   sortOrder?: 'asc' | 'desc';
 }
