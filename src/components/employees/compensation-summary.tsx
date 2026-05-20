@@ -8,10 +8,13 @@ interface SalaryBreakdown {
   baseSalary: number;
   grossPay: number;
   netPay: number;
+  netPay40?: number;
+  netPayTotal?: number;
   tax: number;
   pension: number;
   employerPension?: number;
   nhf?: number;
+  totalDeductions?: number;
   allowances: { name: string; amount: number }[];
   deductions: { name: string; amount: number }[];
 }
@@ -91,17 +94,16 @@ export function CompensationSummary({
 }: CompensationSummaryProps) {
   const cur = currency || "NGN";
 
-  // Compute total deductions from actual line items to avoid the grossPay-netPay sign bug
-  const totalDeductions = salaryBreakdown
-    ? (salaryBreakdown.tax > 0 ? salaryBreakdown.tax : 0)
-      + (salaryBreakdown.pension > 0 ? salaryBreakdown.pension : 0)
-      + ((salaryBreakdown.nhf ?? 0) > 0 ? (salaryBreakdown.nhf ?? 0) : 0)
-      + salaryBreakdown.deductions.reduce((s, d) => s + d.amount, 0)
-    : 0;
-
-  // Company contributions
-  const emplrPension = salaryBreakdown?.employerPension ?? 0;
-  const itf = salaryBreakdown ? Math.round(salaryBreakdown.baseSalary * 0.01 * 100) / 100 : 0;
+  const n = (v: unknown) => parseFloat(String(v ?? 0)) || 0;
+  const totalDeductions =
+    n(salaryBreakdown?.tax) +
+    n(salaryBreakdown?.pension) +
+    n(salaryBreakdown?.nhf) +
+    (Array.isArray(salaryBreakdown?.deductions)
+      ? salaryBreakdown.deductions.reduce((s: number, d: { amount: number }) => s + n(d.amount), 0)
+      : 0);
+  const emplrPension       = n(salaryBreakdown?.employerPension);
+  const itf                = Math.round(n(salaryBreakdown?.baseSalary) * 0.01 * 100) / 100;
   const totalCompanyContrib = emplrPension + itf;
 
   return (
@@ -134,7 +136,7 @@ export function CompensationSummary({
                   <DollarSign className="h-4 w-4 text-primary" />
                 </div>
                 <p className="text-xs font-semibold uppercase tracking-widest text-primary">Net Pay</p>
-                <p className="mt-1 text-2xl font-bold text-[#412003]">{formatCurrency(salaryBreakdown.netPay, cur)}</p>
+                <p className="mt-1 text-2xl font-bold text-[#412003]">{formatCurrency(salaryBreakdown.netPayTotal ?? salaryBreakdown.netPay, cur)}</p>
               </div>
             </div>
           ) : (

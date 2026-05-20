@@ -771,7 +771,7 @@ export default function CreateEmployeePage() {
           {activeTab === "compensation" && (() => {
             const currency = watch("currency") || "NGN";
             const bd = grossBreakdown;
-            const netPay60 = bd?.netPay60 ?? 0;
+            const netPay60 = Number(bd?.netPay60 ?? 0);
             const watchedNetPay40 = watch("simpleNetPay");
             const netPay40Val = parseFloat(watchedNetPay40 || "0") || 0;
             const netPay100 = netPay60 + netPay40Val;

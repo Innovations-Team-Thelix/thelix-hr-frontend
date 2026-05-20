@@ -54,11 +54,17 @@ export function BankAccountFields({
     }
   }, [bankName, banks, selectedBankCode]);
 
-  // Auto-resolve when account number reaches 10 digits and a bank is selected
+  // Auto-resolve when account number reaches 10 digits and a bank is selected.
+  // Skip the API call if accountName is already populated (pre-existing verified data).
   useEffect(() => {
     if (accountNumber.length !== 10 || !selectedBankCode) {
       setResolved(false);
       setResolveError("");
+      return;
+    }
+    // Account name already populated — mark as verified without hitting the API
+    if (accountName) {
+      setResolved(true);
       return;
     }
     let cancelled = false;
@@ -90,7 +96,7 @@ export function BankAccountFields({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [accountNumber, selectedBankCode]);
+  }, [accountNumber, selectedBankCode, accountName]);
 
   // Close dropdown on outside click
   useEffect(() => {

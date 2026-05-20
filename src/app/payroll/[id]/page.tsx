@@ -204,6 +204,7 @@ export default function PayrollDetailPage() {
     form.setValue("utility", find("utility"));
     form.setValue("commission", salaryDefaults.commission ?? 0);
     form.setValue("withholdingTax", salaryDefaults.withholdingTax ?? 0);
+    form.setValue("netPay40", salaryDefaults.netPay40 ?? 0);
     const known = ["housing", "transport", "wardrobe", "meal", "utility", "commission"];
     const others = salaryDefaults.allowances.filter(
       (a) => !known.some((k) => a.name.toLowerCase().includes(k)),
