@@ -54,6 +54,9 @@ export interface SalaryRecord {
   baseSalary: number;
   grossPay: number;
   netPay: number;
+  netPay40?: number;
+  netPayTotal?: number;
+  totalDeductions?: number;
   pension: number;
   employerPension: number;
   nhf: number;

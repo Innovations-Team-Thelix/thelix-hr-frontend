@@ -301,12 +301,14 @@ export function useUpdateEmployee() {
       return res.data;
     },
     onSuccess: (updatedEmployee, variables) => {
-      // Set the full employee data (including salaryBreakdown) immediately in cache
+      // Set the full employee data immediately so the UI reflects the change without waiting
       if (updatedEmployee) {
         queryClient.setQueryData(["employee", variables.id], updatedEmployee);
       }
-      // Invalidate salary history so it refetches in the background
+      // Invalidate both the list and the individual employee so fresh data (with all
+      // computed fields like totalDeductions and netPayTotal) is refetched from the server
       queryClient.invalidateQueries({ queryKey: ["employees"] });
+      queryClient.invalidateQueries({ queryKey: ["employee", variables.id] });
     },
   });
 }
@@ -827,6 +829,7 @@ interface SalaryDefaults {
   grossPay: number;
   basicSalary: number;
   referenceNetPay: number;
+  netPay40: number;
   commission: number;
   withholdingTax: number;
   allowances: Array<{ name: string; amount: number }>;

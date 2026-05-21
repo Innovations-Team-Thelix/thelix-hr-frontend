@@ -105,6 +105,11 @@ export default function LeavePage() {
   const [selectedRequest, setSelectedRequest] = useState<LeaveRequest | null>(null);
   const [myPage, setMyPage] = useState(1);
   const [approvalPage, setApprovalPage] = useState(1);
+  const [approvalStatusFilter, setApprovalStatusFilter] = useState<"Pending" | "Approved" | "Rejected">("Pending");
+  const handleApprovalFilterChange = (status: "Pending" | "Approved" | "Rejected") => {
+    setApprovalStatusFilter(status);
+    setApprovalPage(1);
+  };
 
   // Approval action state
   const [actionDropdownId, setActionDropdownId] = useState<string | null>(null);
@@ -141,17 +146,16 @@ export default function LeavePage() {
   const { data: myBalances, isLoading: balancesLoading } = useMyLeaveBalances();
 
   // My requests / All requests
-  // - In Employee view (including admins/SBUHeads using "View as Employee"),
-  //   restrict to the viewer's own requests by passing an explicit employeeId
-  //   filter — the backend would otherwise also return direct-report requests.
+  // - Non-admin: always filter to the current user's own requests only.
+  // - Admin: show all requests (tab is labelled "All Requests").
   const myRequestsData_filters: LeaveRequestFilters = {
     page: myPage,
     limit: 10,
-    ...(isEmployee && profile?.id ? { employeeId: profile.id } : {}),
+    ...(!isAdmin && profile?.id ? { employeeId: profile.id } : {}),
   };
   const { data: myRequestsData, isLoading: myRequestsLoading } =
     useLeaveRequests(myRequestsData_filters, {
-      enabled: !isEmployee || !!profile?.id,
+      enabled: isAdmin || !!profile?.id,
     });
 
   // Reliever requests (where I'm the relieve officer)
@@ -161,13 +165,14 @@ export default function LeavePage() {
     page: 1,
     limit: 10,
   });
-  const hasRelieverRequests = (relieverData?.data?.length ?? 0) > 0;
+  const relieverCount = relieverData?.data?.length ?? 0;
 
-  // Approval queue (pending requests) — scoped by role stage
+  // Approval queue — pending uses stage filter; history uses status filter without stage
   const approvalStage = isAdmin ? "hr" as const : "supervisor" as const;
+  const isPendingFilter = approvalStatusFilter === "Pending";
   const { data: pendingData, isLoading: pendingLoading } = useLeaveRequests({
-    status: "Pending",
-    stage: approvalStage,
+    status: approvalStatusFilter,
+    ...(isPendingFilter ? { stage: approvalStage } : {}),
     page: approvalPage,
     limit: 10,
   });
@@ -234,9 +239,7 @@ export default function LeavePage() {
 
   const tabs = [
     { id: "my-requests", label: isAdmin ? "All Requests" : "My Requests" },
-    ...(hasRelieverRequests
-      ? [{ id: "reliever-queue", label: `Reliever Requests (${relieverData?.data?.length || 0})` }]
-      : []),
+    { id: "reliever-queue", label: relieverCount > 0 ? `Reliever Requests (${relieverCount})` : "Reliever Requests" },
     ...(showApprovalQueue
       ? [{ id: "approval-queue", label: "Approval Queue" }]
       : []),
@@ -703,6 +706,27 @@ export default function LeavePage() {
             {/* Approval Queue Tab */}
             {activeTab === "approval-queue" && canApprove && (
               <Card className="mt-4 overflow-visible" style={{ minHeight: "80vh" }}>
+                {/* Status filter bar */}
+                <div className="flex items-center gap-1 border-b border-gray-100 px-4 py-3">
+                  {(["Pending", "Approved", "Rejected"] as const).map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => handleApprovalFilterChange(s)}
+                      className={cn(
+                        "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                        approvalStatusFilter === s
+                          ? s === "Pending"
+                            ? "bg-amber-100 text-amber-800"
+                            : s === "Approved"
+                              ? "bg-green-100 text-green-800"
+                              : "bg-red-100 text-red-800"
+                          : "text-gray-500 hover:bg-gray-100"
+                      )}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
                 <CardContent className="p-0 overflow-visible [&>div]:overflow-visible">
                   <Table>
                     <TableHeader>
@@ -713,7 +737,7 @@ export default function LeavePage() {
                         <TableHead>End Date</TableHead>
                         <TableHead>Days</TableHead>
                         <TableHead>Reason</TableHead>
-                        <TableHead>Actions</TableHead>
+                        <TableHead>{isPendingFilter ? "Actions" : "Status"}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -727,18 +751,24 @@ export default function LeavePage() {
                             ))}
                           </TableRow>
                         ))
-                      ) : !pendingData?.data.length ? (
+                      ) : !pendingData?.data.filter(r => r.employeeId !== profile?.id).length ? (
                         <TableRow>
                           <TableCell
                             colSpan={7}
                             className="py-8 text-center text-sm text-gray-500"
                           >
-                            No pending requests
+                            {isPendingFilter ? "No pending requests" : `No ${approvalStatusFilter.toLowerCase()} requests`}
                           </TableCell>
                         </TableRow>
                       ) : (
-                        pendingData.data.map((req) => (
-                          <TableRow key={req.id}>
+                        pendingData!.data
+                          .filter(r => r.employeeId !== profile?.id)
+                          .map((req) => (
+                          <TableRow
+                            key={req.id}
+                            className="cursor-pointer hover:bg-gray-50"
+                            onClick={() => { setDetailRequest(req); setDetailModalOpen(true); }}
+                          >
                             <TableCell>
                               <div className="flex flex-col">
                                 <span className="font-medium text-gray-900">
@@ -777,7 +807,8 @@ export default function LeavePage() {
                                 {req.reason || "-"}
                               </span>
                             </TableCell>
-                            <TableCell>
+                            <TableCell onClick={(e) => e.stopPropagation()}>
+                              {isPendingFilter ? (
                               <div className="relative" ref={actionDropdownId === req.id ? actionDropdownRef : undefined}>
                                 <button
                                   onClick={() => setActionDropdownId(actionDropdownId === req.id ? null : req.id)}
@@ -809,6 +840,9 @@ export default function LeavePage() {
                                   </div>
                                 )}
                               </div>
+                              ) : (
+                                <StatusBadge status={req.status} />
+                              )}
                             </TableCell>
                           </TableRow>
                         ))

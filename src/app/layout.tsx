@@ -22,6 +22,15 @@ export default function RootLayout({
     <html lang="en" className={inter.variable} suppressHydrationWarning>
       <body className="font-sans antialiased" suppressHydrationWarning>
         <Providers>{children}</Providers>
+        <script dangerouslySetInnerHTML={{
+          __html: `
+            if ('serviceWorker' in navigator) {
+              navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                registrations.forEach(function(r) { r.unregister(); });
+              });
+            }
+          `
+        }} />
       </body>
     </html>
   );

@@ -279,6 +279,9 @@ export default function EmployeeProfilePage() {
       deductions: [],
     },
   });
+  // Track previous modal state so we only reset the form when it OPENS, not on every
+  // background refetch — otherwise a query update mid-edit clears the user's typed values.
+  const editModalWasOpen = React.useRef(false);
 
   const { fields: allowanceFields, append: appendAllowance, remove: removeAllowance } = useFieldArray({
     control: editForm.control,
@@ -333,7 +336,13 @@ export default function EmployeeProfilePage() {
   const { data: departments } = useDepartments(selectedSbuId);
 
   React.useEffect(() => {
-    if (employee && editModalOpen) {
+    // Only initialise the form when the modal transitions closed→open.
+    // If employee/salaryHistory change while the modal is already open (background
+    // refetch) we must NOT reset — that would silently wipe values the user is typing.
+    const justOpened = editModalOpen && !editModalWasOpen.current;
+    editModalWasOpen.current = editModalOpen;
+
+    if (employee && justOpened) {
       // Use salaryBreakdown from employee, or fallback to active record from salary history
       const breakdown = employee.salaryBreakdown
         ?? salaryHistory?.find((r) => r.isActive);
@@ -388,6 +397,7 @@ export default function EmployeeProfilePage() {
               (d) => d.name.toLowerCase().includes("withholding")
             )?.amount?.toString()
           : undefined),
+        simpleNetPay: Number(breakdown?.netPay40) > 0 ? String(Number(breakdown?.netPay40)) : undefined,
         allowances: [],
         deductions: [],
         salaryBand: employee.salaryBand || undefined,
@@ -429,6 +439,7 @@ export default function EmployeeProfilePage() {
         allowances: _all, deductions: _ded,
         ...rest
       } = data;
+      const netPay40FromForm = simpleNetPay ? parseFloat(simpleNetPay) : 0;
 
       const grossPayNum = data.monthlySalary ? parseFloat(data.monthlySalary) : 0;
       const commissionNum = commission ? parseFloat(commission) : 0;
@@ -458,6 +469,7 @@ export default function EmployeeProfilePage() {
         baseSalary: grossPayNum ? r2(grossPayNum * 0.35) : undefined,
         allowances: allAllowances.length > 0 ? allAllowances : undefined,
         deductions: allDeductions.length > 0 ? allDeductions : undefined,
+        ...(grossPayNum > 0 ? { netPay40: netPay40FromForm } : {}),
       };
 
       // Remove empty strings and undefined values
@@ -467,6 +479,7 @@ export default function EmployeeProfilePage() {
         }
       });
 
+      console.log("SAVE CHANGES payload:", JSON.stringify(payload, null, 2));
       await updateEmployee.mutateAsync({
         id: employeeId,
         data: payload,
@@ -1631,7 +1644,7 @@ export default function EmployeeProfilePage() {
           size="lg"
           className="max-w-4xl"
         >
-          <form onSubmit={editForm.handleSubmit(handleEditSubmit)}>
+          <form onSubmit={editForm.handleSubmit(handleEditSubmit, (errors) => console.error("FORM VALIDATION ERRORS:", JSON.stringify(errors, null, 2)))}>
             <Tabs
               tabs={formTabs}
               activeTab={editActiveTab}
@@ -1903,9 +1916,8 @@ export default function EmployeeProfilePage() {
             {editActiveTab === "compensation" && (() => {
               const currency = editForm.watch("currency") || "NGN";
               const bd = grossBreakdown;
-              const netPay60 = bd?.netPay60 ?? 0;
-              const watchedNetPay40 = editForm.watch("simpleNetPay");
-              const netPay40Val = parseFloat(watchedNetPay40 || "0") || 0;
+              const netPay60 = Number(bd?.netPay60 ?? 0);
+              const netPay40Val = parseFloat(editForm.watch("simpleNetPay") || "0") || 0;
               const netPay100 = netPay60 + netPay40Val;
 
               const CalcField = ({ label, value }: { label: string; value: number | undefined }) => (
@@ -1998,13 +2010,25 @@ export default function EmployeeProfilePage() {
                     </h3>
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                       <CalcField label="Net Pay 60% (Total - Deductions)" value={bd ? netPay60 : undefined} />
-                      <CurrencyInput
-                        control={editForm.control}
-                        name="simpleNetPay"
-                        label="Net Pay 40% (Manual Input)"
-                        currencyCode={currency}
-                        error={editForm.formState.errors.simpleNetPay?.message}
-                      />
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Net Pay 40% (Manual Input)</label>
+                        <div className="flex items-center gap-1.5 px-3 py-2 rounded-md border border-gray-300 bg-white text-sm focus-within:ring-2 focus-within:ring-primary-400 focus-within:border-primary-400">
+                          <span className="text-gray-500 shrink-0">{currency === "USD" ? "$" : "₦"}</span>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="0.00"
+                            value={editForm.watch("simpleNetPay") || ""}
+                            onChange={(e) => {
+                              const raw = e.target.value.replace(/,/g, "");
+                              if (raw === "" || /^\d*\.?\d*$/.test(raw)) {
+                                editForm.setValue("simpleNetPay", raw, { shouldDirty: true });
+                              }
+                            }}
+                            className="flex-1 outline-none bg-transparent text-gray-900"
+                          />
+                        </div>
+                      </div>
                       <CalcField
                         label="Net Pay 100% (60% + 40%)"
                         value={bd ? netPay100 : undefined}
