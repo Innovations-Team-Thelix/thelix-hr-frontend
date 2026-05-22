@@ -27,7 +27,6 @@ import { Skeleton } from "@/components/ui/loading";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import {
   usePayrollRun,
-  useUploadPayslips,
   useCreatePayslip,
   useEmployeeSalaryDefaults,
   usePopulatePayrollRun,
@@ -124,7 +123,6 @@ export default function PayrollDetailPage() {
   const payrollRunId = params.id as string;
 
   const [addModalOpen, setAddModalOpen] = useState(false);
-  const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
   const [disburseModalOpen, setDisburseModalOpen] = useState(false);
   const [deletePayslipTarget, setDeletePayslipTarget] = useState<{ id: string; name: string } | null>(null);
@@ -136,14 +134,9 @@ export default function PayrollDetailPage() {
     variant?: "danger" | "primary";
     onConfirm: () => void;
   } | null>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [employeeSearch, setEmployeeSearch] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
-  const [bulkResult, setBulkResult] = useState<{
-    created: number;
-    errors: Array<{ row: number; message: string }>;
-  } | null>(null);
 
   const { data: run, isLoading } = usePayrollRun(payrollRunId);
   const { data: allEmployees } = useAllEmployees();
@@ -155,7 +148,6 @@ export default function PayrollDetailPage() {
       emp.employeeId.toLowerCase().includes(employeeSearch.toLowerCase()),
   );
 
-  const uploadPayslips = useUploadPayslips();
   const createPayslip = useCreatePayslip();
   const populateRun = usePopulatePayrollRun();
   const submitRun = useSubmitPayroll();
@@ -255,22 +247,6 @@ export default function PayrollDetailPage() {
     } catch (err) {
       const e = err as { response?: { data?: { message?: string } } };
       toast.error(e?.response?.data?.message || "Failed to add payslip");
-    }
-  };
-
-  const handleBulkUpload = async () => {
-    if (!selectedFile) return;
-    const formData = new FormData();
-    formData.append("file", selectedFile);
-    try {
-      const res = await uploadPayslips.mutateAsync({ payrollRunId, data: formData });
-      setBulkResult(res as { created: number; errors: Array<{ row: number; message: string }> });
-      toast.success(`Uploaded: ${(res as { created: number }).created} created`);
-      setUploadModalOpen(false);
-      setSelectedFile(null);
-    } catch (err) {
-      const e = err as { response?: { data?: { message?: string } } };
-      toast.error(e?.response?.data?.message || "Failed to upload payslips");
     }
   };
 
@@ -408,6 +384,26 @@ export default function PayrollDetailPage() {
     });
   };
 
+  const handleDownloadSpreadsheet = async () => {
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
+      const res = await fetch(`${API_URL}/payroll/${payrollRunId}/register.xlsx`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Download failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const monthName = run ? ["January","February","March","April","May","June","July","August","September","October","November","December"][run.month - 1] : "";
+      a.download = `payroll-${monthName}-${run?.year}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error("Failed to download spreadsheet");
+    }
+  };
+
   const handleDownloadPdf = async (payslip: Payslip) => {
     try {
       const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
@@ -505,12 +501,12 @@ export default function PayrollDetailPage() {
 
           {/* Action bar driven by status */}
           <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={handleDownloadSpreadsheet}>
+              <Download className="h-4 w-4" />
+              Download Spreadsheet
+            </Button>
             {run.status === "Draft" && (
               <>
-                <Button variant="outline" onClick={() => setUploadModalOpen(true)}>
-                  <Upload className="h-4 w-4" />
-                  Bulk Upload
-                </Button>
                 <Button variant="outline" onClick={() => setAddModalOpen(true)}>
                   <Plus className="h-4 w-4" />
                   Add Payslip
@@ -611,25 +607,6 @@ export default function PayrollDetailPage() {
           </CardContent>
         </Card>
 
-        {/* Bulk upload result, if any */}
-        {bulkResult && bulkResult.errors.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Bulk Upload — {bulkResult.errors.length} row error(s)</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ul className="space-y-1 text-sm text-red-600">
-                {bulkResult.errors.map((e) => (
-                  <li key={e.row}>Row {e.row}: {e.message}</li>
-                ))}
-              </ul>
-              <Button variant="outline" size="sm" className="mt-3" onClick={() => setBulkResult(null)}>
-                Dismiss
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-
         {/* Payslips Table */}
         <Card>
           <CardHeader>
@@ -648,10 +625,6 @@ export default function PayrollDetailPage() {
                       <th className="px-3 py-3">Employee</th>
                       <th className="px-3 py-3 text-right">Gross</th>
                       <th className="px-3 py-3 text-right">PAYE</th>
-                      <th className="px-3 py-3 text-right">Emp. Pension</th>
-                      <th className="px-3 py-3 text-right">Empl. Pension</th>
-                      <th className="px-3 py-3 text-right">NHF</th>
-                      <th className="px-3 py-3 text-right">Other Ded.</th>
                       <th className="px-3 py-3 text-right">Net Pay</th>
                       {(run.status === "Disbursing" || run.status === "Sent") && (
                         <th className="px-3 py-3">Payment</th>
@@ -661,11 +634,6 @@ export default function PayrollDetailPage() {
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {run.payslips.map((payslip) => {
-                      const otherDed =
-                        Number(payslip.deductions || 0) -
-                        Number(payslip.paye || 0) -
-                        Number(payslip.pension || 0) -
-                        Number(payslip.nhf || 0);
                       return (
                         <tr key={payslip.id} className="group hover:bg-gray-50">
                           <td className="px-3 py-3">
@@ -676,14 +644,12 @@ export default function PayrollDetailPage() {
                           </td>
                           <td className="px-3 py-3 text-right">{formatCurrency(payslip.grossPay || 0)}</td>
                           <td className="px-3 py-3 text-right text-red-600">({formatCurrency(payslip.paye || 0)})</td>
-                          <td className="px-3 py-3 text-right text-red-600">({formatCurrency(payslip.pension || 0)})</td>
-                          <td className="px-3 py-3 text-right text-blue-600">{formatCurrency(payslip.employerPension || 0)}</td>
-                          <td className="px-3 py-3 text-right text-red-600">({formatCurrency(payslip.nhf || 0)})</td>
-                          <td className="px-3 py-3 text-right text-red-600">
-                            ({formatCurrency(otherDed > 0 ? otherDed : 0)})
-                          </td>
                           <td className="px-3 py-3 text-right font-semibold">
-                            {formatCurrency(payslip.netPay)}
+                            {formatCurrency(
+                              Number(payslip.netPayTotal) > 0
+                                ? payslip.netPayTotal
+                                : Number(payslip.netPay) + Number(payslip.netPay40 || 0)
+                            )}
                           </td>
                           {(run.status === "Disbursing" || run.status === "Sent") && (
                             <td className="px-3 py-3">
@@ -871,48 +837,6 @@ export default function PayrollDetailPage() {
                   </div>
                 </div>
               )}
-            </div>
-          </div>
-        </Modal>
-
-        {/* Bulk Upload Modal */}
-        <Modal
-          isOpen={uploadModalOpen}
-          onClose={() => { setUploadModalOpen(false); setSelectedFile(null); }}
-          title="Bulk Upload Payslips"
-          size="md"
-          footer={
-            <div className="flex justify-end gap-3">
-              <Button variant="outline" onClick={() => setUploadModalOpen(false)}>Cancel</Button>
-              <Button onClick={handleBulkUpload} loading={uploadPayslips.isPending} disabled={!selectedFile}>
-                Upload
-              </Button>
-            </div>
-          }
-        >
-          <div className="space-y-4">
-            <p className="text-sm text-gray-600">Upload the Thelix payroll template (.xlsx). Expected columns:</p>
-            <div className="rounded-lg bg-gray-50 p-3 text-xs text-gray-700 space-y-0.5">
-              <p><span className="font-semibold">A</span> — Emp No. &nbsp;<span className="font-semibold">B</span> — Full Name &nbsp;<span className="font-semibold">C</span> — Department</p>
-              <p><span className="font-semibold">F</span> — Basic Salary &nbsp;<span className="font-semibold">G</span> — Housing &nbsp;<span className="font-semibold">H</span> — Transport</p>
-              <p><span className="font-semibold">I</span> — Wardrobe &nbsp;<span className="font-semibold">J</span> — Meal &nbsp;<span className="font-semibold">K</span> — Utility</p>
-              <p><span className="font-semibold">S</span> — Net Pay 40% (manual input)</p>
-              <p className="text-gray-500 mt-1">PAYE, pension and net pay are auto-calculated. Data rows start at row 6.</p>
-            </div>
-            <div>
-              <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-600 hover:bg-gray-50">
-                <Upload className="h-4 w-4" />
-                Choose Excel file
-                <input
-                  type="file"
-                  accept=".xlsx"
-                  className="hidden"
-                  onChange={(e) => {
-                    if (e.target.files?.[0]) setSelectedFile(e.target.files[0]);
-                  }}
-                />
-              </label>
-              {selectedFile && <p className="mt-2 text-sm text-gray-500">{selectedFile.name}</p>}
             </div>
           </div>
         </Modal>
