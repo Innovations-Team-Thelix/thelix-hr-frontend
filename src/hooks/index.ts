@@ -1044,6 +1044,21 @@ export function useCancelPayrollRun() {
   });
 }
 
+export function useDispatchPayslips() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payrollRunId: string) => {
+      const res = await api.post<{ data: { sent: number; failed: number; skipped: number } }>(
+        `/payroll/${payrollRunId}/dispatch-payslips`,
+      );
+      return res.data.data;
+    },
+    onSuccess: (_data, payrollRunId) => {
+      queryClient.invalidateQueries({ queryKey: ["payroll-run", payrollRunId] });
+    },
+  });
+}
+
 export function useBanks() {
   return useQuery<{ name: string; code: string; slug: string }[]>({
     queryKey: ["paystack-banks"],
