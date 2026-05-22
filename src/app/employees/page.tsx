@@ -902,10 +902,11 @@ function EmployeesPageContent() {
                   className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
                 >
                   {[
-                    { label: "Employee", value: "Employee" },
+                    { label: "CVO / CEO", value: "CVO" },
                     { label: "Admin", value: "Admin" },
                     { label: "Finance", value: "Finance" },
                     { label: "SBU Head", value: "SBUHead" },
+                    { label: "Employee", value: "Employee" },
                   ].map((r) => (
                     <option key={r.value} value={r.value}>{r.label}</option>
                   ))}

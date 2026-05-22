@@ -3,11 +3,11 @@
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { useForm, useFieldArray } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import toast from "react-hot-toast";
-import { ArrowLeft, ArrowRight, Save, Plus, Trash2, UserPlus, Search, ChevronDown, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Save, Plus, UserPlus, Search, ChevronDown, X } from "lucide-react";
 import { AppLayout } from "@/components/layout/app-layout";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,9 @@ import { CurrencyInput } from "@/components/ui/currency-input";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Modal } from "@/components/ui/modal";
 import { Spinner } from "@/components/ui/loading";
+import api from "@/lib/api";
+import { formatCurrency } from "@/lib/utils";
+import { BankAccountFields } from "@/components/shared/bank-account-fields";
 
 const createEmployeeSchema = z.object({
   fullName: z.string().min(1, "Full name is required"),
@@ -67,6 +70,8 @@ const createEmployeeSchema = z.object({
   bankName: z.string().optional(),
   currency: z.string().default("NGN"),
   salaryEffectiveDate: z.string().optional(),
+  commission: z.string().optional(),
+  withholdingTax: z.string().optional(),
 });
 
 type CreateEmployeeFormData = z.infer<typeof createEmployeeSchema>;
@@ -102,12 +107,27 @@ export default function CreateEmployeePage() {
   const createEmployee = useCreateEmployee();
   const [secondarySbuIds, setSecondarySbuIds] = useState<string[]>([]);
 
+  interface GrossBreakdown {
+    basicSalary: number;
+    allowancesBreakdown: { name: string; amount: number }[];
+    grossPay: number;
+    pension: number;
+    employerPension: number;
+    totalPension: number;
+    paye: number;
+    totalDeductions: number;
+    netPay60: number;
+  }
+  const [grossBreakdown, setGrossBreakdown] = useState<GrossBreakdown | null>(null);
+  const [breakdownLoading, setBreakdownLoading] = useState(false);
+
   const {
     register,
     handleSubmit,
     control,
     watch,
     setValue,
+    trigger,
     formState: { errors },
   } = useForm<CreateEmployeeFormData>({
     resolver: zodResolver(createEmployeeSchema),
@@ -119,16 +139,6 @@ export default function CreateEmployeePage() {
       allowances: [],
       deductions: [],
     },
-  });
-
-  const { fields: allowanceFields, append: appendAllowance, remove: removeAllowance } = useFieldArray({
-    control,
-    name: "allowances",
-  });
-
-  const { fields: deductionFields, append: appendDeduction, remove: removeDeduction } = useFieldArray({
-    control,
-    name: "deductions",
   });
 
   const selectedSbuId = watch("sbuId");
@@ -152,10 +162,33 @@ export default function CreateEmployeePage() {
 
   // Redirect non-admin users
   useEffect(() => {
-    if (user && effectiveRole !== "Admin") {
+    if (user && effectiveRole !== "Admin" && effectiveRole !== "CVO") {
       router.push("/dashboard");
     }
   }, [user, router]);
+
+  const watchedGrossPay = watch("monthlySalary");
+  useEffect(() => {
+    const grossPay = parseFloat(watchedGrossPay || "0");
+    if (!grossPay || grossPay <= 0) {
+      setGrossBreakdown(null);
+      return;
+    }
+    setBreakdownLoading(true);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await api.get<GrossBreakdown>("/payroll/gross-breakdown", {
+          params: { grossPay },
+        });
+        setGrossBreakdown(res.data);
+      } catch {
+        // silently ignore
+      } finally {
+        setBreakdownLoading(false);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [watchedGrossPay]);
 
   const sbuOptions = (sbus || []).map((s) => ({
     label: s.name,
@@ -192,10 +225,11 @@ export default function CreateEmployeePage() {
   ];
 
   const roleOptions = [
-    { label: "Employee", value: "Employee" },
+    { label: "CVO / CEO", value: "CVO" },
     { label: "Admin", value: "Admin" },
     { label: "Finance", value: "Finance" },
     { label: "SBU Head", value: "SBUHead" },
+    { label: "Employee", value: "Employee" },
   ];
 
   const statusOptions = [
@@ -231,6 +265,26 @@ export default function CreateEmployeePage() {
 
   const onSubmit = async (data: CreateEmployeeFormData) => {
     try {
+      const grossPayNum = data.monthlySalary ? parseFloat(data.monthlySalary) : 0;
+      const commissionNum = data.commission ? parseFloat(data.commission) : 0;
+      const withholdingNum = data.withholdingTax ? parseFloat(data.withholdingTax) : 0;
+      const r2 = (n: number) => Math.round(n * 100) / 100;
+
+      const standardAllowances = grossPayNum > 0 ? [
+        { name: "Housing",   amount: r2(grossPayNum * 0.20) },
+        { name: "Transport", amount: r2(grossPayNum * 0.15) },
+        { name: "Wardrobe",  amount: r2(grossPayNum * 0.10) },
+        { name: "Meal",      amount: r2(grossPayNum * 0.10) },
+        { name: "Utility",   amount: r2(grossPayNum * 0.10) },
+      ] : [];
+      const allAllowances = [
+        ...standardAllowances,
+        ...(commissionNum > 0 ? [{ name: "Commission", amount: commissionNum }] : []),
+      ];
+      const allDeductions = withholdingNum > 0
+        ? [{ name: "Withholding Tax", amount: withholdingNum }]
+        : [];
+
       // Base payload with explicit nulls for optional fields
       const payload: Record<string, unknown> = {
         ...data,
@@ -250,33 +304,18 @@ export default function CreateEmployeePage() {
         tin: data.tin || null,
         pensionNumber: data.pensionNumber || null,
         hmoId: data.hmoId || null,
-        
+
         // Employment
         supervisorId: data.supervisorId || null,
         probationPeriod: data.probationPeriod ? parseInt(data.probationPeriod) : null,
         probationEndDate: data.probationEndDate || null,
-        
-        // Compensation — send flat numeric fields as the backend expects
-        monthlySalary: data.monthlySalary ? parseFloat(data.monthlySalary) : null,
-        netPay: data.netPay
-          ? parseFloat(data.netPay)
-          : (data.simpleNetPay ? parseFloat(data.simpleNetPay) : null),
-        baseSalary: data.baseSalary ? parseFloat(data.baseSalary) : undefined,
-        grossPay: data.grossPay ? parseFloat(data.grossPay) : undefined,
-        pension: data.pension ? parseFloat(data.pension) : undefined,
-        tax: data.tax ? parseFloat(data.tax) : undefined,
-        allowances: data.allowances.length > 0
-          ? data.allowances.map((a) => ({
-              name: a.name,
-              amount: parseFloat(a.amount || "0"),
-            }))
-          : undefined,
-        deductions: data.deductions.length > 0
-          ? data.deductions.map((d) => ({
-              name: d.name,
-              amount: parseFloat(d.amount || "0"),
-            }))
-          : undefined,
+
+        // Compensation — auto-calculated structure
+        monthlySalary: grossPayNum || null,
+        grossPay: grossPayNum || undefined,
+        baseSalary: grossPayNum ? r2(grossPayNum * 0.35) : undefined,
+        allowances: allAllowances.length > 0 ? allAllowances : undefined,
+        deductions: allDeductions.length > 0 ? allDeductions : undefined,
         salaryBand: data.salaryBand || null,
         accountName: data.accountName || null,
         accountNumber: data.accountNumber || null,
@@ -285,8 +324,20 @@ export default function CreateEmployeePage() {
         currency: data.currency || "NGN",
       };
 
-      // Remove form-only field not in the backend schema
+      // Remove form-only fields not in the backend schema
+      const netPay40FromForm = data.simpleNetPay ? parseFloat(data.simpleNetPay) || 0 : 0;
       delete payload.simpleNetPay;
+      delete payload.netPay;
+      delete payload.baseSalary;
+      delete payload.pension;
+      delete payload.tax;
+      delete payload.commission;
+      delete payload.withholdingTax;
+      // Re-add the computed ones
+      if (grossPayNum) payload.baseSalary = r2(grossPayNum * 0.35);
+      if (grossPayNum) payload.netPay40 = netPay40FromForm;
+      if (allAllowances.length > 0) payload.allowances = allAllowances;
+      if (allDeductions.length > 0) payload.deductions = allDeductions;
 
       // Attach secondary SBU assignments
       if (secondarySbuIds.length > 0) {
@@ -337,7 +388,7 @@ export default function CreateEmployeePage() {
         </div>
 
         <form
-          onSubmit={handleSubmit(onSubmit, onFormError)}
+          onSubmit={(e) => e.preventDefault()}
           onKeyDown={(e) => {
             if (e.key === "Enter" && (e.target as HTMLElement).tagName !== "TEXTAREA") {
               e.preventDefault();
@@ -719,234 +770,181 @@ export default function CreateEmployeePage() {
           )}
 
           {/* Compensation Tab */}
-          {activeTab === "compensation" && (
-            <div className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>General Compensation Details</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    <CurrencyInput
-                      control={control}
-                      name="monthlySalary"
-                      label="Gross Pay"
-                      currencyCode={watch("currency")}
-                      error={errors.monthlySalary?.message}
-                    />
-                    <CurrencyInput
-                      control={control}
-                      name="simpleNetPay"
-                      label="Net Pay"
-                      currencyCode={watch("currency")}
-                      error={errors.simpleNetPay?.message}
-                    />
-                    <Input
-                      label="Salary Band"
-                      placeholder="e.g. L3, L4"
-                      error={errors.salaryBand?.message}
-                      {...register("salaryBand")}
-                    />
-                    <Select
-                      label="Currency"
-                      options={[
-                        { label: "NGN - Nigerian Naira", value: "NGN" },
-                        { label: "USD - US Dollar", value: "USD" },
-                        { label: "GBP - British Pound", value: "GBP" },
-                        { label: "EUR - Euro", value: "EUR" },
-                      ]}
-                      error={errors.currency?.message}
-                      {...register("currency")}
-                    />
-                    <Input
-                      label="Account Name"
-                      error={errors.accountName?.message}
-                      {...register("accountName")}
-                    />
-                    <Input
-                      label="Account Number"
-                      error={errors.accountNumber?.message}
-                      {...register("accountNumber")}
-                    />
-                    <Input
-                      label="Bank Name"
-                      error={errors.bankName?.message}
-                      {...register("bankName")}
-                    />
-                    <Input
-                      label="Salary Effective Date"
-                      type="date"
-                      error={errors.salaryEffectiveDate?.message}
-                      {...register("salaryEffectiveDate")}
-                    />
-                  </div>
-                </CardContent>
-              </Card>
+          {activeTab === "compensation" && (() => {
+            const currency = watch("currency") || "NGN";
+            const bd = grossBreakdown;
+            const netPay60 = Number(bd?.netPay60 ?? 0);
+            const watchedNetPay40 = watch("simpleNetPay");
+            const netPay40Val = parseFloat(watchedNetPay40 || "0") || 0;
+            const netPay100 = netPay60 + netPay40Val;
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Salary Breakdown</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    <CurrencyInput
-                      control={control}
-                      name="baseSalary"
-                      label="Base Salary"
-                      currencyCode={watch("currency")}
-                      error={errors.baseSalary?.message}
-                    />
-                    <CurrencyInput
-                      control={control}
-                      name="grossPay"
-                      label="Gross Pay"
-                      currencyCode={watch("currency")}
-                      error={errors.grossPay?.message}
-                    />
-                    <CurrencyInput
-                      control={control}
-                      name="netPay"
-                      label="Net Pay"
-                      currencyCode={watch("currency")}
-                      error={errors.netPay?.message}
-                    />
-                    <CurrencyInput
-                      control={control}
-                      name="pension"
-                      label="Pension"
-                      currencyCode={watch("currency")}
-                      error={errors.pension?.message}
-                    />
-                    <CurrencyInput
-                      control={control}
-                      name="tax"
-                      label="Tax"
-                      currencyCode={watch("currency")}
-                      error={errors.tax?.message}
-                    />
-                  </div>
-                </CardContent>
-              </Card>
+            const CalcField = ({ label, value }: { label: string; value: number | undefined }) => (
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">{label}</label>
+                <div className={`flex items-center gap-2 px-3 py-2 rounded-md border text-sm ${
+                  bd ? "bg-blue-50 border-blue-200 text-blue-900" : "bg-gray-50 border-gray-200 text-gray-400"
+                }`}>
+                  {breakdownLoading ? (
+                    <span className="text-gray-400 italic text-xs">calculating…</span>
+                  ) : (
+                    <>
+                      <span className="text-gray-400 text-xs">auto</span>
+                      <span className="font-medium">
+                        {value !== undefined ? formatCurrency(value, currency) : "—"}
+                      </span>
+                    </>
+                  )}
+                </div>
+              </div>
+            );
 
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                {/* Allowances */}
+            return (
+              <div className="space-y-6">
+                {/* Gross Pay */}
                 <Card>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-base font-semibold">
-                      Allowances
-                    </CardTitle>
+                  <CardHeader>
+                    <CardTitle>Compensation</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-4">
-                      {allowanceFields.map((field, index) => (
-                        <div key={field.id} className="flex items-start gap-3">
-                          <div className="flex-1">
-                            <Input
-                              label={index === 0 ? "Name" : undefined}
-                              placeholder="Name"
-                              error={errors.allowances?.[index]?.name?.message}
-                              {...register(`allowances.${index}.name`)}
-                            />
-                          </div>
-                          <div className="w-40">
-                            <CurrencyInput
-                              control={control}
-                              name={`allowances.${index}.amount`}
-                              label={index === 0 ? "Amount" : undefined}
-                              currencyCode={watch("currency")}
-                              error={
-                                errors.allowances?.[index]?.amount?.message
-                              }
-                            />
-                          </div>
-                          <div className={index === 0 ? "mt-8" : "mt-1"}>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 w-8 p-0 text-red-500 hover:text-red-600"
-                              onClick={() => removeAllowance(index)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() =>
-                          appendAllowance({ name: "", amount: "" })
-                        }
-                      >
-                        <Plus className="mr-2 h-4 w-4" />
-                        Add Allowance
-                      </Button>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <CurrencyInput
+                        control={control}
+                        name="monthlySalary"
+                        label="Gross Pay"
+                        currencyCode={currency}
+                        error={errors.monthlySalary?.message}
+                      />
+                      <Input
+                        label="Salary Effective Date"
+                        type="date"
+                        error={errors.salaryEffectiveDate?.message}
+                        {...register("salaryEffectiveDate")}
+                      />
                     </div>
                   </CardContent>
                 </Card>
 
-                {/* Deductions */}
+                {/* Salary Structure (auto-computed) */}
                 <Card>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-base font-semibold">
-                      Deductions
-                    </CardTitle>
+                  <CardHeader>
+                    <CardTitle>Salary Structure</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-4">
-                      {deductionFields.map((field, index) => (
-                        <div key={field.id} className="flex items-start gap-3">
-                          <div className="flex-1">
-                            <Input
-                              label={index === 0 ? "Name" : undefined}
-                              placeholder="Name"
-                              error={errors.deductions?.[index]?.name?.message}
-                              {...register(`deductions.${index}.name`)}
-                            />
-                          </div>
-                          <div className="w-40">
-                            <CurrencyInput
-                              control={control}
-                              name={`deductions.${index}.amount`}
-                              label={index === 0 ? "Amount" : undefined}
-                              currencyCode={watch("currency")}
-                              error={
-                                errors.deductions?.[index]?.amount?.message
-                              }
-                            />
-                          </div>
-                          <div className={index === 0 ? "mt-8" : "mt-1"}>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 w-8 p-0 text-red-500 hover:text-red-600"
-                              onClick={() => removeDeduction(index)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() =>
-                          appendDeduction({ name: "", amount: "" })
-                        }
-                      >
-                        <Plus className="mr-2 h-4 w-4" />
-                        Add Deduction
-                      </Button>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <CalcField label="Basic Salary (35%)" value={bd?.basicSalary} />
+                      <CalcField label="Housing (20%)" value={bd?.allowancesBreakdown?.find((a) => a.name === "Housing")?.amount} />
+                      <CalcField label="Transport (15%)" value={bd?.allowancesBreakdown?.find((a) => a.name === "Transport")?.amount} />
+                      <CalcField label="Wardrobe (10%)" value={bd?.allowancesBreakdown?.find((a) => a.name === "Wardrobe")?.amount} />
+                      <CalcField label="Meal (10%)" value={bd?.allowancesBreakdown?.find((a) => a.name === "Meal")?.amount} />
+                      <CalcField label="Utility (10%)" value={bd?.allowancesBreakdown?.find((a) => a.name === "Utility")?.amount} />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Statutory Deductions (auto-computed) */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Statutory Deductions</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <CalcField label="Employee Pension (8%)" value={bd?.pension} />
+                      <CalcField label="Employer Pension (10%)" value={bd?.employerPension} />
+                      <CalcField label="Total Pension" value={bd?.totalPension} />
+                      <CalcField label="PAYE Tax (Monthly)" value={bd?.paye} />
+                      <CalcField label="Total Deductions" value={bd?.totalDeductions} />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Net Pay */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Net Pay</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <CalcField label="Net Pay 60% (Total - Deductions)" value={bd ? netPay60 : undefined} />
+                      <CurrencyInput
+                        control={control}
+                        name="simpleNetPay"
+                        label="Net Pay 40% (Manual Input)"
+                        currencyCode={currency}
+                        error={errors.simpleNetPay?.message}
+                      />
+                      <CalcField label="Net Pay 100% (60% + 40%)" value={bd ? netPay100 : undefined} />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Additional Compensation */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Additional Compensation</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <CurrencyInput
+                        control={control}
+                        name="commission"
+                        label="Commission"
+                        currencyCode={currency}
+                        error={errors.commission?.message}
+                      />
+                      <CurrencyInput
+                        control={control}
+                        name="withholdingTax"
+                        label="Withholding Tax"
+                        currencyCode={currency}
+                        error={errors.withholdingTax?.message}
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Banking & Admin */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Banking & Admin</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                      <Input
+                        label="Salary Band"
+                        placeholder="e.g. L3, L4"
+                        error={errors.salaryBand?.message}
+                        {...register("salaryBand")}
+                      />
+                      <Select
+                        label="Currency"
+                        options={[
+                          { label: "NGN - Nigerian Naira", value: "NGN" },
+                          { label: "USD - US Dollar", value: "USD" },
+                          { label: "GBP - British Pound", value: "GBP" },
+                          { label: "EUR - Euro", value: "EUR" },
+                        ]}
+                        error={errors.currency?.message}
+                        {...register("currency")}
+                      />
+                      <BankAccountFields
+                        accountNumber={watch("accountNumber") || ""}
+                        accountName={watch("accountName") || ""}
+                        bankName={watch("bankName") || ""}
+                        onAccountNumberChange={(v) => setValue("accountNumber", v)}
+                        onAccountNameChange={(v) => setValue("accountName", v)}
+                        onBankNameChange={(v) => setValue("bankName", v)}
+                        errors={{
+                          accountNumber: errors.accountNumber?.message,
+                          accountName: errors.accountName?.message,
+                          bankName: errors.bankName?.message,
+                        }}
+                      />
                     </div>
                   </CardContent>
                 </Card>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Navigation / Submit */}
           <div className="mt-6 flex items-center justify-end gap-3">
@@ -960,8 +958,9 @@ export default function CreateEmployeePage() {
             </Button>
             {activeTab === "compensation" ? (
               <Button
-                type="submit"
+                type="button"
                 loading={createEmployee.isPending}
+                onClick={() => handleSubmit(onSubmit, onFormError)()}
               >
                 <Save className="h-4 w-4" />
                 Create Employee
@@ -969,12 +968,21 @@ export default function CreateEmployeePage() {
             ) : (
               <Button
                 type="button"
-                onClick={() => {
+                onClick={async () => {
                   const tabOrder = formTabs.map((t) => t.id);
                   const currentIndex = tabOrder.indexOf(activeTab);
-                  if (currentIndex < tabOrder.length - 1) {
-                    setActiveTab(tabOrder[currentIndex + 1]);
-                  }
+                  if (currentIndex >= tabOrder.length - 1) return;
+
+                  // Validate required fields for the current tab before advancing
+                  const fieldsToValidate: (keyof CreateEmployeeFormData)[] =
+                    activeTab === "personal"
+                      ? ["fullName", "workEmail"]
+                      : ["dateOfHire", "employmentType", "sbuId", "departmentId", "jobTitle"];
+
+                  const valid = await trigger(fieldsToValidate);
+                  if (!valid) return;
+
+                  setActiveTab(tabOrder[currentIndex + 1]);
                 }}
               >
                 Next

@@ -69,6 +69,28 @@ export function useLeaveRequests(
   });
 }
 
+// ─── Employee leave balances (admin) ──────────────────────
+
+export function useEmployeeLeaveBalances(
+  employeeId: string | null | undefined,
+  year?: number,
+  options?: Omit<UseQueryOptions<LeaveBalance[]>, 'queryKey' | 'queryFn'>,
+) {
+  return useQuery<LeaveBalance[]>({
+    queryKey: [...leaveKeys.balances(), 'employee', employeeId, year] as const,
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (employeeId) params.set('employeeId', employeeId);
+      if (year) params.set('year', String(year));
+      const response = await api.get<LeaveBalance[]>('/leave-balances', { params });
+      return response.data;
+    },
+    enabled: !!employeeId,
+    staleTime: 2 * 60 * 1000,
+    ...options,
+  });
+}
+
 // ─── My leave balances ─────────────────────────────────────
 
 export function useMyLeaveBalances(
@@ -288,27 +310,6 @@ export function useCancelLeave() {
     onError: (error: any) => {
       const message =
         error?.response?.data?.message || 'Failed to cancel leave request.';
-      toast.error(message);
-    },
-  });
-}
-
-// ─── Hard delete leave request (admin only) ───────────────
-
-export function useDeleteLeave() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (id: string) => {
-      await api.delete(`/leave-requests/${id}/hard`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: leaveKeys.requests() });
-      toast.success('Leave request deleted.');
-    },
-    onError: (error: any) => {
-      const message =
-        error?.response?.data?.message || 'Failed to delete leave request.';
       toast.error(message);
     },
   });

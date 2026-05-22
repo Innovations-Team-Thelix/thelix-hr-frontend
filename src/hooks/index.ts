@@ -301,12 +301,14 @@ export function useUpdateEmployee() {
       return res.data;
     },
     onSuccess: (updatedEmployee, variables) => {
-      // Set the full employee data (including salaryBreakdown) immediately in cache
+      // Set the full employee data immediately so the UI reflects the change without waiting
       if (updatedEmployee) {
         queryClient.setQueryData(["employee", variables.id], updatedEmployee);
       }
-      // Invalidate salary history so it refetches in the background
+      // Invalidate both the list and the individual employee so fresh data (with all
+      // computed fields like totalDeductions and netPayTotal) is refetched from the server
       queryClient.invalidateQueries({ queryKey: ["employees"] });
+      queryClient.invalidateQueries({ queryKey: ["employee", variables.id] });
     },
   });
 }
@@ -782,6 +784,13 @@ export function usePayrollRun(id: string) {
       return res.data;
     },
     enabled: !!id,
+    // Automatically poll every 5 s while the run is Disbursing so the UI
+    // reflects webhook / cron-poll updates without a manual page refresh.
+    refetchInterval: (query) => {
+      const status = (query.state.data as PayrollRun | undefined)?.status;
+      return status === "Disbursing" ? 5_000 : false;
+    },
+    refetchIntervalInBackground: true,
   });
 }
 
@@ -814,6 +823,41 @@ export function useUploadPayslips() {
   });
 }
 
+interface SalaryDefaults {
+  hasSalaryRecord: boolean;
+  hasBreakdown: boolean;
+  grossPay: number;
+  basicSalary: number;
+  referenceNetPay: number;
+  netPay40: number;
+  commission: number;
+  withholdingTax: number;
+  allowances: Array<{ name: string; amount: number }>;
+  deductions: Array<{ name: string; amount: number }>;
+  computed: {
+    pension: number;
+    employerPension: number;
+    totalPension: number;
+    paye: number;
+    totalDeductions: number;
+    netPay60: number;
+  } | null;
+}
+
+export function useEmployeeSalaryDefaults(employeeId: string | null) {
+  return useQuery<SalaryDefaults>({
+    queryKey: ["employee-salary-defaults", employeeId],
+    queryFn: async () => {
+      // api.get() already unwraps axios response.data → returns ApiResponse<T>
+      // so res.data is the actual payload object from the server
+      const res = await api.get<SalaryDefaults>(`/payroll/salary-defaults/${employeeId}`);
+      return res.data ?? { hasSalaryRecord: false, basicSalary: 0, allowances: [], deductions: [] };
+    },
+    enabled: !!employeeId,
+    staleTime: 30_000,
+  });
+}
+
 export function useCreatePayslip() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -822,7 +866,15 @@ export function useCreatePayslip() {
       data,
     }: {
       payrollRunId: string;
-      data: { employeeId: string; basicSalary: number; allowances: number; deductions: number };
+      data: {
+        employeeId: string;
+        basicSalary: number;
+        allowances: Array<{ name: string; amount: number }>;
+        deductions: Array<{ name: string; amount: number }>;
+        netPay40?: number;
+        nhfOptIn?: boolean;
+        unpaidLeaveDays?: number;
+      };
     }) => {
       const res = await api.post<Payslip>(`/payroll/${payrollRunId}/payslips`, data);
       return res.data;
@@ -868,6 +920,261 @@ export function useMyPayslips() {
     queryFn: async () => {
       const res = await api.get<PayslipWithYTD>("/payslips/me");
       return res.data;
+    },
+  });
+}
+
+export interface AllPayslipsFilters {
+  month?: number;
+  year?: number;
+  employeeId?: string;
+  paymentStatus?: string;
+  page?: number;
+}
+
+export function useAllPayslips(filters: AllPayslipsFilters = {}) {
+  return useQuery({
+    queryKey: ["payslips-all", filters],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (filters.month)         params.set("month",         String(filters.month));
+      if (filters.year)          params.set("year",          String(filters.year));
+      if (filters.employeeId)    params.set("employeeId",    filters.employeeId);
+      if (filters.paymentStatus) params.set("paymentStatus", filters.paymentStatus);
+      if (filters.page)          params.set("page",          String(filters.page));
+      const res = await api.get(`/payslips?${params.toString()}`);
+      return res.data as { data: import("@/types").Payslip[]; pagination: { total: number; page: number; limit: number; totalPages: number; hasNextPage: boolean; hasPrevPage: boolean } };
+    },
+  });
+}
+
+// ─── Payroll workflow mutations (new) ────────────────
+
+function invalidatePayrollRun(queryClient: ReturnType<typeof useQueryClient>, id: string) {
+  queryClient.invalidateQueries({ queryKey: ["payroll-run", id] });
+  queryClient.invalidateQueries({ queryKey: ["payroll-runs"] });
+}
+
+export function usePopulatePayrollRun() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await api.post<{ populated: number; skipped: Array<{ employeeId: string; fullName: string; reason: string }> }>(`/payroll/${id}/populate`);
+      return res.data;
+    },
+    onSuccess: (_d, id) => invalidatePayrollRun(queryClient, id),
+  });
+}
+
+export function useSubmitPayroll() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await api.post<PayrollRun>(`/payroll/${id}/submit`);
+      return res.data;
+    },
+    onSuccess: (_d, id) => invalidatePayrollRun(queryClient, id),
+  });
+}
+
+export function useApproveFinance() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await api.post<PayrollRun>(`/payroll/${id}/approve-finance`);
+      return res.data;
+    },
+    onSuccess: (_d, id) => invalidatePayrollRun(queryClient, id),
+  });
+}
+
+export function useApproveCvo() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await api.post<PayrollRun>(`/payroll/${id}/approve-cvo`);
+      return res.data;
+    },
+    onSuccess: (_d, id) => invalidatePayrollRun(queryClient, id),
+  });
+}
+
+export function useRejectPayroll() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
+      const res = await api.post<PayrollRun>(`/payroll/${id}/reject`, { reason });
+      return res.data;
+    },
+    onSuccess: (_d, vars) => invalidatePayrollRun(queryClient, vars.id),
+  });
+}
+
+export function useDisbursePayroll() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await api.post<{ initiated: number; failedToInitiate: Array<{ payslipId: string; reason: string }> }>(`/payroll/${id}/disburse`);
+      return res.data;
+    },
+    onSuccess: (_d, id) => invalidatePayrollRun(queryClient, id),
+  });
+}
+
+export function useDeletePayslip() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ payrollRunId, payslipId }: { payrollRunId: string; payslipId: string }) => {
+      await api.delete(`/payroll/${payrollRunId}/payslips/${payslipId}`);
+    },
+    onSuccess: (_d, vars) => invalidatePayrollRun(queryClient, vars.payrollRunId),
+  });
+}
+
+export function useCancelPayrollRun() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await api.delete<{ id: string }>(`/payroll/${id}`);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["payroll-runs"] });
+    },
+  });
+}
+
+export function useDispatchPayslips() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payrollRunId: string) => {
+      const res = await api.post<{ data: { sent: number; failed: number; skipped: number } }>(
+        `/payroll/${payrollRunId}/dispatch-payslips`,
+      );
+      return res.data.data;
+    },
+    onSuccess: (_data, payrollRunId) => {
+      queryClient.invalidateQueries({ queryKey: ["payroll-run", payrollRunId] });
+    },
+  });
+}
+
+export function useBanks() {
+  return useQuery<{ name: string; code: string; slug: string }[]>({
+    queryKey: ["paystack-banks"],
+    queryFn: async () => {
+      const res = await api.get<{ name: string; code: string; slug: string }[]>("/payroll/banks");
+      return res.data;
+    },
+    staleTime: 24 * 60 * 60 * 1000, // bank list rarely changes — cache for 24h
+  });
+}
+
+export function useWalletBalance() {
+  return useQuery<{ currency: string; balance: number }[]>({
+    queryKey: ["payroll-wallet-balance"],
+    queryFn: async () => {
+      const res = await api.get<{ currency: string; balance: number }[]>("/payroll/wallet-balance");
+      return res.data;
+    },
+    staleTime: 60_000, // refresh every 60s
+    retry: false,
+  });
+}
+
+export function useTransferHistory(payrollRunId: string, disbursing = false) {
+  return useQuery({
+    queryKey: ["payroll-transfers", payrollRunId],
+    queryFn: async () => {
+      const res = await api.get(`/payroll/${payrollRunId}/transfers`);
+      return res.data as Array<{
+        id: string;
+        paymentStatus: string;
+        paystackTransferCode: string | null;
+        paystackReference: string | null;
+        paymentAttemptedAt: string | null;
+        paymentCompletedAt: string | null;
+        paymentFailureReason: string | null;
+        netPayTotal: number;
+        netPay: number;
+        netPay40: number | null;
+        employee: { id: string; fullName: string; employeeId: string };
+      }>;
+    },
+    enabled: !!payrollRunId,
+    refetchInterval: disbursing ? 5_000 : false,
+    refetchIntervalInBackground: disbursing,
+  });
+}
+
+// ─── Bonuses hooks ───────────────────────────────────
+
+import type { EmployeeBonus, BonusFilters } from "@/types";
+
+export function useBonuses(filters: BonusFilters = {}) {
+  return useQuery<{ data: EmployeeBonus[]; pagination: PaginationMeta }>({
+    queryKey: ["bonuses", filters],
+    queryFn: async () => {
+      const res = await api.get<EmployeeBonus[]>("/bonuses", {
+        params: buildParams(filters as Record<string, unknown>),
+      });
+      return { data: res.data, pagination: res.pagination! };
+    },
+  });
+}
+
+export function useMyBonuses() {
+  return useQuery<EmployeeBonus[]>({
+    queryKey: ["bonuses-me"],
+    queryFn: async () => {
+      const res = await api.get<EmployeeBonus[]>("/bonuses/me");
+      return res.data;
+    },
+  });
+}
+
+export function useCreateBonus() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: {
+      employeeId: string;
+      type: EmployeeBonus["type"];
+      description: string;
+      amount: number;
+      effectiveMonth: number;
+      effectiveYear: number;
+    }) => {
+      const res = await api.post<EmployeeBonus>("/bonuses", data);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bonuses"] });
+    },
+  });
+}
+
+export function useUpdateBonus() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Partial<EmployeeBonus> }) => {
+      const res = await api.put<EmployeeBonus>(`/bonuses/${id}`, data);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bonuses"] });
+    },
+  });
+}
+
+export function useDeleteBonus() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await api.delete(`/bonuses/${id}`);
+      return id;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bonuses"] });
     },
   });
 }

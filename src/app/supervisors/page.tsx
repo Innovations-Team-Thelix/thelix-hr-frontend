@@ -24,15 +24,17 @@ import toast from "react-hot-toast";
 import { useQueryClient } from "@tanstack/react-query";
 
 const ROLE_OPTIONS = [
+  { label: "CVO / CEO (9.0)", value: "CVO" },
   { label: "System Admin (8.6)", value: "Admin" },
   { label: "VP / Executive (8.1)", value: "SBUHead" },
   { label: "Director (8.2)", value: "Director" },
   { label: "Manager (8.3)", value: "Manager" },
-  { label: "HR / Performance Admin (8.5)", value: "Finance" },
+  { label: "Finance (8.5)", value: "Finance" },
   { label: "Team Member (8.4)", value: "Employee" },
 ];
 
 const ROLE_COLORS: Record<string, string> = {
+  CVO: "bg-indigo-50 text-indigo-700 border-indigo-100",
   Admin: "bg-red-50 text-red-700 border-red-100",
   SBUHead: "bg-amber-50 text-amber-700 border-amber-100",
   Director: "bg-purple-50 text-purple-700 border-purple-100",
@@ -54,10 +56,11 @@ function getRoleLabel(role: string) {
   return ROLE_OPTIONS.find((r) => r.value === role)?.label ?? role;
 }
 
-type RoleTab = "all" | "Admin" | "SBUHead" | "Director" | "Manager" | "Finance" | "Employee" | "NoAccess";
+type RoleTab = "all" | "CVO" | "Admin" | "SBUHead" | "Director" | "Manager" | "Finance" | "Employee" | "NoAccess";
 
 const ROLE_TABS: { id: RoleTab; label: string }[] = [
   { id: "all", label: "All" },
+  { id: "CVO", label: "CVO / CEO" },
   { id: "Admin", label: "Admins" },
   { id: "SBUHead", label: "Supervisors (VP)" },
   { id: "Director", label: "Directors" },
@@ -110,6 +113,7 @@ export default function SupervisorsPage() {
   const [phone, setPhone] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
+  const [isEditingAccess, setIsEditingAccess] = useState(false);
 
   const { data: departments } = useDepartments(sbuId || undefined);
   const sbuOptions = sbus?.map((s: any) => ({ label: s.name, value: s.id })) || [];
@@ -118,6 +122,7 @@ export default function SupervisorsPage() {
   const closeModal = () => {
     setModalOpen(false);
     setSelectedEmployeeId(null);
+    setIsEditingAccess(false);
     setFullName("");
     setWorkEmail("");
     setPassword("Welcome@123");
@@ -135,9 +140,13 @@ export default function SupervisorsPage() {
   };
 
   const openCreateForEmployee = (emp: any) => {
+    const hasAccount = !!emp.userAccount;
     setSelectedEmployeeId(emp.id);
+    setIsEditingAccess(hasAccount);
     setFullName(emp.fullName);
     setWorkEmail(emp.workEmail);
+    // Password blank when editing so admin only fills it if they want to reset it
+    setPassword(hasAccount ? "" : "Welcome@123");
     setJobTitle(emp.jobTitle || "");
     setPhone(emp.phone || "");
     setSbuId(emp.sbuId || emp.sbu?.id || "");
@@ -147,6 +156,30 @@ export default function SupervisorsPage() {
   };
 
   const handleCreate = async () => {
+    if (isEditingAccess) {
+      // ── Edit existing access ──────────────────────────────
+      if (!selectedEmployeeId) return;
+      setSubmitting(true);
+      try {
+        // Always update the role
+        await api.patch(`/auth/account/${selectedEmployeeId}/role`, { role });
+        // Only reset password if the admin typed a new one
+        if (password.trim()) {
+          await api.patch(`/auth/account/${selectedEmployeeId}/password`, { password });
+        }
+        toast.success("Access updated successfully");
+        queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+        queryClient.invalidateQueries({ queryKey: ["employees"] });
+        closeModal();
+      } catch (err: any) {
+        toast.error(err.response?.data?.message || "Failed to update access");
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+
+    // ── Grant new access / create new user ───────────────────
     if (!fullName.trim() || !workEmail.trim() || !password.trim()) {
       toast.error("Name, email, and password are required");
       return;
@@ -195,7 +228,7 @@ export default function SupervisorsPage() {
         ...(role === "Manager" && deptId ? { departmentScopeId: deptId } : {}),
       });
 
-      toast.success(`User ${selectedEmployeeId ? "registered" : "created"} successfully`);
+      toast.success("User created successfully");
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
       queryClient.invalidateQueries({ queryKey: ["employees"] });
       closeModal();
@@ -450,7 +483,7 @@ export default function SupervisorsPage() {
       <Modal
         isOpen={modalOpen}
         onClose={closeModal}
-        title={selectedEmployeeId ? `Grant Access — ${fullName}` : "Add New User"}
+        title={isEditingAccess ? `Edit Access — ${fullName}` : selectedEmployeeId ? `Grant Access — ${fullName}` : "Add New User"}
         size="md"
         footer={
           <div className="flex items-center justify-end gap-2">
@@ -466,7 +499,7 @@ export default function SupervisorsPage() {
               className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 transition-colors disabled:opacity-60"
             >
               {submitting && <Spinner size="sm" />}
-              {selectedEmployeeId ? "Register User" : "Create User"}
+              {isEditingAccess ? "Update Access" : selectedEmployeeId ? "Grant Access" : "Create User"}
             </button>
           </div>
         }
@@ -495,12 +528,12 @@ export default function SupervisorsPage() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="relative">
               <Input
-                label="Password"
+                label={isEditingAccess ? "New Password" : "Password"}
                 type={showPassword ? "text" : "password"}
-                placeholder="Min 8 characters"
+                placeholder={isEditingAccess ? "Leave blank to keep current" : "Min 8 characters"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                required
+                required={!isEditingAccess}
               />
               <button
                 type="button"

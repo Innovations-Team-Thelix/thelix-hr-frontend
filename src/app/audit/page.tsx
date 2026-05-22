@@ -86,7 +86,7 @@ export default function AuditPage() {
 
   // Redirect non-admin users
   useEffect(() => {
-    if (user && effectiveRole !== "Admin") {
+    if (user && effectiveRole !== "Admin" && effectiveRole !== "CVO") {
       router.push("/dashboard");
     }
   }, [user, router]);
