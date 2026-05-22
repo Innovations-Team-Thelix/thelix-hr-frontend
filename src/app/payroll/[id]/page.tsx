@@ -646,9 +646,8 @@ export default function PayrollDetailPage() {
                           <td className="px-3 py-3 text-right text-red-600">({formatCurrency(payslip.paye || 0)})</td>
                           <td className="px-3 py-3 text-right font-semibold">
                             {formatCurrency(
-                              Number(payslip.netPayTotal) > 0
-                                ? payslip.netPayTotal
-                                : Number(payslip.netPay) + Number(payslip.netPay40 || 0)
+                              Number(payslip.netPay || 0) + Number(payslip.netPay40 || 0) ||
+                              Number(payslip.netPayTotal || 0)
                             )}
                           </td>
                           {(run.status === "Disbursing" || run.status === "Sent") && (
@@ -1002,7 +1001,7 @@ export default function PayrollDetailPage() {
                           <p className="text-xs text-gray-400">{t.employee.employeeId}</p>
                         </td>
                         <td className="px-4 py-3 font-medium text-gray-800">
-                          ₦{Number(t.netPayTotal || t.netPay).toLocaleString("en-NG", { minimumFractionDigits: 2 })}
+                          ₦{(Number(t.netPay || 0) + Number(t.netPay40 || 0) || Number(t.netPayTotal || 0)).toLocaleString("en-NG", { minimumFractionDigits: 2 })}
                         </td>
                         <td className="px-4 py-3">
                           <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${PAY_STATUS_COLORS[t.paymentStatus as keyof typeof PAY_STATUS_COLORS] ?? "bg-gray-100 text-gray-600"}`}>

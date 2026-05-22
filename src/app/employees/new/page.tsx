@@ -325,6 +325,7 @@ export default function CreateEmployeePage() {
       };
 
       // Remove form-only fields not in the backend schema
+      const netPay40FromForm = data.simpleNetPay ? parseFloat(data.simpleNetPay) || 0 : 0;
       delete payload.simpleNetPay;
       delete payload.netPay;
       delete payload.baseSalary;
@@ -334,6 +335,7 @@ export default function CreateEmployeePage() {
       delete payload.withholdingTax;
       // Re-add the computed ones
       if (grossPayNum) payload.baseSalary = r2(grossPayNum * 0.35);
+      if (grossPayNum) payload.netPay40 = netPay40FromForm;
       if (allAllowances.length > 0) payload.allowances = allAllowances;
       if (allDeductions.length > 0) payload.deductions = allDeductions;
 
