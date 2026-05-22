@@ -601,6 +601,8 @@ export interface Payslip {
   allowances: number;
   deductions: number;
   netPay: number;
+  netPay40: number | null;
+  netPayTotal: number | null;
 
   grossPay: number;
   taxableIncome: number;
