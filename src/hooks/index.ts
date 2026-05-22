@@ -1082,6 +1082,7 @@ export function useTransferHistory(payrollRunId: string, disbursing = false) {
         paymentFailureReason: string | null;
         netPayTotal: number;
         netPay: number;
+        netPay40: number | null;
         employee: { id: string; fullName: string; employeeId: string };
       }>;
     },
