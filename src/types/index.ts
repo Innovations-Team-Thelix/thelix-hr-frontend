@@ -603,6 +603,7 @@ export interface Payslip {
   netPay: number;
   netPay40: number | null;
   netPayTotal: number | null;
+  payslipEmailSentAt: string | null;
 
   grossPay: number;
   taxableIncome: number;

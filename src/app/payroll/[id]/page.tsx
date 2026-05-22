@@ -41,6 +41,7 @@ import {
   useEffectiveRole,
   useWalletBalance,
   useTransferHistory,
+  useDispatchPayslips,
 } from "@/hooks";
 import { formatDate } from "@/lib/utils";
 import type {
@@ -157,6 +158,7 @@ export default function PayrollDetailPage() {
   const disburseRun = useDisbursePayroll();
   const cancelRun = useCancelPayrollRun();
   const deletePayslip = useDeletePayslip();
+  const dispatchPayslips = useDispatchPayslips();
   const { data: walletBalances } = useWalletBalance();
   const isDisbursingRun = run?.status === "Disbursing";
   const { data: transferHistory } = useTransferHistory(payrollRunId, isDisbursingRun);
@@ -555,6 +557,23 @@ export default function PayrollDetailPage() {
                 {run.status === "Disbursing" ? "Retry failed transfers" : "Disburse via Paystack"}
               </Button>
             )}
+            {(run.status === "Approved" || run.status === "Disbursing" || run.status === "Sent") && isAdmin && (
+              <Button
+                variant="outline"
+                loading={dispatchPayslips.isPending}
+                onClick={async () => {
+                  try {
+                    const r = await dispatchPayslips.mutateAsync(payrollRunId);
+                    toast.success(`Payslips sent: ${r.sent} delivered${r.failed ? `, ${r.failed} failed` : ""}${r.skipped ? `, ${r.skipped} skipped` : ""}`);
+                  } catch (e: any) {
+                    toast.error(e?.response?.data?.message || "Failed to send payslips");
+                  }
+                }}
+              >
+                <Send className="h-4 w-4" />
+                Send Payslips
+              </Button>
+            )}
           </div>
         </div>
 
@@ -626,6 +645,7 @@ export default function PayrollDetailPage() {
                       <th className="px-3 py-3 text-right">Gross</th>
                       <th className="px-3 py-3 text-right">PAYE</th>
                       <th className="px-3 py-3 text-right">Net Pay</th>
+                      <th className="px-3 py-3 text-center">Payslip Sent</th>
                       {(run.status === "Disbursing" || run.status === "Sent") && (
                         <th className="px-3 py-3">Payment</th>
                       )}
@@ -648,6 +668,20 @@ export default function PayrollDetailPage() {
                             {formatCurrency(
                               Number(payslip.netPay || 0) + Number(payslip.netPay40 || 0) ||
                               Number(payslip.netPayTotal || 0)
+                            )}
+                          </td>
+                          <td className="px-3 py-3 text-center">
+                            {payslip.payslipEmailSentAt ? (
+                              <span
+                                className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700"
+                                title={`Sent ${new Date(payslip.payslipEmailSentAt).toLocaleString("en-NG")}`}
+                              >
+                                ✓ Sent
+                              </span>
+                            ) : (
+                              <span className="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-400">
+                                Pending
+                              </span>
                             )}
                           </td>
                           {(run.status === "Disbursing" || run.status === "Sent") && (
