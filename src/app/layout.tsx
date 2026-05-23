@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "@/styles/globals.css";
-import { Suspense } from "react";
 import { Providers } from "./providers";
 
 const inter = Inter({
@@ -22,9 +21,16 @@ export default function RootLayout({
   return (
     <html lang="en" className={inter.variable} suppressHydrationWarning>
       <body className="font-sans antialiased" suppressHydrationWarning>
-        <Suspense>
-          <Providers>{children}</Providers>
-        </Suspense>
+        <Providers>{children}</Providers>
+        <script dangerouslySetInnerHTML={{
+          __html: `
+            if ('serviceWorker' in navigator) {
+              navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                registrations.forEach(function(r) { r.unregister(); });
+              });
+            }
+          `
+        }} />
       </body>
     </html>
   );

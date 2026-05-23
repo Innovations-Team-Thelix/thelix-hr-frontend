@@ -22,6 +22,7 @@ import { useSbus, usePaginatedDepartments, useDepartments } from "@/hooks";
 import api from "@/lib/api";
 import toast from "react-hot-toast";
 import { useQueryClient } from "@tanstack/react-query";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 
 export default function DepartmentsPage() {
   const queryClient = useQueryClient();
@@ -50,6 +51,7 @@ export default function DepartmentsPage() {
   const [minOnsite, setMinOnsite] = useState("2");
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
 
   const sbuOptions = sbus?.map((s: any) => ({ label: s.name, value: s.id })) || [];
 
@@ -103,11 +105,12 @@ export default function DepartmentsPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Delete this department? Departments with employees cannot be deleted.")) return;
-    setDeletingId(id);
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeletingId(deleteTarget.id);
+    setDeleteTarget(null);
     try {
-      await api.delete(`/departments/${id}`);
+      await api.delete(`/departments/${deleteTarget.id}`);
       toast.success("Department deleted.");
       queryClient.invalidateQueries({ queryKey: ["departments"] });
       queryClient.invalidateQueries({ queryKey: ["sbus"] });
@@ -259,7 +262,7 @@ export default function DepartmentsPage() {
                               Edit
                             </button>
                             <button
-                              onClick={() => handleDelete(dept.id)}
+                              onClick={() => setDeleteTarget({ id: dept.id, name: dept.name })}
                               disabled={deletingId === dept.id}
                               className="inline-flex items-center justify-center rounded-lg border border-red-100 bg-red-50 p-1.5 text-red-500 transition-all hover:bg-red-100 hover:text-red-700 disabled:opacity-50"
                             >
@@ -298,7 +301,7 @@ export default function DepartmentsPage() {
                         <Pencil className="h-3.5 w-3.5" />
                       </button>
                       <button
-                        onClick={() => handleDelete(dept.id)}
+                        onClick={() => setDeleteTarget({ id: dept.id, name: dept.name })}
                         disabled={deletingId === dept.id}
                         className="rounded-lg border border-red-100 bg-red-50 p-1.5 text-red-500 hover:bg-red-100 disabled:opacity-50"
                       >
@@ -371,6 +374,17 @@ export default function DepartmentsPage() {
           />
         </div>
       </Modal>
+
+      <ConfirmDialog
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+        title="Delete department"
+        message={`Are you sure you want to delete "${deleteTarget?.name}"? Departments with employees cannot be deleted.`}
+        confirmLabel="Delete"
+        variant="danger"
+        loading={!!deletingId}
+      />
     </AppLayout>
   );
 }

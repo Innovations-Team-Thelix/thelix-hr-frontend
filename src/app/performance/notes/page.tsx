@@ -12,6 +12,7 @@ import { BookOpen, Plus, Pencil, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { formatDate } from "@/lib/utils";
 import type { EmployeeNote } from "@/hooks";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 
 export default function NotesPage() {
   const { data: notes, isLoading } = useEmployeeNotes();
@@ -21,6 +22,7 @@ export default function NotesPage() {
 
   const [modal, setModal] = useState<"create" | "edit" | null>(null);
   const [editing, setEditing] = useState<EmployeeNote | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<EmployeeNote | null>(null);
   const [body, setBody] = useState("");
   const [shareWithManager, setShareWithManager] = useState(false);
 
@@ -42,11 +44,12 @@ export default function NotesPage() {
     } catch { toast.error("Failed to save note."); }
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm("Delete this note? This cannot be undone.")) return;
+  async function handleDelete() {
+    if (!deleteTarget) return;
     try {
-      await deleteNote.mutateAsync(id);
+      await deleteNote.mutateAsync(deleteTarget.id);
       toast.success("Note deleted.");
+      setDeleteTarget(null);
     } catch { toast.error("Failed to delete note."); }
   }
 
@@ -93,7 +96,7 @@ export default function NotesPage() {
                       <button onClick={() => openEdit(note)} className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600">
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
-                      <button onClick={() => handleDelete(note.id)} className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-500">
+                      <button onClick={() => setDeleteTarget(note)} className="p-1.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-500">
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
@@ -129,6 +132,17 @@ export default function NotesPage() {
             </div>
           </div>
         </Modal>
+
+        <ConfirmDialog
+          isOpen={!!deleteTarget}
+          onClose={() => setDeleteTarget(null)}
+          onConfirm={handleDelete}
+          title="Delete note"
+          message="Delete this note? This is permanent and cannot be undone."
+          confirmLabel="Delete"
+          variant="danger"
+          loading={deleteNote.isPending}
+        />
       </div>
     </AppLayout>
   );

@@ -1,6 +1,6 @@
 // ─── Type unions ────────────────────────────────────────────
 
-export type UserRole = 'Admin' | 'SBUHead' | 'Director' | 'Manager' | 'Finance' | 'Employee';
+export type UserRole = 'CVO' | 'Admin' | 'SBUHead' | 'Director' | 'Manager' | 'Finance' | 'Employee';
 export type Gender = 'Male' | 'Female' | 'NonBinary' | 'PreferNotToSay';
 export type EmploymentType = 'FullTime' | 'Contract' | 'Intern';
 export type WorkArrangement = 'Remote' | 'Hybrid' | 'Onsite';
@@ -12,7 +12,19 @@ export type NotificationChannel = 'Email' | 'Slack' | 'InApp';
 export type ViolationType = 'LateComing' | 'Absenteeism' | 'Insubordination' | 'PolicyViolation' | 'Misconduct' | 'Other';
 export type DisciplinarySeverity = 'Warning' | 'Strike' | 'Suspension' | 'Termination';
 export type DisciplinaryStatus = 'Pending' | 'Approved' | 'Rejected';
-export type PayrollStatus = 'Draft' | 'Approved' | 'Sent';
+export type PayrollStatus =
+  | 'Draft'
+  | 'PendingFinance'
+  | 'PendingCVO'
+  | 'Approved'
+  | 'Disbursing'
+  | 'Sent'
+  | 'Rejected';
+
+export type PayslipPaymentStatus = 'Pending' | 'Processing' | 'Paid' | 'Failed';
+
+export type BonusType = 'Bonus' | 'Reimbursement' | 'OneOffAllowance' | 'OneOffDeduction';
+export type BonusStatus = 'Pending' | 'Applied' | 'Cancelled';
 
 // ─── Entity interfaces ────────────────────────────────────
 
@@ -42,7 +54,12 @@ export interface SalaryRecord {
   baseSalary: number;
   grossPay: number;
   netPay: number;
+  netPay40?: number;
+  netPayTotal?: number;
+  totalDeductions?: number;
   pension: number;
+  employerPension: number;
+  nhf: number;
   tax: number;
   allowances: SalaryComponent[];
   deductions: SalaryComponent[];
@@ -422,7 +439,7 @@ export interface EmployeeFilters {
   joined?: 'this_month' | 'last_month' | 'this_year';
   // Filter by the role on the linked user account.
   // 'NoAccess' selects employees who have no portal account at all.
-  role?: 'Admin' | 'SBUHead' | 'Director' | 'Manager' | 'Finance' | 'Employee' | 'NoAccess';
+  role?: 'CVO' | 'Admin' | 'SBUHead' | 'Director' | 'Manager' | 'Finance' | 'Employee' | 'NoAccess';
   sortBy?: 'fullName' | 'employeeId' | 'dateOfHire' | 'jobTitle' | 'employmentStatus' | 'createdAt';
   sortOrder?: 'asc' | 'desc';
 }
@@ -529,20 +546,51 @@ export interface CompanyPolicy {
 
 // ─── Payroll types ───────────────────────────────────────────
 
+export interface PayrollApprover {
+  id: string;
+  fullName: string;
+}
+
 export interface PayrollRun {
   id: string;
   month: number;
   year: number;
   status: PayrollStatus;
   createdById: string;
+  submittedAt: string | null;
+  financeApprovedAt: string | null;
+  cvoApprovedAt: string | null;
   approvedAt: string | null;
+  disbursedAt: string | null;
+  rejectedAt: string | null;
+  rejectionReason: string | null;
   sentAt: string | null;
+  totalGross: number;
+  totalNet: number;
+  totalTax: number;
+  totalPension: number;
+  paystackBatchId: string | null;
   createdAt: string;
   updatedAt: string;
 
-  createdBy?: Pick<Employee, 'id' | 'fullName'>;
+  createdBy?: PayrollApprover;
+  financeApprover?: PayrollApprover | null;
+  cvoApprover?: PayrollApprover | null;
+  disburser?: PayrollApprover | null;
+  rejecter?: PayrollApprover | null;
   payslips?: Payslip[];
   _count?: { payslips: number };
+}
+
+export interface BonusBreakdownItem {
+  description: string;
+  type: BonusType;
+  amount: number;
+}
+
+export interface AllowanceBreakdownItem {
+  name: string;
+  amount: number;
 }
 
 export interface Payslip {
@@ -553,11 +601,72 @@ export interface Payslip {
   allowances: number;
   deductions: number;
   netPay: number;
+  netPay40: number | null;
+  netPayTotal: number | null;
+  payslipEmailSentAt: string | null;
+
+  grossPay: number;
+  taxableIncome: number;
+  paye: number;
+  pension: number;
+  employerPension: number;
+  nhf: number;
+  loanRepayment: number;
+  bonusesTotal: number;
+  reimbursementsTotal: number;
+  allowancesBreakdown: AllowanceBreakdownItem[] | null;
+  deductionsBreakdown: AllowanceBreakdownItem[] | null;
+  bonusesBreakdown: BonusBreakdownItem[] | null;
+  unpaidLeaveDays: number;
+  prorationFactor: number;
+
+  paymentStatus: PayslipPaymentStatus;
+  paystackTransferCode: string | null;
+  paystackReference: string | null;
+  paymentAttemptedAt: string | null;
+  paymentCompletedAt: string | null;
+  paymentFailureReason: string | null;
+
   createdAt: string;
   updatedAt: string;
 
-  employee?: Pick<Employee, 'id' | 'employeeId' | 'fullName' | 'jobTitle' | 'workEmail'>;
+  employee?: Pick<
+    Employee,
+    'id' | 'employeeId' | 'fullName' | 'jobTitle' | 'workEmail'
+  > & {
+    accountName?: string | null;
+    accountNumber?: string | null;
+    bankName?: string | null;
+  };
   payrollRun?: Pick<PayrollRun, 'id' | 'month' | 'year' | 'status'>;
+}
+
+export interface EmployeeBonus {
+  id: string;
+  employeeId: string;
+  payrollRunId: string | null;
+  payslipId: string | null;
+  type: BonusType;
+  description: string;
+  amount: number;
+  effectiveMonth: number;
+  effectiveYear: number;
+  status: BonusStatus;
+  createdById: string;
+  createdAt: string;
+  updatedAt: string;
+  employee?: Pick<Employee, 'id' | 'employeeId' | 'fullName' | 'jobTitle'>;
+  createdBy?: { id: string; fullName: string };
+}
+
+export interface BonusFilters {
+  page?: number;
+  limit?: number;
+  employeeId?: string;
+  month?: number;
+  year?: number;
+  status?: BonusStatus;
+  type?: BonusType;
 }
 
 export interface PayslipWithYTD {
