@@ -989,7 +989,7 @@ export default function EmployeeProfilePage() {
                                 {formatCurrency(record.grossPay, employee.currency || "NGN")}
                               </td>
                               <td className="px-4 py-3 text-gray-600">
-                                {formatCurrency(record.netPay, employee.currency || "NGN")}
+                                {formatCurrency(record.netPayTotal || record.netPay, employee.currency || "NGN")}
                               </td>
                               <td className="px-4 py-3 text-gray-500">
                                 {record.createdBy?.fullName || record.createdById}
