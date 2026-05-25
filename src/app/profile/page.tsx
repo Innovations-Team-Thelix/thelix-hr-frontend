@@ -600,7 +600,7 @@ export default function ProfilePage() {
                             {formatCurrency(record.grossPay, profile.currency || "NGN")}
                           </td>
                           <td className="px-4 py-3 text-gray-600">
-                            {formatCurrency(record.netPay, profile.currency || "NGN")}
+                            {formatCurrency(record.netPayTotal || record.netPay, profile.currency || "NGN")}
                           </td>
                           <td className="px-4 py-3 text-gray-500">
                             {record.createdBy?.fullName || record.createdById}
