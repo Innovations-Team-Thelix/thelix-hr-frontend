@@ -961,11 +961,17 @@ export function usePopulatePayrollRun() {
     mutationFn: async (id: string) => {
       const res = await api.post<{
         populated: number;
-        skipped: Array<{
+        populatedWithZeroDefaults: Array<{
           employeeId: string;
           employeeIdCode: string;
           fullName: string;
           reason: string;
+        }>;
+        failed: Array<{
+          employeeId: string;
+          employeeIdCode: string;
+          fullName: string;
+          error: string;
         }>;
         excludedByStatus: {
           count: number;
