@@ -135,6 +135,15 @@ export default function PayrollDetailPage() {
     variant?: "danger" | "primary";
     onConfirm: () => void;
   } | null>(null);
+  const [populateReport, setPopulateReport] = useState<{
+    populated: number;
+    skipped: Array<{ employeeIdCode: string; fullName: string; reason: string }>;
+    excludedByStatus: {
+      count: number;
+      breakdown: Record<string, number>;
+      employees: Array<{ employeeIdCode: string; fullName: string; status: string }>;
+    };
+  } | null>(null);
   const [employeeSearch, setEmployeeSearch] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
@@ -261,14 +270,10 @@ export default function PayrollDetailPage() {
       onConfirm: async () => {
         setGenericConfirm(null);
         try {
-          const res = await populateRun.mutateAsync(payrollRunId);
-          const r = res as { populated: number; skipped: Array<{ fullName: string; reason: string }> };
+          const r = await populateRun.mutateAsync(payrollRunId);
           toast.success(`Populated ${r.populated} payslip(s)`);
-          if (r.skipped.length > 0) {
-            toast(
-              `${r.skipped.length} skipped: ${r.skipped.slice(0, 3).map((s) => s.fullName).join(", ")}${r.skipped.length > 3 ? "…" : ""}`,
-              { icon: "⚠️" },
-            );
+          if (r.skipped.length > 0 || r.excludedByStatus.count > 0) {
+            setPopulateReport(r);
           }
         } catch (err) {
           const e = err as { response?: { data?: { message?: string } } };
@@ -899,6 +904,96 @@ export default function PayrollDetailPage() {
               placeholder="e.g. Bonus for John D. was missed"
             />
           </div>
+        </Modal>
+
+        {/* Auto-populate result report — surfaces every employee the run did NOT include */}
+        <Modal
+          isOpen={!!populateReport}
+          onClose={() => setPopulateReport(null)}
+          title="Auto-populate report"
+          size="lg"
+          footer={
+            <div className="flex justify-end">
+              <Button onClick={() => setPopulateReport(null)}>Close</Button>
+            </div>
+          }
+        >
+          {populateReport && (
+            <div className="space-y-4">
+              <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+                Generated <strong>{populateReport.populated}</strong> payslip(s).
+              </div>
+
+              {populateReport.skipped.length > 0 && (
+                <div>
+                  <p className="mb-2 text-sm font-medium text-gray-900">
+                    {populateReport.skipped.length} active employee(s) skipped — no usable salary record
+                  </p>
+                  <div className="max-h-60 overflow-y-auto rounded-lg border border-amber-200 bg-amber-50">
+                    <table className="w-full text-xs">
+                      <thead className="sticky top-0 bg-amber-100 text-amber-900">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-medium">ID</th>
+                          <th className="px-3 py-2 text-left font-medium">Name</th>
+                          <th className="px-3 py-2 text-left font-medium">Reason</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-amber-900">
+                        {populateReport.skipped.map((s) => (
+                          <tr key={s.employeeIdCode} className="border-t border-amber-200">
+                            <td className="px-3 py-1.5 font-mono">{s.employeeIdCode}</td>
+                            <td className="px-3 py-1.5">{s.fullName}</td>
+                            <td className="px-3 py-1.5">{s.reason}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="mt-2 text-xs text-gray-500">
+                    Fix: open each profile and set their salary (Gross / Basic / Monthly), then re-run Auto-populate.
+                  </p>
+                </div>
+              )}
+
+              {populateReport.excludedByStatus.count > 0 && (
+                <div>
+                  <p className="mb-2 text-sm font-medium text-gray-900">
+                    {populateReport.excludedByStatus.count} employee(s) excluded by employment status
+                  </p>
+                  <div className="mb-2 flex flex-wrap gap-2 text-xs">
+                    {Object.entries(populateReport.excludedByStatus.breakdown).map(([status, n]) => (
+                      <span key={status} className="rounded-full bg-gray-100 px-2 py-0.5 text-gray-700">
+                        {status}: {n}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="max-h-48 overflow-y-auto rounded-lg border border-gray-200 bg-gray-50">
+                    <table className="w-full text-xs">
+                      <thead className="sticky top-0 bg-gray-100 text-gray-700">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-medium">ID</th>
+                          <th className="px-3 py-2 text-left font-medium">Name</th>
+                          <th className="px-3 py-2 text-left font-medium">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-gray-800">
+                        {populateReport.excludedByStatus.employees.map((e) => (
+                          <tr key={e.employeeIdCode} className="border-t border-gray-200">
+                            <td className="px-3 py-1.5 font-mono">{e.employeeIdCode}</td>
+                            <td className="px-3 py-1.5">{e.fullName}</td>
+                            <td className="px-3 py-1.5">{e.status}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="mt-2 text-xs text-gray-500">
+                    These employees are intentionally excluded. Change their status to Active if they should be paid.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
         </Modal>
 
         {/* Generic confirm dialog (auto-populate, submit, approve, cancel) */}
