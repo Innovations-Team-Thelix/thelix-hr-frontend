@@ -135,6 +135,16 @@ export default function PayrollDetailPage() {
     variant?: "danger" | "primary";
     onConfirm: () => void;
   } | null>(null);
+  const [populateReport, setPopulateReport] = useState<{
+    populated: number;
+    populatedWithZeroDefaults: Array<{ employeeIdCode: string; fullName: string; reason: string }>;
+    failed: Array<{ employeeIdCode: string; fullName: string; error: string }>;
+    excludedByStatus: {
+      count: number;
+      breakdown: Record<string, number>;
+      employees: Array<{ employeeIdCode: string; fullName: string; status: string }>;
+    };
+  } | null>(null);
   const [employeeSearch, setEmployeeSearch] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
@@ -261,18 +271,34 @@ export default function PayrollDetailPage() {
       onConfirm: async () => {
         setGenericConfirm(null);
         try {
-          const res = await populateRun.mutateAsync(payrollRunId);
-          const r = res as { populated: number; skipped: Array<{ fullName: string; reason: string }> };
-          toast.success(`Populated ${r.populated} payslip(s)`);
-          if (r.skipped.length > 0) {
-            toast(
-              `${r.skipped.length} skipped: ${r.skipped.slice(0, 3).map((s) => s.fullName).join(", ")}${r.skipped.length > 3 ? "…" : ""}`,
-              { icon: "⚠️" },
-            );
+          const r = await populateRun.mutateAsync(payrollRunId);
+          if (r.failed.length > 0) {
+            toast.error(`Populated ${r.populated} payslip(s), ${r.failed.length} failed — see report`);
+          } else {
+            toast.success(`Populated ${r.populated} payslip(s)`);
+          }
+          if (
+            r.populatedWithZeroDefaults.length > 0 ||
+            r.failed.length > 0 ||
+            r.excludedByStatus.count > 0
+          ) {
+            setPopulateReport(r);
           }
         } catch (err) {
-          const e = err as { response?: { data?: { message?: string } } };
-          toast.error(e?.response?.data?.message || "Failed to populate");
+          const e = err as { response?: { data?: { message?: string } }; code?: string; message?: string };
+          // True network timeout / no response shape = no `e.response`. Surface
+          // something actionable instead of the bare "Failed to populate".
+          if (!e?.response) {
+            const isTimeout = e?.code === "ECONNABORTED" || /timeout/i.test(e?.message ?? "");
+            toast.error(
+              isTimeout
+                ? "Auto-populate timed out — the server may still be working. Refresh in a moment to check."
+                : "Could not reach the server. Check your connection and try again.",
+              { duration: 6000 },
+            );
+            return;
+          }
+          toast.error(e.response.data?.message || "Failed to populate");
         }
       },
     });
@@ -899,6 +925,129 @@ export default function PayrollDetailPage() {
               placeholder="e.g. Bonus for John D. was missed"
             />
           </div>
+        </Modal>
+
+        {/* Auto-populate result report — surfaces every employee the run did NOT include */}
+        <Modal
+          isOpen={!!populateReport}
+          onClose={() => setPopulateReport(null)}
+          title="Auto-populate report"
+          size="lg"
+          footer={
+            <div className="flex justify-end">
+              <Button onClick={() => setPopulateReport(null)}>Close</Button>
+            </div>
+          }
+        >
+          {populateReport && (
+            <div className="space-y-4">
+              <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+                Generated <strong>{populateReport.populated}</strong> payslip(s).
+              </div>
+
+              {populateReport.failed.length > 0 && (
+                <div>
+                  <p className="mb-2 text-sm font-medium text-gray-900">
+                    {populateReport.failed.length} employee(s) failed — no payslip written for these
+                  </p>
+                  <div className="max-h-60 overflow-y-auto rounded-lg border border-red-200 bg-red-50">
+                    <table className="w-full text-xs">
+                      <thead className="sticky top-0 bg-red-100 text-red-900">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-medium">ID</th>
+                          <th className="px-3 py-2 text-left font-medium">Name</th>
+                          <th className="px-3 py-2 text-left font-medium">Error</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-red-900">
+                        {populateReport.failed.map((f) => (
+                          <tr key={f.employeeIdCode} className="border-t border-red-200">
+                            <td className="px-3 py-1.5 font-mono">{f.employeeIdCode}</td>
+                            <td className="px-3 py-1.5">{f.fullName}</td>
+                            <td className="px-3 py-1.5 break-all">{f.error}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="mt-2 text-xs text-gray-500">
+                    Full error stacks are persisted to{" "}
+                    <code className="rounded bg-gray-100 px-1 py-0.5 font-mono">logs/payroll-populate.log</code>
+                    {" "}on the server. Re-run Auto-populate after fixing the underlying issue — it&apos;s idempotent.
+                  </p>
+                </div>
+              )}
+
+              {populateReport.populatedWithZeroDefaults.length > 0 && (
+                <div>
+                  <p className="mb-2 text-sm font-medium text-gray-900">
+                    {populateReport.populatedWithZeroDefaults.length} payslip(s) generated with 0.00 — no usable salary record
+                  </p>
+                  <div className="max-h-60 overflow-y-auto rounded-lg border border-amber-200 bg-amber-50">
+                    <table className="w-full text-xs">
+                      <thead className="sticky top-0 bg-amber-100 text-amber-900">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-medium">ID</th>
+                          <th className="px-3 py-2 text-left font-medium">Name</th>
+                          <th className="px-3 py-2 text-left font-medium">Reason</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-amber-900">
+                        {populateReport.populatedWithZeroDefaults.map((s) => (
+                          <tr key={s.employeeIdCode} className="border-t border-amber-200">
+                            <td className="px-3 py-1.5 font-mono">{s.employeeIdCode}</td>
+                            <td className="px-3 py-1.5">{s.fullName}</td>
+                            <td className="px-3 py-1.5">{s.reason}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="mt-2 text-xs text-gray-500">
+                    These payslips were created with 0.00 values so totals reconcile against the headcount. Set their salary (Gross / Basic / Monthly) and re-run Auto-populate to compute real figures.
+                  </p>
+                </div>
+              )}
+
+              {populateReport.excludedByStatus.count > 0 && (
+                <div>
+                  <p className="mb-2 text-sm font-medium text-gray-900">
+                    {populateReport.excludedByStatus.count} employee(s) excluded by employment status
+                  </p>
+                  <div className="mb-2 flex flex-wrap gap-2 text-xs">
+                    {Object.entries(populateReport.excludedByStatus.breakdown).map(([status, n]) => (
+                      <span key={status} className="rounded-full bg-gray-100 px-2 py-0.5 text-gray-700">
+                        {status}: {n}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="max-h-48 overflow-y-auto rounded-lg border border-gray-200 bg-gray-50">
+                    <table className="w-full text-xs">
+                      <thead className="sticky top-0 bg-gray-100 text-gray-700">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-medium">ID</th>
+                          <th className="px-3 py-2 text-left font-medium">Name</th>
+                          <th className="px-3 py-2 text-left font-medium">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-gray-800">
+                        {populateReport.excludedByStatus.employees.map((e) => (
+                          <tr key={e.employeeIdCode} className="border-t border-gray-200">
+                            <td className="px-3 py-1.5 font-mono">{e.employeeIdCode}</td>
+                            <td className="px-3 py-1.5">{e.fullName}</td>
+                            <td className="px-3 py-1.5">{e.status}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="mt-2 text-xs text-gray-500">
+                    These employees are intentionally excluded. Change their status to Active if they should be paid.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
         </Modal>
 
         {/* Generic confirm dialog (auto-populate, submit, approve, cancel) */}

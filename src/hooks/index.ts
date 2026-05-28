@@ -959,7 +959,31 @@ export function usePopulatePayrollRun() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const res = await api.post<{ populated: number; skipped: Array<{ employeeId: string; fullName: string; reason: string }> }>(`/payroll/${id}/populate`);
+      const res = await api.post<{
+        populated: number;
+        populatedWithZeroDefaults: Array<{
+          employeeId: string;
+          employeeIdCode: string;
+          fullName: string;
+          reason: string;
+        }>;
+        failed: Array<{
+          employeeId: string;
+          employeeIdCode: string;
+          fullName: string;
+          error: string;
+        }>;
+        excludedByStatus: {
+          count: number;
+          breakdown: Record<string, number>;
+          employees: Array<{
+            employeeId: string;
+            employeeIdCode: string;
+            fullName: string;
+            status: string;
+          }>;
+        };
+      }>(`/payroll/${id}/populate`);
       return res.data;
     },
     onSuccess: (_d, id) => invalidatePayrollRun(queryClient, id),
