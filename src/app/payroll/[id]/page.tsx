@@ -42,6 +42,7 @@ import {
   useWalletBalance,
   useTransferHistory,
   useDispatchPayslips,
+  useDispatchSinglePayslip,
 } from "@/hooks";
 import { formatDate } from "@/lib/utils";
 import type {
@@ -169,6 +170,47 @@ export default function PayrollDetailPage() {
   const cancelRun = useCancelPayrollRun();
   const deletePayslip = useDeletePayslip();
   const dispatchPayslips = useDispatchPayslips();
+  const dispatchSinglePayslip = useDispatchSinglePayslip();
+  const [sendingPayslipId, setSendingPayslipId] = useState<string | null>(null);
+
+  const handleSendOnePayslip = (payslip: Payslip) => {
+    if (sendingPayslipId) return;
+    const wasSent = !!payslip.payslipEmailSentAt;
+    const name = payslip.employee?.fullName ?? "this employee";
+    const email = payslip.employee?.workEmail ?? "their email";
+    const preApproval =
+      run?.status === "Draft" || run?.status === "PendingFinance" || run?.status === "PendingCVO";
+    const baseMessage = wasSent
+      ? `${name} was emailed on ${new Date(payslip.payslipEmailSentAt!).toLocaleString("en-NG")}. Sending again will deliver another copy to ${email}.`
+      : `This will email the payslip to ${name} at ${email}. Emails cannot be unsent.`;
+    const message = preApproval
+      ? `⚠ This run is still in ${run?.status} and has NOT been approved by Finance / CVO yet. Sending now bypasses the approval workflow.\n\n${baseMessage}`
+      : baseMessage;
+    setGenericConfirm({
+      title: wasSent ? "Re-send payslip email?" : "Send payslip email?",
+      message,
+      confirmLabel: wasSent ? "Re-send" : "Send",
+      variant: preApproval ? "danger" : "primary",
+      onConfirm: async () => {
+        setGenericConfirm(null);
+        setSendingPayslipId(payslip.id);
+        try {
+          const r = await dispatchSinglePayslip.mutateAsync({
+            payrollRunId,
+            payslipId: payslip.id,
+          });
+          if (r.status === "sent") toast.success(`Sent to ${name}`);
+          else if (r.status === "skipped") toast(`Skipped: ${r.reason ?? "no email on file"}`, { icon: "⚠️" });
+          else toast.error(`Failed: ${r.reason ?? "unknown error"}`);
+        } catch (err) {
+          const e = err as { response?: { data?: { message?: string } } };
+          toast.error(e?.response?.data?.message || "Failed to send payslip");
+        } finally {
+          setSendingPayslipId(null);
+        }
+      },
+    });
+  };
   const { data: walletBalances } = useWalletBalance();
   const isDisbursingRun = run?.status === "Disbursing";
   const { data: transferHistory } = useTransferHistory(payrollRunId, isDisbursingRun);
@@ -583,17 +625,31 @@ export default function PayrollDetailPage() {
                 {run.status === "Disbursing" ? "Retry failed transfers" : "Disburse via Paystack"}
               </Button>
             )}
-            {(run.status === "Approved" || run.status === "Disbursing" || run.status === "Sent") && isAdmin && (
+            {run.status !== "Rejected" && isAdmin && (
               <Button
                 variant="outline"
                 loading={dispatchPayslips.isPending}
-                onClick={async () => {
-                  try {
-                    const r = await dispatchPayslips.mutateAsync(payrollRunId);
-                    toast.success(`Payslips sent: ${r.sent} delivered${r.failed ? `, ${r.failed} failed` : ""}${r.skipped ? `, ${r.skipped} skipped` : ""}`);
-                  } catch (e: any) {
-                    toast.error(e?.response?.data?.message || "Failed to send payslips");
-                  }
+                onClick={() => {
+                  const preApproval =
+                    run.status === "Draft" || run.status === "PendingFinance" || run.status === "PendingCVO";
+                  const unsent = run.payslips?.filter((p) => !p.payslipEmailSentAt).length ?? 0;
+                  setGenericConfirm({
+                    title: preApproval ? "Send all payslips now (bypasses approval)?" : "Send all unsent payslips?",
+                    message: preApproval
+                      ? `⚠ This run is still in ${run.status} and has NOT been approved by Finance / CVO. Sending now will email ${unsent} payslip(s) to employees and bypass the approval workflow. Emails cannot be unsent.`
+                      : `This will email ${unsent} unsent payslip(s) to employees. Emails cannot be unsent.`,
+                    confirmLabel: `Send ${unsent} payslip${unsent === 1 ? "" : "s"}`,
+                    variant: preApproval ? "danger" : "primary",
+                    onConfirm: async () => {
+                      setGenericConfirm(null);
+                      try {
+                        const r = await dispatchPayslips.mutateAsync(payrollRunId);
+                        toast.success(`Payslips sent: ${r.sent} delivered${r.failed ? `, ${r.failed} failed` : ""}${r.skipped ? `, ${r.skipped} skipped` : ""}`);
+                      } catch (e: any) {
+                        toast.error(e?.response?.data?.message || "Failed to send payslips");
+                      }
+                    },
+                  });
                 }}
               >
                 <Send className="h-4 w-4" />
@@ -726,6 +782,18 @@ export default function PayrollDetailPage() {
                                 <Download className="h-3 w-3" />
                                 PDF
                               </Button>
+                              {run.status !== "Rejected" && isAdmin && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  loading={sendingPayslipId === payslip.id}
+                                  onClick={(e) => { e.stopPropagation(); handleSendOnePayslip(payslip); }}
+                                  title={payslip.payslipEmailSentAt ? "Re-send payslip email" : "Send payslip email"}
+                                >
+                                  <Send className="h-3 w-3" />
+                                  {payslip.payslipEmailSentAt ? "Re-send" : "Send"}
+                                </Button>
+                              )}
                               {run.status === "Draft" && (
                                 <button
                                   type="button"

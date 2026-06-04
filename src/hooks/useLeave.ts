@@ -14,6 +14,12 @@ import type {
   LeaveStatus,
   PaginatedResponse,
   LeaveCalendarEntry,
+  LeaveType,
+  PublicHoliday,
+  LeaveBlackoutDate,
+  LeaveTransaction,
+  ApproverDelegation,
+  LeaveAnalytics,
 } from '@/types';
 import toast from 'react-hot-toast';
 
@@ -31,7 +37,222 @@ export const leaveKeys = {
     [...leaveKeys.balances(), 'me', year] as const,
   calendar: (sbuId?: string, start?: string, end?: string) =>
     [...leaveKeys.all, 'calendar', { sbuId, start, end }] as const,
+  types: () => [...leaveKeys.all, 'types'] as const,
+  holidays: (year?: number) => [...leaveKeys.all, 'holidays', year] as const,
+  blackouts: () => [...leaveKeys.all, 'blackouts'] as const,
+  delegations: (delegatorId?: string) => [...leaveKeys.all, 'delegations', delegatorId] as const,
+  ledger: (employeeId?: string, leaveTypeId?: string, year?: number) =>
+    [...leaveKeys.all, 'ledger', { employeeId, leaveTypeId, year }] as const,
+  analytics: (year?: number) => [...leaveKeys.all, 'analytics', year] as const,
 };
+
+// ─── Admin: Leave Type CRUD ────────────────────────────────
+
+export function useLeaveTypeMutations() {
+  const qc = useQueryClient();
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: leaveKeys.types() });
+    qc.invalidateQueries({ queryKey: ['leave-types'] });
+  };
+
+  const create = useMutation({
+    mutationFn: async (data: Partial<LeaveType>) =>
+      (await api.post<LeaveType>('/leave-types', data)).data,
+    onSuccess: () => { invalidate(); toast.success('Leave type created.'); },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to create leave type.'),
+  });
+
+  const update = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Partial<LeaveType> }) =>
+      (await api.put<LeaveType>(`/leave-types/${id}`, data)).data,
+    onSuccess: () => { invalidate(); toast.success('Leave type updated.'); },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to update leave type.'),
+  });
+
+  const remove = useMutation({
+    mutationFn: async (id: string) => (await api.delete(`/leave-types/${id}`)).data,
+    onSuccess: () => { invalidate(); toast.success('Leave type removed.'); },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to remove leave type.'),
+  });
+
+  return { create, update, remove };
+}
+
+// ─── Admin: Public Holidays ────────────────────────────────
+
+export function useHolidays(year?: number) {
+  return useQuery<PublicHoliday[]>({
+    queryKey: leaveKeys.holidays(year),
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (year) params.set('year', String(year));
+      return (await api.get<PublicHoliday[]>('/leave-holidays', { params })).data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useHolidayMutations() {
+  const qc = useQueryClient();
+  const invalidate = () => qc.invalidateQueries({ queryKey: [...leaveKeys.all, 'holidays'] });
+
+  const create = useMutation({
+    mutationFn: async (data: Partial<PublicHoliday>) =>
+      (await api.post<PublicHoliday>('/leave-holidays', data)).data,
+    onSuccess: () => { invalidate(); toast.success('Holiday added.'); },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to add holiday.'),
+  });
+  const update = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Partial<PublicHoliday> }) =>
+      (await api.put<PublicHoliday>(`/leave-holidays/${id}`, data)).data,
+    onSuccess: () => { invalidate(); toast.success('Holiday updated.'); },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to update holiday.'),
+  });
+  const remove = useMutation({
+    mutationFn: async (id: string) => (await api.delete(`/leave-holidays/${id}`)).data,
+    onSuccess: () => { invalidate(); toast.success('Holiday removed.'); },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to remove holiday.'),
+  });
+  return { create, update, remove };
+}
+
+// ─── Admin: Restricted (blackout) periods ──────────────────
+
+export function useBlackouts() {
+  return useQuery<LeaveBlackoutDate[]>({
+    queryKey: leaveKeys.blackouts(),
+    queryFn: async () => (await api.get<LeaveBlackoutDate[]>('/leave-blackouts')).data,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useBlackoutMutations() {
+  const qc = useQueryClient();
+  const invalidate = () => qc.invalidateQueries({ queryKey: leaveKeys.blackouts() });
+
+  const create = useMutation({
+    mutationFn: async (data: Partial<LeaveBlackoutDate>) =>
+      (await api.post<LeaveBlackoutDate>('/leave-blackouts', data)).data,
+    onSuccess: () => { invalidate(); toast.success('Restricted period added.'); },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to add restricted period.'),
+  });
+  const update = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Partial<LeaveBlackoutDate> }) =>
+      (await api.put<LeaveBlackoutDate>(`/leave-blackouts/${id}`, data)).data,
+    onSuccess: () => { invalidate(); toast.success('Restricted period updated.'); },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to update restricted period.'),
+  });
+  const remove = useMutation({
+    mutationFn: async (id: string) => (await api.delete(`/leave-blackouts/${id}`)).data,
+    onSuccess: () => { invalidate(); toast.success('Restricted period removed.'); },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to remove restricted period.'),
+  });
+  return { create, update, remove };
+}
+
+// ─── Approver delegations ──────────────────────────────────
+
+export function useDelegations(delegatorId?: string) {
+  return useQuery<ApproverDelegation[]>({
+    queryKey: leaveKeys.delegations(delegatorId),
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (delegatorId) params.set('delegatorId', delegatorId);
+      return (await api.get<ApproverDelegation[]>('/leave-delegations', { params })).data;
+    },
+  });
+}
+
+export function useDelegationMutations() {
+  const qc = useQueryClient();
+  const invalidate = () => qc.invalidateQueries({ queryKey: [...leaveKeys.all, 'delegations'] });
+
+  const create = useMutation({
+    mutationFn: async (data: { delegateId: string; startDate: string; endDate: string; reason?: string; delegatorId?: string }) =>
+      (await api.post<ApproverDelegation>('/leave-delegations', data)).data,
+    onSuccess: () => { invalidate(); toast.success('Delegation created.'); },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to create delegation.'),
+  });
+  const remove = useMutation({
+    mutationFn: async (id: string) => (await api.delete(`/leave-delegations/${id}`)).data,
+    onSuccess: () => { invalidate(); toast.success('Delegation removed.'); },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to remove delegation.'),
+  });
+  return { create, remove };
+}
+
+// ─── Balance administration & ledger ───────────────────────
+
+export function useAdjustBalance() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: { employeeId: string; leaveTypeId: string; days: number; reason: string; year?: number }) =>
+      (await api.post('/leave-balances/adjust', data)).data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: leaveKeys.balances() });
+      qc.invalidateQueries({ queryKey: [...leaveKeys.all, 'ledger'] });
+      toast.success('Balance adjusted.');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to adjust balance.'),
+  });
+}
+
+export function useRunRollover() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (year?: number) =>
+      (await api.post<{ toYear: number; balancesCreated: number; carryOversApplied: number }>('/leave-balances/rollover', { year })).data,
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: leaveKeys.balances() });
+      toast.success(`Rollover to ${data.toYear}: ${data.balancesCreated} balances, ${data.carryOversApplied} carryovers.`);
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Rollover failed.'),
+  });
+}
+
+export function useBalanceLedger(opts: { employeeId?: string; leaveTypeId?: string; year?: number } = {}) {
+  return useQuery<LeaveTransaction[]>({
+    queryKey: leaveKeys.ledger(opts.employeeId, opts.leaveTypeId, opts.year),
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (opts.employeeId) params.set('employeeId', opts.employeeId);
+      if (opts.leaveTypeId) params.set('leaveTypeId', opts.leaveTypeId);
+      if (opts.year) params.set('year', String(opts.year));
+      return (await api.get<LeaveTransaction[]>('/leave-ledger', { params })).data;
+    },
+  });
+}
+
+// ─── Analytics & exports ───────────────────────────────────
+
+export function useLeaveAnalytics(year?: number) {
+  return useQuery<LeaveAnalytics>({
+    queryKey: leaveKeys.analytics(year),
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (year) params.set('year', String(year));
+      return (await api.get<LeaveAnalytics>('/leave-analytics', { params })).data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/** Trigger a CSV/ICS file download from a leave-reports endpoint. */
+export async function downloadLeaveFile(path: string, filename: string, params?: Record<string, string>) {
+  try {
+    const res = await api.instance.get(path, { params, responseType: 'blob' });
+    const url = window.URL.createObjectURL(new Blob([res.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  } catch {
+    toast.error('Download failed.');
+  }
+}
 
 // ─── List leave requests ───────────────────────────────────
 
@@ -142,17 +363,21 @@ export function useCreateLeaveRequest() {
         });
       }
 
-      const response = await api.post<LeaveRequest>('/leave-requests', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
+      const response = await api.post<LeaveRequest & { coverageWarning?: string | null }>(
+        '/leave-requests',
+        formData,
+        { headers: { 'Content-Type': 'multipart/form-data' } },
+      );
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: leaveKeys.requests() });
       queryClient.invalidateQueries({ queryKey: leaveKeys.balances() });
-      toast.success('Leave request submitted successfully.');
+      const wasAutoApproved = data?.status === 'Approved';
+      toast.success(wasAutoApproved ? 'Leave request auto-approved.' : 'Leave request submitted successfully.');
+      if (data?.coverageWarning) {
+        toast(data.coverageWarning, { icon: '⚠️', duration: 6000 });
+      }
     },
     onError: (error: any) => {
       const message =

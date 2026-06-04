@@ -17,7 +17,10 @@ import {
   RotateCcw,
   Paperclip,
   MessageSquare,
+  Settings,
+  Download,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { AppLayout } from "@/components/layout/app-layout";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -54,6 +57,8 @@ import {
   useHrAction,
   useRelieverAction,
   useSendApprovalReminder,
+  useLeaveAnalytics,
+  downloadLeaveFile,
 } from "@/hooks/useLeave";
 import { useEmployees } from "@/hooks/useEmployees";
 import { formatDate, cn } from "@/lib/utils";
@@ -87,6 +92,7 @@ const LEAVE_TYPE_COLORS: Record<string, string> = {
 };
 
 export default function LeavePage() {
+  const router = useRouter();
   const { user } = useAuthStore();
   const { data: profile } = useMyProfile();
   const effectiveRole = useEffectiveRole();
@@ -237,6 +243,7 @@ export default function LeavePage() {
   // it as their focused "awaiting my action" list.
   const showApprovalQueue = canApprove && !isAdmin;
 
+  const canViewReports = isAdmin || isSBUHead;
   const tabs = [
     { id: "my-requests", label: isAdmin ? "All Requests" : "My Requests" },
     { id: "reliever-queue", label: relieverCount > 0 ? `Reliever Requests (${relieverCount})` : "Reliever Requests" },
@@ -244,6 +251,7 @@ export default function LeavePage() {
       ? [{ id: "approval-queue", label: "Approval Queue" }]
       : []),
     { id: "calendar", label: "Calendar" },
+    ...(canViewReports ? [{ id: "reports", label: "Reports" }] : []),
   ];
 
   const handleCreateLeave = async (data: CreateLeaveFormData) => {
@@ -384,10 +392,18 @@ export default function LeavePage() {
               Leave Management
             </h2>
           </div>
-          <Button variant="outline" onClick={() => setApplyModalOpen(true)}>
-            <Plus className="h-4 w-4" />
-            Apply for Leave
-          </Button>
+          <div className="flex items-center gap-2">
+            {isAdmin && (
+              <Button variant="outline" onClick={() => router.push("/leave/settings")}>
+                <Settings className="h-4 w-4" />
+                Settings
+              </Button>
+            )}
+            <Button variant="outline" onClick={() => setApplyModalOpen(true)}>
+              <Plus className="h-4 w-4" />
+              Apply for Leave
+            </Button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
@@ -862,6 +878,9 @@ export default function LeavePage() {
                 </CardContent>
               </Card>
             )}
+
+            {/* Reports Tab */}
+            {activeTab === "reports" && <LeaveReportsPanel />}
 
             {/* Calendar Tab */}
             {activeTab === "calendar" && (
@@ -1605,6 +1624,151 @@ export default function LeavePage() {
         </Modal>
       </div>
     </AppLayout>
+  );
+}
+
+// ─── Reports & Analytics panel ─────────────────────────────
+
+function LeaveReportsPanel() {
+  const year = new Date().getFullYear();
+  const { data: analytics, isLoading } = useLeaveAnalytics(year);
+
+  return (
+    <div className="mt-4 space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="text-lg font-medium text-gray-900">Leave Analytics — {year}</h3>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" onClick={() => downloadLeaveFile("/leave-reports/requests.csv", `leave-requests-${year}.csv`)}>
+            <Download className="mr-1 h-4 w-4" /> Requests CSV
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => downloadLeaveFile("/leave-reports/balances.csv", `leave-balances-${year}.csv`, { year: String(year) })}>
+            <Download className="mr-1 h-4 w-4" /> Balances CSV
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => downloadLeaveFile("/leave-calendar.ics", `leave-${year}.ics`, { year: String(year) })}>
+            <Download className="mr-1 h-4 w-4" /> Calendar (.ics)
+          </Button>
+        </div>
+      </div>
+
+      {isLoading ? (
+        <Card><CardContent className="py-10 text-center text-gray-400">Loading analytics…</CardContent></Card>
+      ) : !analytics ? (
+        <Card><CardContent className="py-10 text-center text-gray-400">No data available.</CardContent></Card>
+      ) : (
+        <>
+          {/* Utilization by leave type */}
+          <Card>
+            <CardHeader><CardTitle className="text-base">Utilization by Leave Type</CardTitle></CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Leave Type</TableHead>
+                    <TableHead>Entitled</TableHead>
+                    <TableHead>Used</TableHead>
+                    <TableHead>Utilization</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {analytics.utilizationByType.map((t) => (
+                    <TableRow key={t.name}>
+                      <TableCell className="font-medium">{t.name}</TableCell>
+                      <TableCell>{t.entitled}</TableCell>
+                      <TableCell>{t.used}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <div className="h-2 w-24 overflow-hidden rounded-full bg-gray-100">
+                            <div className="h-full bg-primary" style={{ width: `${Math.min(t.utilizationPct, 100)}%` }} />
+                          </div>
+                          <span className="text-xs text-gray-500">{t.utilizationPct}%</span>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            {/* By SBU */}
+            <Card>
+              <CardHeader><CardTitle className="text-base">Leave Days by SBU</CardTitle></CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow><TableHead>SBU</TableHead><TableHead>Requests</TableHead><TableHead>Days</TableHead></TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {analytics.bySbu.map((s) => (
+                      <TableRow key={s.name}>
+                        <TableCell className="font-medium">{s.name}</TableCell>
+                        <TableCell>{s.requests}</TableCell>
+                        <TableCell>{s.days}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+
+            {/* Bradford Factor */}
+            <Card>
+              <CardHeader><CardTitle className="text-base">Bradford Factor (top absentees)</CardTitle></CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow><TableHead>Employee</TableHead><TableHead>Spells</TableHead><TableHead>Days</TableHead><TableHead>Factor</TableHead></TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {analytics.bradford.slice(0, 10).map((b) => (
+                      <TableRow key={b.employeeId}>
+                        <TableCell className="font-medium">{b.name}</TableCell>
+                        <TableCell>{b.spells}</TableCell>
+                        <TableCell>{b.days}</TableCell>
+                        <TableCell>
+                          <Badge variant={b.bradfordFactor >= 200 ? "danger" : b.bradfordFactor >= 50 ? "warning" : "neutral"}>
+                            {b.bradfordFactor}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Upcoming absences */}
+          <Card>
+            <CardHeader><CardTitle className="text-base">Upcoming Absences (next 30 days)</CardTitle></CardHeader>
+            <CardContent>
+              {analytics.upcoming.length === 0 ? (
+                <p className="py-4 text-center text-sm text-gray-400">No upcoming approved leave.</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow><TableHead>Employee</TableHead><TableHead>SBU</TableHead><TableHead>Type</TableHead><TableHead>From</TableHead><TableHead>To</TableHead><TableHead>Days</TableHead></TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {analytics.upcoming.map((u, i) => (
+                      <TableRow key={i}>
+                        <TableCell className="font-medium">{u.employee}</TableCell>
+                        <TableCell>{u.sbu}</TableCell>
+                        <TableCell>{u.leaveType}</TableCell>
+                        <TableCell>{formatDate(u.startDate)}</TableCell>
+                        <TableCell>{formatDate(u.endDate)}</TableCell>
+                        <TableCell>{u.days}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </>
+      )}
+    </div>
   );
 }
 

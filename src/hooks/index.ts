@@ -1083,6 +1083,22 @@ export function useDispatchPayslips() {
   });
 }
 
+export function useDispatchSinglePayslip() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: { payrollRunId: string; payslipId: string }) => {
+      const res = await api.post<{
+        status: "sent" | "skipped" | "failed";
+        reason?: string;
+      }>(`/payroll/${vars.payrollRunId}/payslips/${vars.payslipId}/dispatch`);
+      return res.data;
+    },
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["payroll-run", vars.payrollRunId] });
+    },
+  });
+}
+
 export function useBanks() {
   return useQuery<{ name: string; code: string; slug: string }[]>({
     queryKey: ["paystack-banks"],

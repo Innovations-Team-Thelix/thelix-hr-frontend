@@ -195,6 +195,60 @@ export interface LeaveType {
   defaultDays: number;
   noticePeriod: number;
   requiresDoc: boolean;
+  // Policy configuration
+  isActive?: boolean;
+  isPaid?: boolean;
+  genderEligibility?: 'All' | 'Male' | 'Female';
+  carryOverMax?: number;
+  carryOverExpiryMonths?: number | null;
+  maxConsecutiveDays?: number | null;
+  minDurationDays?: number;
+  requiresHrApproval?: boolean;
+  autoApproveUnderDays?: number | null;
+  color?: string | null;
+}
+
+export interface PublicHoliday {
+  id: string;
+  date: string;
+  name: string;
+  sbuId: string | null;
+  recurring: boolean;
+}
+
+export interface LeaveTransaction {
+  id: string;
+  employeeId: string;
+  leaveTypeId: string;
+  year: number;
+  type: 'Grant' | 'CarryOver' | 'Deduction' | 'Adjustment' | 'Reversal' | 'Expiry' | 'Proration';
+  days: number;
+  balanceAfter: number;
+  reason: string | null;
+  requestId: string | null;
+  actorId: string | null;
+  createdAt: string;
+  leaveType?: { id: string; name: string };
+  actor?: { id: string; fullName: string } | null;
+}
+
+export interface ApproverDelegation {
+  id: string;
+  delegatorId: string;
+  delegateId: string;
+  startDate: string;
+  endDate: string;
+  reason: string | null;
+  delegator?: { id: string; fullName: string };
+  delegate?: { id: string; fullName: string };
+}
+
+export interface LeaveAnalytics {
+  year: number;
+  utilizationByType: Array<{ name: string; entitled: number; used: number; utilizationPct: number }>;
+  bySbu: Array<{ name: string; days: number; requests: number }>;
+  bradford: Array<{ employeeId: string; name: string; spells: number; days: number; bradfordFactor: number }>;
+  upcoming: Array<{ employee: string; sbu: string; leaveType: string; startDate: string; endDate: string; days: number }>;
 }
 
 export interface LeaveAttachment {
@@ -210,10 +264,11 @@ export interface LeaveAttachment {
 
 export interface LeaveBlackoutDate {
   id: string;
-  name: string;
-  startDate: string;
-  endDate: string;
-  reason: string | null;
+  date: string;
+  endDate: string | null;
+  reason: string;
+  sbuId: string | null;
+  isActive: boolean;
 }
 
 export interface LeaveBalance {
@@ -226,6 +281,9 @@ export interface LeaveBalance {
 
   // Computed / relations
   remainingDays?: number;
+  carriedOverDays?: number;
+  carryOverExpiresAt?: string | null;
+  adjustmentDays?: number;
   leaveType?: LeaveType;
 }
 
