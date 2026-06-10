@@ -20,6 +20,7 @@ import type {
   LeaveTransaction,
   ApproverDelegation,
   LeaveAnalytics,
+  AuditLogEntry,
 } from '@/types';
 import toast from 'react-hot-toast';
 
@@ -32,6 +33,7 @@ export const leaveKeys = {
     [...leaveKeys.requests(), filters] as const,
   requestDetail: (id: string) =>
     [...leaveKeys.requests(), 'detail', id] as const,
+  audit: (id: string) => [...leaveKeys.requests(), 'audit', id] as const,
   balances: () => [...leaveKeys.all, 'balances'] as const,
   myBalances: (year?: number) =>
     [...leaveKeys.balances(), 'me', year] as const,
@@ -44,6 +46,7 @@ export const leaveKeys = {
   ledger: (employeeId?: string, leaveTypeId?: string, year?: number) =>
     [...leaveKeys.all, 'ledger', { employeeId, leaveTypeId, year }] as const,
   analytics: (year?: number) => [...leaveKeys.all, 'analytics', year] as const,
+  settings: () => [...leaveKeys.all, 'settings'] as const,
 };
 
 // ─── Admin: Leave Type CRUD ────────────────────────────────
@@ -76,6 +79,23 @@ export function useLeaveTypeMutations() {
   });
 
   return { create, update, remove };
+}
+
+/** Re-apply a leave type's role-based entitlement to current-year balances. */
+export function useApplyEntitlements() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, year }: { id: string; year?: number }) =>
+      (await api.post<{ year: number; created: number; updated: number; employees: number }>(
+        `/leave-types/${id}/apply-entitlements`,
+        year ? { year } : {},
+      )).data,
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: leaveKeys.balances() });
+      toast.success(`Entitlements applied for ${data.year}: ${data.created} created, ${data.updated} updated.`);
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to apply entitlements.'),
+  });
 }
 
 // ─── Admin: Public Holidays ────────────────────────────────
@@ -197,6 +217,31 @@ export function useAdjustBalance() {
   });
 }
 
+export interface LeaveSettings {
+  id: string;
+  maxConcurrentPerGroup: number | null;
+}
+
+export function useLeaveSettings() {
+  return useQuery({
+    queryKey: leaveKeys.settings(),
+    queryFn: async () => (await api.get<LeaveSettings>('/leave-settings')).data,
+  });
+}
+
+export function useUpdateLeaveSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: { maxConcurrentPerGroup: number | null }) =>
+      (await api.put<LeaveSettings>('/leave-settings', data)).data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: leaveKeys.settings() });
+      toast.success('Coverage policy updated.');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Update failed.'),
+  });
+}
+
 export function useRunRollover() {
   const qc = useQueryClient();
   return useMutation({
@@ -290,6 +335,20 @@ export function useLeaveRequests(
   });
 }
 
+// ─── Single leave request (detail, with signed-URL attachments) ────
+
+export function useLeaveRequest(
+  id: string | null | undefined,
+  enabled = true,
+) {
+  return useQuery<LeaveRequest>({
+    queryKey: leaveKeys.requestDetail(id ?? ''),
+    queryFn: async () => (await api.get<LeaveRequest>(`/leave-requests/${id}`)).data,
+    enabled: !!id && enabled,
+    staleTime: 30 * 1000,
+  });
+}
+
 // ─── Employee leave balances (admin) ──────────────────────
 
 export function useEmployeeLeaveBalances(
@@ -349,6 +408,9 @@ export function useCreateLeaveRequest() {
       handoverNote?: string;
       relieveOfficerId: string;
       attachments?: File[];
+      onBehalfOfEmployeeId?: string;
+      overrideCoverage?: boolean;
+      overrideReason?: string;
     }) => {
       const formData = new FormData();
       formData.append('leaveTypeId', data.leaveTypeId);
@@ -357,6 +419,9 @@ export function useCreateLeaveRequest() {
       formData.append('relieveOfficerId', data.relieveOfficerId);
       if (data.reason) formData.append('reason', data.reason);
       if (data.handoverNote) formData.append('handoverNote', data.handoverNote);
+      if (data.onBehalfOfEmployeeId) formData.append('onBehalfOfEmployeeId', data.onBehalfOfEmployeeId);
+      if (data.overrideCoverage) formData.append('overrideCoverage', 'true');
+      if (data.overrideReason) formData.append('overrideReason', data.overrideReason);
       if (data.attachments) {
         data.attachments.forEach((file) => {
           formData.append('attachments', file);
@@ -461,6 +526,46 @@ export function useHrAction() {
         error?.response?.data?.message || 'Failed to process HR action.';
       toast.error(message);
     },
+  });
+}
+
+// ─── HR document upload ────────────────────────────────────
+
+export function useAddHrAttachments() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, attachments }: { id: string; attachments: File[] }) => {
+      const formData = new FormData();
+      attachments.forEach((file) => formData.append('attachments', file));
+
+      const response = await api.post<LeaveRequest>(
+        `/leave-requests/${id}/hr-attachments`,
+        formData,
+        { headers: { 'Content-Type': 'multipart/form-data' } },
+      );
+      return response.data;
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: leaveKeys.requests() });
+      queryClient.invalidateQueries({ queryKey: leaveKeys.requestDetail(variables.id) });
+      queryClient.invalidateQueries({ queryKey: leaveKeys.audit(variables.id) });
+      toast.success('Document(s) uploaded.');
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.message || 'Failed to upload document(s).');
+    },
+  });
+}
+
+// ─── Leave request audit trail ─────────────────────────────
+
+export function useLeaveAuditTrail(id: string | null | undefined, enabled = true) {
+  return useQuery<AuditLogEntry[]>({
+    queryKey: leaveKeys.audit(id ?? ''),
+    queryFn: async () => (await api.get<AuditLogEntry[]>(`/leave-requests/${id}/audit`)).data,
+    enabled: !!id && enabled,
+    staleTime: 30 * 1000,
   });
 }
 

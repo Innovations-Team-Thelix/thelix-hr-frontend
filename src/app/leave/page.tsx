@@ -5,7 +5,6 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import toast from "react-hot-toast";
-import dayjs from "dayjs";
 import {
   Plus,
   CalendarDays,
@@ -19,6 +18,9 @@ import {
   MessageSquare,
   Settings,
   Download,
+  Lock,
+  Upload,
+  History,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { AppLayout } from "@/components/layout/app-layout";
@@ -58,6 +60,9 @@ import {
   useRelieverAction,
   useSendApprovalReminder,
   useLeaveAnalytics,
+  useAddHrAttachments,
+  useLeaveAuditTrail,
+  useLeaveRequest,
   downloadLeaveFile,
 } from "@/hooks/useLeave";
 import { useEmployees } from "@/hooks/useEmployees";
@@ -74,6 +79,8 @@ const createLeaveSchema = z
     handoverNote: z.string().optional(),
     relieveOfficerId: z.string().min(1, "Relieve officer is required"),
     attachments: z.any().optional(),
+    onBehalfOfEmployeeId: z.string().optional(),
+    overrideReason: z.string().optional(),
   })
   .refine((data) => new Date(data.endDate) >= new Date(data.startDate), {
     message: "End date must be on or after start date",
@@ -81,6 +88,18 @@ const createLeaveSchema = z
   });
 
 type CreateLeaveFormData = z.infer<typeof createLeaveSchema>;
+
+/** Human-friendly labels for audit-log action codes shown in the activity trail. */
+const AUDIT_ACTION_LABELS: Record<string, string> = {
+  SUPERVISOR_ACTION: "Supervisor decision",
+  HR_ACTION: "HR decision",
+  HR_ATTACHMENT_ADD: "HR uploaded document(s)",
+  CANCEL: "Request cancelled",
+  BALANCE_ADJUST: "Balance adjusted",
+};
+const formatAuditAction = (action: string) =>
+  AUDIT_ACTION_LABELS[action] ??
+  action.toLowerCase().replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
 
 const LEAVE_TYPE_COLORS: Record<string, string> = {
   Annual: "bg-blue-100 text-blue-800",
@@ -100,8 +119,6 @@ export default function LeavePage() {
   const isSBUHead = effectiveRole === "SBUHead";
   const isSupervisor = (profile?.subordinates?.length ?? 0) > 0;
   const canApprove = isAdmin || isSBUHead || isSupervisor;
-  const isEmployee = effectiveRole === "Employee";
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
 
   const [activeTab, setActiveTab] = useState("my-requests");
   const [applyModalOpen, setApplyModalOpen] = useState(false);
@@ -183,21 +200,14 @@ export default function LeavePage() {
     limit: 10,
   });
 
-  // Calendar data
-  let calStartDate: Date;
-  let calEndDate: Date;
-
-  if (isEmployee) {
-    calStartDate = selectedDate;
-    calEndDate = selectedDate;
-  } else {
-    calStartDate = calendarMonth
-      ? new Date(calendarMonth.year, calendarMonth.month, 1)
-      : new Date();
-    calEndDate = calendarMonth
-      ? new Date(calendarMonth.year, calendarMonth.month + 1, 0)
-      : new Date();
-  }
+  // Calendar data — everyone (including regular employees) sees the team
+  // calendar for the whole selected month.
+  const calStartDate = calendarMonth
+    ? new Date(calendarMonth.year, calendarMonth.month, 1)
+    : new Date();
+  const calEndDate = calendarMonth
+    ? new Date(calendarMonth.year, calendarMonth.month + 1, 0)
+    : new Date();
   const { data: calendarData } = useLeaveCalendar({
     startDate: calendarMonth ? calStartDate.toISOString().split("T")[0] : undefined,
     endDate: calendarMonth ? calEndDate.toISOString().split("T")[0] : undefined,
@@ -218,6 +228,18 @@ export default function LeavePage() {
   const hrAction = useHrAction();
   const relieverActionMutation = useRelieverAction();
   const sendReminder = useSendApprovalReminder();
+  const addHrAttachments = useAddHrAttachments();
+  const hrFileInputRef = useRef<HTMLInputElement>(null);
+
+  // When the detail modal is open, fetch the full request (signed-URL
+  // attachments + lock state) and — for HR — its audit trail.
+  const { data: detailFull } = useLeaveRequest(detailRequest?.id, detailModalOpen);
+  const { data: auditTrail } = useLeaveAuditTrail(
+    detailRequest?.id,
+    detailModalOpen && isAdmin,
+  );
+  // Prefer the freshly-fetched detail (has attachments/lockedAt) over the list row.
+  const detail = detailFull ?? detailRequest;
 
   const form = useForm<CreateLeaveFormData>({
     resolver: zodResolver(createLeaveSchema),
@@ -237,6 +259,35 @@ export default function LeavePage() {
 
   const selectedLeaveTypeId = form.watch("leaveTypeId");
   const selectedLeaveType = leaveTypes?.find(lt => lt.id === selectedLeaveTypeId);
+
+  // Live balance + over-balance hint for the selected leave type, shown in the form.
+  const watchedStart = form.watch("startDate");
+  const watchedEnd = form.watch("endDate");
+  const selectedBalance = myBalances?.find((b) => b.leaveTypeId === selectedLeaveTypeId);
+  const remainingForType =
+    selectedBalance != null
+      ? selectedBalance.remainingDays ?? selectedBalance.totalDays - selectedBalance.usedDays
+      : null;
+  // Estimate working days (Mon–Fri, inclusive) for the picked range. The backend
+  // also excludes public holidays, so this is a heads-up estimate, not the final count.
+  const estimatedDays = (() => {
+    if (!watchedStart || !watchedEnd) return 0;
+    const s = new Date(watchedStart);
+    const e = new Date(watchedEnd);
+    if (isNaN(s.getTime()) || isNaN(e.getTime()) || e < s) return 0;
+    let count = 0;
+    const cur = new Date(s);
+    while (cur <= e) {
+      const d = cur.getUTCDay();
+      if (d !== 0 && d !== 6) count++;
+      cur.setUTCDate(cur.getUTCDate() + 1);
+    }
+    return count;
+  })();
+  // Unpaid leave draws no paid entitlement, so never flag it as over-balance.
+  const isPaidType = selectedLeaveType?.isPaid !== false;
+  const overBalance =
+    isPaidType && remainingForType != null && estimatedDays > remainingForType;
 
   // Admins approve/reject inline from the All Requests detail modal, so the
   // Approval Queue tab is hidden for them. Supervisors / SBUHeads still need
@@ -268,13 +319,21 @@ export default function LeavePage() {
         handoverNote: data.handoverNote || undefined,
         relieveOfficerId: data.relieveOfficerId,
         attachments,
+        onBehalfOfEmployeeId: canApprove && data.onBehalfOfEmployeeId ? data.onBehalfOfEmployeeId : undefined,
+        overrideReason: canApprove && data.overrideReason ? data.overrideReason : undefined,
+        overrideCoverage: canApprove && !!data.overrideReason?.trim(),
       });
       toast.success("Leave request submitted successfully");
       setApplyModalOpen(false);
       form.reset();
     } catch (error: unknown) {
-      const err = error as { response?: { data?: { message?: string } } };
-      toast.error(err.response?.data?.message || "Failed to submit leave request");
+      const err = error as { response?: { data?: { message?: string; errorCode?: string } } };
+      const msg = err.response?.data?.message || "Failed to submit leave request";
+      toast.error(msg);
+      // On a coverage-limit block, privileged users can retry with an override reason.
+      if (err.response?.data?.errorCode === "COVERAGE_LIMIT" && canApprove) {
+        toast("Enter an override reason below to proceed.", { icon: "✍️", duration: 6000 });
+      }
     }
   };
 
@@ -885,87 +944,6 @@ export default function LeavePage() {
             {/* Calendar Tab */}
             {activeTab === "calendar" && (
               <Card className="mt-4">
-                {isEmployee ? (
-                  <>
-<CardHeader className="flex flex-row items-center justify-between pb-2">
-                    <CardTitle className="text-lg font-medium">
-                      {dayjs(selectedDate).format("MMMM D, YYYY")}
-                    </CardTitle>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          const prev = new Date(selectedDate);
-                          prev.setDate(prev.getDate() - 1);
-                          setSelectedDate(prev);
-                        }}
-                      >
-                        <ChevronLeft className="h-4 w-4 mr-1" />
-                        Prev
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setSelectedDate(new Date())}
-                      >
-                        Today
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          const next = new Date(selectedDate);
-                          next.setDate(next.getDate() + 1);
-                          setSelectedDate(next);
-                        }}
-                      >
-                        Next
-                        <ChevronRight className="h-4 w-4 ml-1" />
-                      </Button>
-                    </div>
-                  </CardHeader>
-
-                    <CardContent>
-                      {(!calendarData || calendarData.length === 0) ? (
-                        <div className="flex flex-col items-center justify-center py-12 text-center text-gray-500">
-                          <CalendarDays className="h-12 w-12 text-gray-300 mb-3" />
-                          <p className="text-lg font-medium">No leaves found</p>
-                          <p className="text-sm">No one is on leave for this date.</p>
-                        </div>
-                      ) : (
-                        <div className="space-y-4">
-                          {calendarData.map((entry) => (
-                            <div
-                              key={entry.id}
-                              className="flex items-center justify-between p-4 border rounded-lg bg-gray-50"
-                            >
-                              <div className="flex items-center gap-4">
-                                <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold">
-                                  {entry.employee.fullName.charAt(0)}
-                                </div>
-                                <div>
-                                  <p className="font-medium">{entry.employee.fullName}</p>
-                                  <p className="text-sm text-gray-500">
-                                    {entry.employee.jobTitle} • {entry.employee.department?.name || "N/A"}
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="text-right">
-                                <Badge variant="neutral" className="mb-1">
-                                  {entry.leaveType.name}
-                                </Badge>
-                                <p className="text-sm text-gray-600">
-                                  Returns: <span className="font-medium">{dayjs(entry.endDate).format("MMM D, YYYY")}</span>
-                                </p>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </CardContent>
-                  </>
-                ) : (
                   <>
 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-lg font-medium">
@@ -1073,7 +1051,6 @@ export default function LeavePage() {
                   </div>
                 </CardContent>
                   </>
-                )}
               </Card>
             )}
           </div>
@@ -1179,6 +1156,32 @@ export default function LeavePage() {
               error={form.formState.errors.leaveTypeId?.message}
               {...form.register("leaveTypeId")}
             />
+            {selectedLeaveTypeId && (
+              isPaidType && selectedBalance ? (
+                <div className="-mt-2 flex items-center justify-between rounded-md bg-emerald-50 px-3 py-2 text-sm">
+                  <span className="text-emerald-800">
+                    You have{" "}
+                    <span className="font-semibold">{remainingForType}</span> of{" "}
+                    <span className="font-semibold">{selectedBalance.totalDays}</span> days left
+                  </span>
+                  {estimatedDays > 0 && (
+                    <span className="text-xs text-emerald-700/80">
+                      this request ≈ {estimatedDays} day{estimatedDays === 1 ? "" : "s"}
+                    </span>
+                  )}
+                </div>
+              ) : !isPaidType ? (
+                <p className="-mt-2 rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-500">
+                  Unpaid leave — no paid entitlement is used.
+                </p>
+              ) : null
+            )}
+            {overBalance && (
+              <div className="-mt-2 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+                This request (≈{estimatedDays} working days) looks like it exceeds your
+                remaining balance of {remainingForType} day{remainingForType === 1 ? "" : "s"}. You may not be able to submit it.
+              </div>
+            )}
             <Input
               label="Start Date"
               type="date"
@@ -1215,6 +1218,26 @@ export default function LeavePage() {
               placeholder="Describe tasks or responsibilities to hand over..."
               {...form.register("handoverNote")}
             />
+
+            {canApprove && (
+              <div className="space-y-4 rounded-lg border border-amber-200 bg-amber-50/50 p-3">
+                <p className="text-xs font-medium text-amber-800">Admin options</p>
+                <Select
+                  label="Submit on behalf of (optional)"
+                  options={[
+                    { label: "Myself", value: "" },
+                    ...(colleaguesData?.data || []).map((emp) => ({ label: emp.fullName, value: emp.id })),
+                  ]}
+                  {...form.register("onBehalfOfEmployeeId")}
+                />
+                <Textarea
+                  label="Override coverage limit (reason)"
+                  rows={2}
+                  placeholder="Only needed if the coverage limit blocks this request — e.g. critical cover arranged."
+                  {...form.register("overrideReason")}
+                />
+              </div>
+            )}
 
             <div className="w-full">
               <label
@@ -1593,6 +1616,119 @@ export default function LeavePage() {
                   </div>
                 )}
 
+              {/* Documents — employee/HR/return attachments + HR upload */}
+              <div className="border-t pt-4">
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="flex items-center gap-1.5 text-xs font-medium text-gray-700">
+                    <Paperclip className="h-3.5 w-3.5" /> Documents
+                  </p>
+                  {isAdmin && (
+                    <>
+                      <input
+                        ref={hrFileInputRef}
+                        type="file"
+                        multiple
+                        className="hidden"
+                        onChange={async (e) => {
+                          const files = e.target.files ? Array.from(e.target.files) : [];
+                          if (!files.length || !detail) return;
+                          try {
+                            await addHrAttachments.mutateAsync({ id: detail.id, attachments: files });
+                          } catch {
+                            // handled in hook
+                          } finally {
+                            if (hrFileInputRef.current) hrFileInputRef.current.value = "";
+                          }
+                        }}
+                      />
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        loading={addHrAttachments.isPending}
+                        onClick={() => hrFileInputRef.current?.click()}
+                      >
+                        <Upload className="mr-1 h-3.5 w-3.5" /> Upload (HR)
+                      </Button>
+                    </>
+                  )}
+                </div>
+                {detail?.attachments && detail.attachments.length > 0 ? (
+                  <ul className="space-y-1.5">
+                    {detail.attachments.map((att) => (
+                      <li
+                        key={att.id}
+                        className="flex items-center justify-between gap-2 rounded-md border border-gray-100 bg-gray-50 px-3 py-2"
+                      >
+                        <div className="flex min-w-0 items-center gap-2">
+                          <Paperclip className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                          <span className="truncate text-xs text-gray-700">{att.fileName}</span>
+                          <span
+                            className={cn(
+                              "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+                              att.source === "HR" ? "bg-amber-100 text-amber-700" :
+                              att.source === "Return" ? "bg-blue-100 text-blue-700" :
+                              "bg-gray-200 text-gray-600",
+                            )}
+                          >
+                            {att.source === "HR" ? "HR" : att.source === "Return" ? "Return" : "Employee"}
+                          </span>
+                        </div>
+                        {att.signedUrl ? (
+                          <a
+                            href={att.signedUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="shrink-0 text-primary hover:text-primary/80"
+                            title="Download"
+                          >
+                            <Download className="h-4 w-4" />
+                          </a>
+                        ) : (
+                          <span className="shrink-0 text-[10px] text-gray-400">unavailable</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-gray-400">No documents attached.</p>
+                )}
+
+                {/* Lock indicator */}
+                {detail?.lockedAt && (
+                  <div className="mt-3 flex items-center gap-1.5 rounded-md bg-gray-50 px-3 py-2">
+                    <Lock className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                    <p className="text-xs text-gray-500">
+                      Locked on {formatDate(detail.lockedAt)} — further changes are tracked in the audit trail.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Activity trail (HR/Admin) */}
+              {isAdmin && auditTrail && auditTrail.length > 0 && (
+                <div className="border-t pt-4">
+                  <p className="mb-2 flex items-center gap-1.5 text-xs font-medium text-gray-700">
+                    <History className="h-3.5 w-3.5" /> Activity trail
+                  </p>
+                  <ul className="space-y-2">
+                    {auditTrail.map((entry) => (
+                      <li key={entry.id} className="flex items-start gap-2 text-xs">
+                        <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-gray-300" />
+                        <div className="min-w-0">
+                          <p className="text-gray-700">
+                            <span className="font-medium">{formatAuditAction(entry.action)}</span>
+                            {entry.actor?.fullName && (
+                              <span className="text-gray-500"> by {entry.actor.fullName}</span>
+                            )}
+                          </p>
+                          <p className="text-[11px] text-gray-400">{formatDate(entry.createdAt)}</p>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               {/* Send Reminder Button — only for pending requests owned by the current user */}
               {detailRequest.status === "Pending" && detailRequest.employeeId === profile?.id && (
                 <div className="border-t pt-4">
@@ -1714,7 +1850,7 @@ function LeaveReportsPanel() {
 
             {/* Bradford Factor */}
             <Card>
-              <CardHeader><CardTitle className="text-base">Bradford Factor (top absentees)</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-base">Top Absentees</CardTitle></CardHeader>
               <CardContent>
                 <Table>
                   <TableHeader>

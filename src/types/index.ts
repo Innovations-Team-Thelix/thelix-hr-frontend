@@ -63,6 +63,8 @@ export interface SalaryRecord {
   tax: number;
   allowances: SalaryComponent[];
   deductions: SalaryComponent[];
+  isContractor?: boolean;
+  commissionFee?: number;
   effectiveDate: string;
   isActive: boolean;
   createdById: string;
@@ -203,9 +205,20 @@ export interface LeaveType {
   carryOverExpiryMonths?: number | null;
   maxConsecutiveDays?: number | null;
   minDurationDays?: number;
+  minServiceMonths?: number;
   requiresHrApproval?: boolean;
   autoApproveUnderDays?: number | null;
   color?: string | null;
+  // Per-role entitlement overrides; roles not listed fall back to defaultDays.
+  entitlements?: LeaveEntitlement[];
+}
+
+export type LeaveRoleKey =
+  | 'CVO' | 'Admin' | 'SBUHead' | 'Director' | 'Manager' | 'Finance' | 'Employee';
+
+export interface LeaveEntitlement {
+  role: LeaveRoleKey;
+  days: number;
 }
 
 export interface PublicHoliday {
@@ -258,8 +271,22 @@ export interface LeaveAttachment {
   fileKey: string;
   fileSize: number | null;
   mimeType: string | null;
+  source?: 'Employee' | 'HR' | 'Return';
+  uploadedById?: string | null;
+  uploadedBy?: Pick<Employee, 'id' | 'fullName'> | null;
   uploadedAt: string;
-  signedUrl?: string;
+  signedUrl?: string | null;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  actorId: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  changes?: Record<string, unknown> | null;
+  createdAt: string;
+  actor?: Pick<Employee, 'id' | 'fullName'> | null;
 }
 
 export interface LeaveBlackoutDate {
@@ -319,6 +346,10 @@ export interface LeaveRequest {
   hrActionById: string | null;
   hrActionAt: string | null;
   hrNote: string | null;
+
+  // Set when the request reaches a terminal state; the request is then locked
+  // and any further change is tracked in the audit trail.
+  lockedAt: string | null;
 
   createdAt: string;
 
@@ -679,6 +710,7 @@ export interface Payslip {
   prorationFactor: number;
 
   paymentStatus: PayslipPaymentStatus;
+  paymentProvider: 'Korapay' | 'Paystack' | null;
   paystackTransferCode: string | null;
   paystackReference: string | null;
   paymentAttemptedAt: string | null;

@@ -36,7 +36,7 @@ export function BankAccountFields({
   const [bankSearch, setBankSearch] = useState("");
   const bankRef = useRef<HTMLDivElement>(null);
 
-  // selected bank code (needed for Paystack resolution)
+  // selected bank code (needed for account-name resolution)
   const [selectedBankCode, setSelectedBankCode] = useState("");
 
   // resolution state
@@ -238,7 +238,7 @@ export function BankAccountFields({
                 ? "Enter 10-digit account number"
                 : resolving
                 ? "Verifying…"
-                : "Auto-populated from Paystack"
+                : "Auto-populated from bank"
             }
             className={`w-full rounded-lg border px-3 py-2.5 text-sm transition-colors ${
               resolved

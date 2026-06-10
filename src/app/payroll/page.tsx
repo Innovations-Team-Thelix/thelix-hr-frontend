@@ -202,13 +202,13 @@ export default function PayrollPage() {
           </div>
         </div>
 
-        {/* ── Paystack Wallet Balance ───────────────────── */}
+        {/* ── Disbursement Wallet Balance (primary provider) ── */}
         {canSeeBalance && (
           <div className="rounded-xl border border-indigo-200 bg-indigo-50 px-5 py-4">
             <div className="flex items-center justify-between gap-4 flex-wrap">
               <div className="flex items-center gap-2.5">
                 <Wallet className="h-5 w-5 text-indigo-600 shrink-0" />
-                <span className="text-sm font-semibold text-indigo-900">Paystack Wallet Balance</span>
+                <span className="text-sm font-semibold text-indigo-900">Disbursement Wallet Balance</span>
               </div>
               <div className="flex items-center gap-6 flex-wrap">
                 {balanceLoading ? (

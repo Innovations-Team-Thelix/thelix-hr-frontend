@@ -28,11 +28,17 @@ import {
   useBlackouts,
   useBlackoutMutations,
   useRunRollover,
+  useLeaveSettings,
+  useUpdateLeaveSettings,
+  useApplyEntitlements,
 } from '@/hooks/useLeave';
 import { formatDate } from '@/lib/utils';
-import type { LeaveType, PublicHoliday, LeaveBlackoutDate } from '@/types';
+import type { LeaveType, LeaveRoleKey, PublicHoliday, LeaveBlackoutDate } from '@/types';
 
 const yesNo = (v?: boolean) => (v ? 'Yes' : 'No');
+
+// Access roles that can carry a per-role leave-day override.
+const ROLE_KEYS: LeaveRoleKey[] = ['CVO', 'Admin', 'SBUHead', 'Director', 'Manager', 'Finance', 'Employee'];
 
 export default function LeaveSettingsPage() {
   const router = useRouter();
@@ -67,6 +73,8 @@ export default function LeaveSettingsPage() {
         Configure leave types, public holidays, and restricted periods.
       </p>
 
+      <CoveragePolicyCard />
+
       <Tabs
         tabs={[
           { id: 'types', label: 'Leave Types' },
@@ -97,27 +105,85 @@ const EMPTY_TYPE: Partial<LeaveType> = {
   genderEligibility: 'All',
   carryOverMax: 0,
   minDurationDays: 1,
+  minServiceMonths: 0,
   requiresHrApproval: true,
 };
+
+function CoveragePolicyCard() {
+  const { data: settings } = useLeaveSettings();
+  const update = useUpdateLeaveSettings();
+  const [value, setValue] = useState<string>('');
+
+  React.useEffect(() => {
+    if (settings) setValue(settings.maxConcurrentPerGroup != null ? String(settings.maxConcurrentPerGroup) : '');
+  }, [settings]);
+
+  const save = () => {
+    const n = value.trim() === '' ? null : Math.max(0, Number(value));
+    update.mutate({ maxConcurrentPerGroup: n });
+  };
+
+  return (
+    <Card className="mb-6">
+      <CardContent className="p-4">
+        <h2 className="mb-1 text-sm font-semibold text-gray-700">Coverage Policy</h2>
+        <p className="mb-3 text-xs text-gray-500">
+          Maximum number of people from the <strong>same department</strong> or the <strong>same role</strong> who
+          may be on leave on overlapping dates. Requests beyond this are blocked; an Admin can override with a
+          reason. Leave blank or 0 to disable.
+        </p>
+        <div className="flex items-end gap-3">
+          <div className="w-48">
+            <Input
+              label="Max concurrent per group"
+              type="number"
+              min={0}
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              placeholder="No limit"
+            />
+          </div>
+          <Button size="sm" onClick={save} loading={update.isPending}>Save</Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 function LeaveTypesTab() {
   const { data: types, isLoading } = useLeaveTypes();
   const { create, update, remove } = useLeaveTypeMutations();
   const rollover = useRunRollover();
+  const applyEnt = useApplyEntitlements();
   const [editing, setEditing] = useState<Partial<LeaveType> | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
+  const defaultDays = Number(editing?.defaultDays) || 0;
+  // Days configured for a role: its override if present, else the default.
+  const daysForRole = (role: LeaveRoleKey) =>
+    editing?.entitlements?.find((e) => e.role === role)?.days ?? defaultDays;
+  const setDaysForRole = (role: LeaveRoleKey, value: number) => {
+    if (!editing) return;
+    const rest = (editing.entitlements ?? []).filter((e) => e.role !== role);
+    setEditing({ ...editing, entitlements: [...rest, { role, days: value }] });
+  };
+
   const save = async () => {
     if (!editing) return;
+    const dDays = Number(editing.defaultDays) || 0;
+    // Send all roles; the backend drops any that just equal the default.
+    const entitlements = ROLE_KEYS.map((role) => ({ role, days: daysForRole(role) }));
     const payload = {
       ...editing,
-      defaultDays: Number(editing.defaultDays) || 0,
+      defaultDays: dDays,
       noticePeriod: Number(editing.noticePeriod) || 0,
       carryOverMax: Number(editing.carryOverMax) || 0,
       minDurationDays: Number(editing.minDurationDays) || 1,
+      minServiceMonths: Number(editing.minServiceMonths) || 0,
       carryOverExpiryMonths: editing.carryOverExpiryMonths ? Number(editing.carryOverExpiryMonths) : null,
       maxConsecutiveDays: editing.maxConsecutiveDays ? Number(editing.maxConsecutiveDays) : null,
       autoApproveUnderDays: editing.autoApproveUnderDays ? Number(editing.autoApproveUnderDays) : null,
+      entitlements,
     };
     if (editing.id) await update.mutateAsync({ id: editing.id, data: payload });
     else await create.mutateAsync(payload);
@@ -150,6 +216,7 @@ function LeaveTypesTab() {
               <TableHead>Days</TableHead>
               <TableHead>Notice</TableHead>
               <TableHead>Carryover</TableHead>
+              <TableHead>Min Service</TableHead>
               <TableHead>Paid</TableHead>
               <TableHead>Doc</TableHead>
               <TableHead>Eligibility</TableHead>
@@ -159,13 +226,21 @@ function LeaveTypesTab() {
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow><TableCell colSpan={9} className="py-8 text-center text-gray-400">Loading…</TableCell></TableRow>
+              <TableRow><TableCell colSpan={10} className="py-8 text-center text-gray-400">Loading…</TableCell></TableRow>
             ) : (types ?? []).map((t) => (
               <TableRow key={t.id}>
                 <TableCell className="font-medium">{t.name}</TableCell>
-                <TableCell>{t.defaultDays}</TableCell>
+                <TableCell>
+                  {t.defaultDays}
+                  {t.entitlements && t.entitlements.length > 0 && (
+                    <span className="ml-1.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                      +{t.entitlements.length} role{t.entitlements.length > 1 ? 's' : ''}
+                    </span>
+                  )}
+                </TableCell>
                 <TableCell>{t.noticePeriod}d</TableCell>
                 <TableCell>{t.carryOverMax ?? 0}{t.carryOverExpiryMonths ? ` (${t.carryOverExpiryMonths}mo)` : ''}</TableCell>
+                <TableCell>{t.minServiceMonths ? `${t.minServiceMonths}mo` : '—'}</TableCell>
                 <TableCell>{yesNo(t.isPaid)}</TableCell>
                 <TableCell>{yesNo(t.requiresDoc)}</TableCell>
                 <TableCell>{t.genderEligibility ?? 'All'}</TableCell>
@@ -205,6 +280,7 @@ function LeaveTypesTab() {
             <Input label="Default Days" type="number" value={String(editing.defaultDays ?? 0)} onChange={(e) => setEditing({ ...editing, defaultDays: Number(e.target.value) })} />
             <Input label="Notice Period (days)" type="number" value={String(editing.noticePeriod ?? 0)} onChange={(e) => setEditing({ ...editing, noticePeriod: Number(e.target.value) })} />
             <Input label="Min Duration (days)" type="number" value={String(editing.minDurationDays ?? 1)} onChange={(e) => setEditing({ ...editing, minDurationDays: Number(e.target.value) })} />
+            <Input label="Min Service (months)" type="number" value={String(editing.minServiceMonths ?? 0)} onChange={(e) => setEditing({ ...editing, minServiceMonths: Number(e.target.value) })} />
             <Input label="Carryover Max" type="number" value={String(editing.carryOverMax ?? 0)} onChange={(e) => setEditing({ ...editing, carryOverMax: Number(e.target.value) })} />
             <Input label="Carryover Expiry (months)" type="number" value={editing.carryOverExpiryMonths ? String(editing.carryOverExpiryMonths) : ''} onChange={(e) => setEditing({ ...editing, carryOverExpiryMonths: e.target.value ? Number(e.target.value) : null })} />
             <Input label="Max Consecutive Days" type="number" value={editing.maxConsecutiveDays ? String(editing.maxConsecutiveDays) : ''} onChange={(e) => setEditing({ ...editing, maxConsecutiveDays: e.target.value ? Number(e.target.value) : null })} />
@@ -221,6 +297,50 @@ function LeaveTypesTab() {
               <Checkbox label="Requires document" checked={editing.requiresDoc ?? false} onChange={(v) => setEditing({ ...editing, requiresDoc: v })} />
               <Checkbox label="Requires HR approval" checked={editing.requiresHrApproval ?? true} onChange={(v) => setEditing({ ...editing, requiresHrApproval: v })} />
               <Checkbox label="Active" checked={editing.isActive ?? true} onChange={(v) => setEditing({ ...editing, isActive: v })} />
+            </div>
+
+            {/* Per-role entitlement overrides */}
+            <div className="col-span-2 border-t border-gray-100 pt-3">
+              <p className="text-sm font-medium text-gray-700">Days by role</p>
+              <p className="mb-3 text-xs text-gray-500">
+                Override the default for specific access roles. Leave a role at the default ({defaultDays}d) to use it.
+              </p>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                {ROLE_KEYS.map((role) => {
+                  const overridden = daysForRole(role) !== defaultDays;
+                  return (
+                    <div key={role}>
+                      <Input
+                        label={role}
+                        type="number"
+                        min={0}
+                        value={String(daysForRole(role))}
+                        onChange={(e) => setDaysForRole(role, Number(e.target.value))}
+                      />
+                      <p className="mt-0.5 text-[10px] text-gray-400">
+                        {overridden ? 'override' : `default (${defaultDays}d)`}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {editing.id && (
+                <div className="mt-3 flex items-center justify-between rounded-md bg-amber-50 px-3 py-2">
+                  <p className="pr-3 text-xs text-amber-800">
+                    Saving updates the policy for future grants. To push these day counts onto employees&apos; existing
+                    balances for this year, apply them now.
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    loading={applyEnt.isPending}
+                    onClick={() => editing.id && applyEnt.mutate({ id: editing.id })}
+                  >
+                    Apply to balances
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         )}

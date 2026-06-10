@@ -983,6 +983,15 @@ export function usePopulatePayrollRun() {
             status: string;
           }>;
         };
+        excludedByHireDate: {
+          count: number;
+          employees: Array<{
+            employeeId: string;
+            employeeIdCode: string;
+            fullName: string;
+            dateOfHire: string;
+          }>;
+        };
       }>(`/payroll/${id}/populate`);
       return res.data;
     },
@@ -1130,6 +1139,7 @@ export function useTransferHistory(payrollRunId: string, disbursing = false) {
       return res.data as Array<{
         id: string;
         paymentStatus: string;
+        paymentProvider: "Korapay" | "Paystack" | null;
         paystackTransferCode: string | null;
         paystackReference: string | null;
         paymentAttemptedAt: string | null;
