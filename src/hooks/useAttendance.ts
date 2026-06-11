@@ -4,6 +4,8 @@ import {
   AttendanceFilters,
   AttendanceRecord,
   ApprovalStatus,
+  AttendanceImportResult,
+  WorkSchedule,
 } from '@/types/attendance';
 import { PaginatedResponse } from '@/types';
 import { toast } from 'react-hot-toast';
@@ -197,4 +199,109 @@ export function useOverrideAttendance() {
       toast.error(error.response?.data?.message || 'Failed to override attendance');
     },
   });
+}
+
+// ─── Bulk import (xlsx/csv) ────────────────────────────────
+
+async function uploadAttendance({ file, dryRun }: { file: File; dryRun?: boolean }) {
+  const formData = new FormData();
+  formData.append('file', file);
+  const { data } = await api.post<AttendanceImportResult>(
+    `/attendance/bulk-upload${dryRun ? '?dryRun=true' : ''}`,
+    formData,
+    { headers: { 'Content-Type': 'multipart/form-data' } },
+  );
+  return data;
+}
+
+/** Dry-run preview of an attendance file (no writes). */
+export function usePreviewAttendanceImport() {
+  return useMutation({
+    mutationFn: (file: File) => uploadAttendance({ file, dryRun: true }),
+    onError: (error: any) => toast.error(error.response?.data?.message || 'Failed to preview file'),
+  });
+}
+
+/** Commit an attendance import. */
+export function useBulkUploadAttendance() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (file: File) => uploadAttendance({ file, dryRun: false }),
+    onSuccess: (res) => {
+      toast.success(`Imported ${res.created} new, ${res.updated} updated.`);
+      queryClient.invalidateQueries({ queryKey: attendanceKeys.all });
+    },
+    onError: (error: any) => toast.error(error.response?.data?.message || 'Import failed'),
+  });
+}
+
+// ─── Bulk approve/reject ───────────────────────────────────
+
+export function useBulkApproveAttendance() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { ids: string[]; status: ApprovalStatus; rejectionReason?: string }) => {
+      const { data } = await api.patch<{ count: number; skipped: number }>(
+        '/attendance/bulk-approve',
+        payload,
+      );
+      return data;
+    },
+    onSuccess: (res) => {
+      toast.success(`${res.count} record(s) updated${res.skipped ? `, ${res.skipped} out of scope` : ''}.`);
+      queryClient.invalidateQueries({ queryKey: attendanceKeys.all });
+    },
+    onError: (error: any) => toast.error(error.response?.data?.message || 'Bulk action failed'),
+  });
+}
+
+// ─── Work schedules ────────────────────────────────────────
+
+export function useWorkSchedules() {
+  return useQuery<WorkSchedule[]>({
+    queryKey: [...attendanceKeys.all, 'schedules'],
+    queryFn: async () => (await api.get<WorkSchedule[]>('/attendance/schedules')).data,
+  });
+}
+
+export function useSaveWorkSchedule() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: Partial<WorkSchedule>) =>
+      (await api.put<WorkSchedule>('/attendance/schedules', payload)).data,
+    onSuccess: () => {
+      toast.success('Work schedule saved.');
+      queryClient.invalidateQueries({ queryKey: [...attendanceKeys.all, 'schedules'] });
+    },
+    onError: (error: any) => toast.error(error.response?.data?.message || 'Failed to save schedule'),
+  });
+}
+
+// ─── Downloads (template / export) ─────────────────────────
+
+async function downloadBlob(path: string, filename: string, params?: Record<string, string>) {
+  try {
+    const res = await api.instance.get(path, { params, responseType: 'blob' });
+    const url = window.URL.createObjectURL(new Blob([res.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  } catch {
+    toast.error('Download failed.');
+  }
+}
+
+export function downloadAttendanceTemplate() {
+  return downloadBlob('/attendance/bulk-template', 'attendance-upload-template.xlsx');
+}
+
+export function downloadAttendanceExport(
+  format: 'csv' | 'xlsx',
+  params: { startDate: string; endDate: string; approvalStatus?: string; status?: string },
+) {
+  return downloadBlob('/attendance/export', `attendance.${format}`, { ...params, format });
 }

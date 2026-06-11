@@ -12,6 +12,9 @@ import {
   PieChart,
   Clock,
   ArrowRight,
+  CalendarRange,
+  Wallet,
+  TrendingUp,
 } from "lucide-react";
 import { AppLayout } from "@/components/layout/app-layout";
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
@@ -43,6 +46,36 @@ const REPORTS: ReportConfig[] = [
     endpoint: "/reports/attendance",
     roles: ["Admin", "SBUHead"],
     color: "text-orange-600 bg-orange-100",
+    type: "link",
+  },
+  {
+    id: "leave-forecast",
+    title: "Leave Forecast & Understaffing",
+    description: "Predict peak-leave months and spot coverage gaps by department.",
+    icon: CalendarRange,
+    endpoint: "/reports/leave-forecast",
+    roles: ["Admin", "CVO", "SBUHead"],
+    color: "text-blue-600 bg-blue-100",
+    type: "link",
+  },
+  {
+    id: "cost-of-leave",
+    title: "Cost of Leave",
+    description: "Indicative monetary value of leave taken and outstanding liability.",
+    icon: Wallet,
+    endpoint: "/reports/cost-of-leave",
+    roles: ["Admin", "CVO", "Finance"],
+    color: "text-emerald-600 bg-emerald-100",
+    type: "link",
+  },
+  {
+    id: "workforce",
+    title: "Workforce Planning",
+    description: "Capacity after leave, headcount trend, and attrition — do we need more hands?",
+    icon: TrendingUp,
+    endpoint: "/reports/workforce",
+    roles: ["Admin", "CVO", "SBUHead"],
+    color: "text-purple-600 bg-purple-100",
     type: "link",
   },
   {

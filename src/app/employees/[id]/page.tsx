@@ -134,6 +134,8 @@ const editEmployeeSchema = z.object({
   monthlySalary: z.string().optional(),
   commission: z.string().optional(),
   withholdingTax: z.string().optional(),
+  isContractor: z.boolean().default(false),
+  commissionFee: z.string().optional(),
   // kept in schema for backward-compat with submit handler; not shown in UI
   baseSalary: z.string().optional(),
   grossPay: z.string().optional(),
@@ -277,6 +279,7 @@ export default function EmployeeProfilePage() {
     defaultValues: {
       allowances: [],
       deductions: [],
+      isContractor: false,
     },
   });
   // Track previous modal state so we only reset the form when it OPENS, not on every
@@ -384,6 +387,10 @@ export default function EmployeeProfilePage() {
         probationEndDate: employee.probationEndDate ? new Date(employee.probationEndDate).toISOString().split('T')[0] : undefined,
         employmentStatus: employee.employmentStatus,
 
+        isContractor: Boolean(breakdown?.isContractor),
+        commissionFee: Number(breakdown?.commissionFee) > 0
+          ? String(Number(breakdown?.commissionFee))
+          : undefined,
         monthlySalary: employee.monthlySalary?.toString() || undefined,
         // Extract commission from stored allowances; omit standard salary-structure items
         commission: (Array.isArray(breakdown?.allowances)
@@ -437,40 +444,52 @@ export default function EmployeeProfilePage() {
         simpleNetPay, baseSalary: _bs, grossPay: _gp, netPay: _np,
         pension: _pen, tax: _tax, commission, withholdingTax,
         allowances: _all, deductions: _ded,
+        isContractor, commissionFee,
         ...rest
       } = data;
-      const netPay40FromForm = simpleNetPay ? parseFloat(simpleNetPay) : 0;
-
-      const grossPayNum = data.monthlySalary ? parseFloat(data.monthlySalary) : 0;
-      const commissionNum = commission ? parseFloat(commission) : 0;
-      const withholdingNum = withholdingTax ? parseFloat(withholdingTax) : 0;
       const r2 = (n: number) => Math.round(n * 100) / 100;
 
-      // Build full allowances array: standard split + commission
-      const standardAllowances = grossPayNum > 0 ? [
-        { name: "Housing",   amount: r2(grossPayNum * 0.20) },
-        { name: "Transport", amount: r2(grossPayNum * 0.15) },
-        { name: "Wardrobe",  amount: r2(grossPayNum * 0.10) },
-        { name: "Meal",      amount: r2(grossPayNum * 0.10) },
-        { name: "Utility",   amount: r2(grossPayNum * 0.10) },
-      ] : [];
-      const allAllowances = [
-        ...standardAllowances,
-        ...(commissionNum > 0 ? [{ name: "Commission", amount: commissionNum }] : []),
-      ];
-      const allDeductions = withholdingNum > 0
-        ? [{ name: "Withholding Tax", amount: withholdingNum }]
-        : [];
+      let payload: Record<string, unknown>;
+      if (isContractor) {
+        // Contractor: flat commission fee = net pay, no salary structure/deductions.
+        payload = {
+          ...rest,
+          isContractor: true,
+          commissionFee: commissionFee ? parseFloat(commissionFee) : 0,
+        };
+      } else {
+        const netPay40FromForm = simpleNetPay ? parseFloat(simpleNetPay) : 0;
+        const grossPayNum = data.monthlySalary ? parseFloat(data.monthlySalary) : 0;
+        const commissionNum = commission ? parseFloat(commission) : 0;
+        const withholdingNum = withholdingTax ? parseFloat(withholdingTax) : 0;
 
-      const payload: Record<string, unknown> = {
-        ...rest,
-        monthlySalary: grossPayNum || undefined,
-        grossPay: grossPayNum || undefined,
-        baseSalary: grossPayNum ? r2(grossPayNum * 0.35) : undefined,
-        allowances: allAllowances.length > 0 ? allAllowances : undefined,
-        deductions: allDeductions.length > 0 ? allDeductions : undefined,
-        ...(grossPayNum > 0 ? { netPay40: netPay40FromForm } : {}),
-      };
+        // Build full allowances array: standard split + commission
+        const standardAllowances = grossPayNum > 0 ? [
+          { name: "Housing",   amount: r2(grossPayNum * 0.20) },
+          { name: "Transport", amount: r2(grossPayNum * 0.15) },
+          { name: "Wardrobe",  amount: r2(grossPayNum * 0.10) },
+          { name: "Meal",      amount: r2(grossPayNum * 0.10) },
+          { name: "Utility",   amount: r2(grossPayNum * 0.10) },
+        ] : [];
+        const allAllowances = [
+          ...standardAllowances,
+          ...(commissionNum > 0 ? [{ name: "Commission", amount: commissionNum }] : []),
+        ];
+        const allDeductions = withholdingNum > 0
+          ? [{ name: "Withholding Tax", amount: withholdingNum }]
+          : [];
+
+        payload = {
+          ...rest,
+          isContractor: false,
+          monthlySalary: grossPayNum || undefined,
+          grossPay: grossPayNum || undefined,
+          baseSalary: grossPayNum ? r2(grossPayNum * 0.35) : undefined,
+          allowances: allAllowances.length > 0 ? allAllowances : undefined,
+          deductions: allDeductions.length > 0 ? allDeductions : undefined,
+          ...(grossPayNum > 0 ? { netPay40: netPay40FromForm } : {}),
+        };
+      }
 
       // Remove empty strings and undefined values
       Object.keys(payload).forEach((key) => {
@@ -1915,6 +1934,7 @@ export default function EmployeeProfilePage() {
             {/* Compensation Tab */}
             {editActiveTab === "compensation" && (() => {
               const currency = editForm.watch("currency") || "NGN";
+              const isContractor = editForm.watch("isContractor");
               const bd = grossBreakdown;
               const netPay60 = Number(bd?.netPay60 ?? 0);
               const netPay40Val = parseFloat(editForm.watch("simpleNetPay") || "0") || 0;
@@ -1942,6 +1962,41 @@ export default function EmployeeProfilePage() {
 
               return (
                 <div className="space-y-6">
+                  {/* ── Contractor toggle ── */}
+                  <label className="flex items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                      checked={!!isContractor}
+                      onChange={(e) => editForm.setValue("isContractor", e.target.checked, { shouldDirty: true })}
+                    />
+                    <span>
+                      <span className="block text-sm font-medium text-gray-900">Contractor</span>
+                      <span className="block text-xs text-gray-500">
+                        Paid a flat commission fee as net pay — no PAYE, pension, NHF or other deductions, and no proration.
+                      </span>
+                    </span>
+                  </label>
+
+                  {isContractor ? (
+                    /* ── Contractor compensation ── */
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <CurrencyInput
+                        control={editForm.control}
+                        name="commissionFee"
+                        label="Commission Fee (Net Pay)"
+                        currencyCode={currency}
+                        error={editForm.formState.errors.commissionFee?.message}
+                      />
+                      <Input
+                        label="Salary Effective Date"
+                        type="date"
+                        error={editForm.formState.errors.salaryEffectiveDate?.message}
+                        {...editForm.register("salaryEffectiveDate")}
+                      />
+                    </div>
+                  ) : (
+                  <>
                   {/* ── Gross Pay ── */}
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <CurrencyInput
@@ -2058,6 +2113,8 @@ export default function EmployeeProfilePage() {
                       />
                     </div>
                   </div>
+                  </>
+                  )}
 
                   {/* ── Banking & Admin ── */}
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
