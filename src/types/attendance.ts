@@ -23,15 +23,39 @@ export interface AttendanceRecord {
   lateReason?: string;
   workLocation: 'Onsite' | 'Remote';
   rejectionReason?: string;
+  source?: 'Clock' | 'Manual' | 'Import';
+  importBatchId?: string | null;
   approvedBy?: { fullName: string };
   employee?: {
     id: string;
     fullName: string;
     employeeId: string;
+    sbuId?: string;
     department?: {
       name: string;
     };
   };
+}
+
+export interface AttendanceImportResult {
+  totalRows: number;
+  created: number;
+  updated: number;
+  skipped: number;
+  errors: { row: number; message: string }[];
+  preview?: Array<Record<string, string>>;
+  batchId?: string;
+}
+
+export interface WorkSchedule {
+  id: string;
+  name: string;
+  sbuId: string | null;
+  startHour: number;
+  startMinute: number;
+  graceMinutes: number;
+  workDays: number[];
+  isActive: boolean;
 }
 
 export interface AttendanceStats {

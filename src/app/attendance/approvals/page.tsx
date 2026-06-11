@@ -22,10 +22,15 @@ import {
   useAttendance,
   useApproveAttendance,
   useOverrideAttendance,
+  usePreviewAttendanceImport,
+  useBulkUploadAttendance,
+  useBulkApproveAttendance,
+  downloadAttendanceTemplate,
+  downloadAttendanceExport,
 } from "@/hooks/useAttendance";
 import { useAuthStore, useEffectiveRole } from "@/hooks";
-import { ApprovalStatus, AttendanceRecord } from "@/types/attendance";
-import { Check, X, Clock, ShieldCheck } from "lucide-react";
+import { ApprovalStatus, AttendanceRecord, AttendanceImportResult } from "@/types/attendance";
+import { Check, X, Clock, ShieldCheck, Upload, Download, FileSpreadsheet } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Modal } from "@/components/ui/modal";
 import toast from "react-hot-toast";
@@ -76,6 +81,67 @@ export default function AttendanceApprovalsPage() {
 
   const { mutate: approve, isPending: isApprovePending } = useApproveAttendance();
   const { mutate: override, isPending: isOverridePending } = useOverrideAttendance();
+  const bulkApprove = useBulkApproveAttendance();
+  const previewImport = usePreviewAttendanceImport();
+  const commitImport = useBulkUploadAttendance();
+
+  const canManage = isAdmin || effectiveRole === "SBUHead";
+
+  // Row selection for bulk approve/reject
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const pendingIds = attendanceRecords
+    .filter((r) => r.approvalStatus === ApprovalStatus.Pending)
+    .map((r) => r.id);
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+  const toggleSelectAll = () => {
+    setSelectedIds((prev) => (prev.size === pendingIds.length ? new Set() : new Set(pendingIds)));
+  };
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const handleBulkApprove = (status: ApprovalStatus) => {
+    if (selectedIds.size === 0) return;
+    let rejectionReason: string | undefined;
+    if (status === ApprovalStatus.Rejected) {
+      rejectionReason = window.prompt("Reason for rejecting the selected records?") || undefined;
+      if (!rejectionReason) { toast.error("Rejection reason is required"); return; }
+    }
+    bulkApprove.mutate(
+      { ids: Array.from(selectedIds), status, rejectionReason },
+      { onSuccess: clearSelection },
+    );
+  };
+
+  // Import flow
+  const [importOpen, setImportOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importPreview, setImportPreview] = useState<AttendanceImportResult | null>(null);
+
+  const resetImport = () => { setImportFile(null); setImportPreview(null); };
+
+  const handlePreview = () => {
+    if (!importFile) return;
+    previewImport.mutate(importFile, { onSuccess: (res) => setImportPreview(res) });
+  };
+  const handleCommit = () => {
+    if (!importFile) return;
+    commitImport.mutate(importFile, {
+      onSuccess: () => { setImportOpen(false); resetImport(); },
+    });
+  };
+
+  const handleExport = (format: "csv" | "xlsx") => {
+    downloadAttendanceExport(format, {
+      startDate,
+      endDate,
+      ...(activeTab !== "All" ? { approvalStatus: activeTab } : {}),
+    });
+  };
 
   // Reject modal
   const [rejectModalOpen, setRejectModalOpen]   = useState(false);
@@ -150,7 +216,7 @@ export default function AttendanceApprovalsPage() {
             <h2 className="text-xl font-semibold text-gray-900">Attendance Approvals</h2>
           </div>
           
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <div className="w-40">
               <Input
                 type="date"
@@ -166,8 +232,41 @@ export default function AttendanceApprovalsPage() {
                 onChange={(e) => handleDateChange(e.target.value, 'end')}
               />
             </div>
+            {canManage && (
+              <>
+                {isAdmin && (
+                  <Button variant="outline" size="sm" onClick={() => { resetImport(); setImportOpen(true); }}>
+                    <Upload className="h-4 w-4 mr-1" /> Upload
+                  </Button>
+                )}
+                <Button variant="outline" size="sm" onClick={() => handleExport("xlsx")}>
+                  <Download className="h-4 w-4 mr-1" /> Export
+                </Button>
+              </>
+            )}
           </div>
         </div>
+
+        {/* Bulk action bar */}
+        {selectedIds.size > 0 && (
+          <div className="flex items-center justify-between rounded-lg border border-primary/20 bg-primary/5 px-4 py-2">
+            <span className="text-sm text-gray-700">{selectedIds.size} selected</span>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={clearSelection}>Clear</Button>
+              <Button size="sm" variant="outline"
+                className="text-red-600 border-red-200 hover:bg-red-50"
+                loading={bulkApprove.isPending}
+                onClick={() => handleBulkApprove(ApprovalStatus.Rejected)}>
+                Reject selected
+              </Button>
+              <Button size="sm"
+                loading={bulkApprove.isPending}
+                onClick={() => handleBulkApprove(ApprovalStatus.Approved)}>
+                Approve selected
+              </Button>
+            </div>
+          </div>
+        )}
 
         {/* Filter tabs */}
         <div className="flex gap-1 border-b border-gray-200">
@@ -199,6 +298,18 @@ export default function AttendanceApprovalsPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      {canManage && (
+                        <TableHead className="w-10">
+                          <input
+                            type="checkbox"
+                            aria-label="Select all pending"
+                            className="h-4 w-4 rounded border-gray-300 text-primary"
+                            checked={pendingIds.length > 0 && selectedIds.size === pendingIds.length}
+                            onChange={toggleSelectAll}
+                            disabled={pendingIds.length === 0}
+                          />
+                        </TableHead>
+                      )}
                       <TableHead>Employee</TableHead>
                       <TableHead>Date</TableHead>
                       <TableHead>Time</TableHead>
@@ -212,6 +323,19 @@ export default function AttendanceApprovalsPage() {
                   <TableBody>
                     {attendanceRecords.map((record) => (
                       <TableRow key={record.id}>
+                        {canManage && (
+                          <TableCell>
+                            {record.approvalStatus === ApprovalStatus.Pending ? (
+                              <input
+                                type="checkbox"
+                                aria-label={`Select ${record.employee?.fullName ?? "record"}`}
+                                className="h-4 w-4 rounded border-gray-300 text-primary"
+                                checked={selectedIds.has(record.id)}
+                                onChange={() => toggleSelect(record.id)}
+                              />
+                            ) : null}
+                          </TableCell>
+                        )}
                         <TableCell>
                           <div className="flex items-center gap-3">
                             <Avatar name={record.employee?.fullName || "Unknown"} size="sm" />
@@ -345,6 +469,90 @@ export default function AttendanceApprovalsPage() {
           <div className="flex justify-end gap-3">
             <Button variant="outline" onClick={() => setOverrideModalOpen(false)} disabled={isOverridePending}>Cancel</Button>
             <Button onClick={handleOverride} loading={isOverridePending}>Apply Override</Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Import Modal */}
+      <Modal isOpen={importOpen} onClose={() => { setImportOpen(false); resetImport(); }} title="Upload Attendance" size="lg">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Upload a <strong>.xlsx</strong> or <strong>.csv</strong> file. Rows are matched by Employee ID or work email,
+            auto-approved, and existing days are updated.
+          </p>
+
+          <button
+            type="button"
+            onClick={() => downloadAttendanceTemplate()}
+            className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline"
+          >
+            <FileSpreadsheet className="h-4 w-4" /> Download template
+          </button>
+
+          <div className="rounded-lg border border-dashed border-gray-300 p-4">
+            <input
+              type="file"
+              accept=".xlsx,.csv"
+              onChange={(e) => { setImportFile(e.target.files?.[0] ?? null); setImportPreview(null); }}
+              className="block w-full text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-primary/10 file:px-3 file:py-2 file:text-sm file:font-medium file:text-primary"
+            />
+            {importFile && <p className="mt-2 text-xs text-gray-500">{importFile.name}</p>}
+          </div>
+
+          {importPreview && (
+            <div className="space-y-2">
+              <div className="flex flex-wrap gap-2 text-sm">
+                <Badge variant="success">{importPreview.created} to create</Badge>
+                <Badge variant="info">{importPreview.updated} to update</Badge>
+                {importPreview.errors.length > 0 && (
+                  <Badge variant="danger">{importPreview.errors.length} error(s)</Badge>
+                )}
+              </div>
+
+              {importPreview.errors.length > 0 && (
+                <div className="max-h-32 overflow-auto rounded-md border border-red-100 bg-red-50 p-2 text-xs text-red-700">
+                  {importPreview.errors.slice(0, 50).map((err, i) => (
+                    <div key={i}>Row {err.row}: {err.message}</div>
+                  ))}
+                </div>
+              )}
+
+              {importPreview.preview && importPreview.preview.length > 0 && (
+                <div className="max-h-48 overflow-auto rounded-md border border-gray-100">
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-50 text-gray-500">
+                      <tr>
+                        {Object.keys(importPreview.preview[0]).map((k) => (
+                          <th key={k} className="px-2 py-1 text-left font-medium capitalize">{k}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {importPreview.preview.map((row, i) => (
+                        <tr key={i} className="border-t border-gray-100">
+                          {Object.values(row).map((v, j) => (
+                            <td key={j} className="px-2 py-1 text-gray-700">{v}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={() => { setImportOpen(false); resetImport(); }}>Cancel</Button>
+            {!importPreview ? (
+              <Button onClick={handlePreview} loading={previewImport.isPending} disabled={!importFile}>
+                Preview
+              </Button>
+            ) : (
+              <Button onClick={handleCommit} loading={commitImport.isPending}>
+                Import {importPreview.created + importPreview.updated} row(s)
+              </Button>
+            )}
           </div>
         </div>
       </Modal>

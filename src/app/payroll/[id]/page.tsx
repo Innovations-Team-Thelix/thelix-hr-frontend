@@ -42,6 +42,7 @@ import {
   useWalletBalance,
   useTransferHistory,
   useDispatchPayslips,
+  useDispatchSinglePayslip,
 } from "@/hooks";
 import { formatDate } from "@/lib/utils";
 import type {
@@ -144,6 +145,10 @@ export default function PayrollDetailPage() {
       breakdown: Record<string, number>;
       employees: Array<{ employeeIdCode: string; fullName: string; status: string }>;
     };
+    excludedByHireDate: {
+      count: number;
+      employees: Array<{ employeeIdCode: string; fullName: string; dateOfHire: string }>;
+    };
   } | null>(null);
   const [employeeSearch, setEmployeeSearch] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -169,6 +174,47 @@ export default function PayrollDetailPage() {
   const cancelRun = useCancelPayrollRun();
   const deletePayslip = useDeletePayslip();
   const dispatchPayslips = useDispatchPayslips();
+  const dispatchSinglePayslip = useDispatchSinglePayslip();
+  const [sendingPayslipId, setSendingPayslipId] = useState<string | null>(null);
+
+  const handleSendOnePayslip = (payslip: Payslip) => {
+    if (sendingPayslipId) return;
+    const wasSent = !!payslip.payslipEmailSentAt;
+    const name = payslip.employee?.fullName ?? "this employee";
+    const email = payslip.employee?.workEmail ?? "their email";
+    const preApproval =
+      run?.status === "Draft" || run?.status === "PendingFinance" || run?.status === "PendingCVO";
+    const baseMessage = wasSent
+      ? `${name} was emailed on ${new Date(payslip.payslipEmailSentAt!).toLocaleString("en-NG")}. Sending again will deliver another copy to ${email}.`
+      : `This will email the payslip to ${name} at ${email}. Emails cannot be unsent.`;
+    const message = preApproval
+      ? `⚠ This run is still in ${run?.status} and has NOT been approved by Finance / CVO yet. Sending now bypasses the approval workflow.\n\n${baseMessage}`
+      : baseMessage;
+    setGenericConfirm({
+      title: wasSent ? "Re-send payslip email?" : "Send payslip email?",
+      message,
+      confirmLabel: wasSent ? "Re-send" : "Send",
+      variant: preApproval ? "danger" : "primary",
+      onConfirm: async () => {
+        setGenericConfirm(null);
+        setSendingPayslipId(payslip.id);
+        try {
+          const r = await dispatchSinglePayslip.mutateAsync({
+            payrollRunId,
+            payslipId: payslip.id,
+          });
+          if (r.status === "sent") toast.success(`Sent to ${name}`);
+          else if (r.status === "skipped") toast(`Skipped: ${r.reason ?? "no email on file"}`, { icon: "⚠️" });
+          else toast.error(`Failed: ${r.reason ?? "unknown error"}`);
+        } catch (err) {
+          const e = err as { response?: { data?: { message?: string } } };
+          toast.error(e?.response?.data?.message || "Failed to send payslip");
+        } finally {
+          setSendingPayslipId(null);
+        }
+      },
+    });
+  };
   const { data: walletBalances } = useWalletBalance();
   const isDisbursingRun = run?.status === "Disbursing";
   const { data: transferHistory } = useTransferHistory(payrollRunId, isDisbursingRun);
@@ -280,7 +326,8 @@ export default function PayrollDetailPage() {
           if (
             r.populatedWithZeroDefaults.length > 0 ||
             r.failed.length > 0 ||
-            r.excludedByStatus.count > 0
+            r.excludedByStatus.count > 0 ||
+            r.excludedByHireDate.count > 0
           ) {
             setPopulateReport(r);
           }
@@ -580,20 +627,34 @@ export default function PayrollDetailPage() {
             {(run.status === "Approved" || run.status === "Disbursing") && isAdmin && (
               <Button onClick={() => setDisburseModalOpen(true)}>
                 <CircleDollarSign className="h-4 w-4" />
-                {run.status === "Disbursing" ? "Retry failed transfers" : "Disburse via Paystack"}
+                {run.status === "Disbursing" ? "Retry failed transfers" : "Disburse salaries"}
               </Button>
             )}
-            {(run.status === "Approved" || run.status === "Disbursing" || run.status === "Sent") && isAdmin && (
+            {run.status !== "Rejected" && isAdmin && (
               <Button
                 variant="outline"
                 loading={dispatchPayslips.isPending}
-                onClick={async () => {
-                  try {
-                    const r = await dispatchPayslips.mutateAsync(payrollRunId);
-                    toast.success(`Payslips sent: ${r.sent} delivered${r.failed ? `, ${r.failed} failed` : ""}${r.skipped ? `, ${r.skipped} skipped` : ""}`);
-                  } catch (e: any) {
-                    toast.error(e?.response?.data?.message || "Failed to send payslips");
-                  }
+                onClick={() => {
+                  const preApproval =
+                    run.status === "Draft" || run.status === "PendingFinance" || run.status === "PendingCVO";
+                  const unsent = run.payslips?.filter((p) => !p.payslipEmailSentAt).length ?? 0;
+                  setGenericConfirm({
+                    title: preApproval ? "Send all payslips now (bypasses approval)?" : "Send all unsent payslips?",
+                    message: preApproval
+                      ? `⚠ This run is still in ${run.status} and has NOT been approved by Finance / CVO. Sending now will email ${unsent} payslip(s) to employees and bypass the approval workflow. Emails cannot be unsent.`
+                      : `This will email ${unsent} unsent payslip(s) to employees. Emails cannot be unsent.`,
+                    confirmLabel: `Send ${unsent} payslip${unsent === 1 ? "" : "s"}`,
+                    variant: preApproval ? "danger" : "primary",
+                    onConfirm: async () => {
+                      setGenericConfirm(null);
+                      try {
+                        const r = await dispatchPayslips.mutateAsync(payrollRunId);
+                        toast.success(`Payslips sent: ${r.sent} delivered${r.failed ? `, ${r.failed} failed` : ""}${r.skipped ? `, ${r.skipped} skipped` : ""}`);
+                      } catch (e: any) {
+                        toast.error(e?.response?.data?.message || "Failed to send payslips");
+                      }
+                    },
+                  });
                 }}
               >
                 <Send className="h-4 w-4" />
@@ -726,6 +787,18 @@ export default function PayrollDetailPage() {
                                 <Download className="h-3 w-3" />
                                 PDF
                               </Button>
+                              {run.status !== "Rejected" && isAdmin && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  loading={sendingPayslipId === payslip.id}
+                                  onClick={(e) => { e.stopPropagation(); handleSendOnePayslip(payslip); }}
+                                  title={payslip.payslipEmailSentAt ? "Re-send payslip email" : "Send payslip email"}
+                                >
+                                  <Send className="h-3 w-3" />
+                                  {payslip.payslipEmailSentAt ? "Re-send" : "Send"}
+                                </Button>
+                              )}
                               {run.status === "Draft" && (
                                 <button
                                   type="button"
@@ -1046,6 +1119,37 @@ export default function PayrollDetailPage() {
                   </p>
                 </div>
               )}
+
+              {populateReport.excludedByHireDate.count > 0 && (
+                <div>
+                  <p className="mb-2 text-sm font-medium text-gray-900">
+                    {populateReport.excludedByHireDate.count} employee(s) excluded — hired after this payroll period
+                  </p>
+                  <div className="max-h-48 overflow-y-auto rounded-lg border border-gray-200 bg-gray-50">
+                    <table className="w-full text-xs">
+                      <thead className="sticky top-0 bg-gray-100 text-gray-700">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-medium">ID</th>
+                          <th className="px-3 py-2 text-left font-medium">Name</th>
+                          <th className="px-3 py-2 text-left font-medium">Date of Hire</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-gray-800">
+                        {populateReport.excludedByHireDate.employees.map((e) => (
+                          <tr key={e.employeeIdCode} className="border-t border-gray-200">
+                            <td className="px-3 py-1.5 font-mono">{e.employeeIdCode}</td>
+                            <td className="px-3 py-1.5">{e.fullName}</td>
+                            <td className="px-3 py-1.5">{e.dateOfHire}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="mt-2 text-xs text-gray-500">
+                    These employees had not yet joined during this period and will appear on the payroll for the month they were hired.
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </Modal>
@@ -1102,7 +1206,7 @@ export default function PayrollDetailPage() {
         <Modal
           isOpen={disburseModalOpen}
           onClose={() => setDisburseModalOpen(false)}
-          title="Disburse via Paystack"
+          title="Disburse salaries"
           size="lg"
           footer={
             <div className="flex justify-end gap-3">
@@ -1123,7 +1227,7 @@ export default function PayrollDetailPage() {
                   : "border-red-200 bg-red-50 text-red-800"
               }`}>
                 <div className="flex items-center justify-between">
-                  <span className="font-medium">Paystack NGN Balance</span>
+                  <span className="font-medium">Available NGN Balance</span>
                   <span className="font-bold">
                     ₦{Number(ngnBalance.balance).toLocaleString("en-NG", { minimumFractionDigits: 2 })}
                   </span>
@@ -1151,7 +1255,7 @@ export default function PayrollDetailPage() {
               </div>
             )}
             <p className="text-xs text-gray-500">
-              Transfers use each payslip ID as the idempotency key — concurrent or duplicate requests are safely rejected. Status updates arrive via Paystack webhook; the run moves to Sent once every transfer settles.
+              Transfers use each payslip ID as the idempotency key — concurrent or duplicate requests are safely rejected. Each payslip is sent via Korapay, automatically falling back to Paystack if Korapay is unavailable. Status updates arrive via provider webhook; the run moves to Sent once every transfer settles.
             </p>
           </div>
         </Modal>
@@ -1170,6 +1274,7 @@ export default function PayrollDetailPage() {
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Employee</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Amount</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Status</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Provider</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Transfer Code</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Attempted</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Settled</th>
@@ -1190,6 +1295,15 @@ export default function PayrollDetailPage() {
                           <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${PAY_STATUS_COLORS[t.paymentStatus as keyof typeof PAY_STATUS_COLORS] ?? "bg-gray-100 text-gray-600"}`}>
                             {t.paymentStatus}
                           </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          {t.paymentProvider ? (
+                            <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${t.paymentProvider === "Korapay" ? "bg-indigo-50 text-indigo-700" : "bg-teal-50 text-teal-700"}`}>
+                              {t.paymentProvider}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-gray-400">—</span>
+                          )}
                         </td>
                         <td className="px-4 py-3 font-mono text-xs text-gray-500">
                           {t.paystackTransferCode ?? "—"}

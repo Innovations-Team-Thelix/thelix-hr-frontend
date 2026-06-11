@@ -193,6 +193,24 @@ const navItems: NavItem[] = [
     roles: ["CVO", "Admin", "Finance"],
   },
   {
+    label: "Leave Forecast",
+    href: "/reports/leave-forecast",
+    icon: CalendarDays,
+    roles: ["CVO", "Admin", "SBUHead"],
+  },
+  {
+    label: "Cost of Leave",
+    href: "/reports/cost-of-leave",
+    icon: Wallet,
+    roles: ["CVO", "Admin", "Finance"],
+  },
+  {
+    label: "Workforce Planning",
+    href: "/reports/workforce",
+    icon: TrendingUp,
+    roles: ["CVO", "Admin", "SBUHead"],
+  },
+  {
     label: "Discipline",
     href: "/discipline",
     icon: ShieldAlert,
