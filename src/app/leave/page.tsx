@@ -481,7 +481,7 @@ export default function LeavePage() {
                         <TableHead>Leave Type</TableHead>
                         {isAdmin && <TableHead>Reliever</TableHead>}
                         <TableHead>Start Date</TableHead>
-                        <TableHead>End Date</TableHead>
+                        <TableHead>Return Date</TableHead>
                         <TableHead>Days</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Reason</TableHead>
@@ -575,7 +575,7 @@ export default function LeavePage() {
                               </TableCell>
                             )}
                             <TableCell>{formatDate(req.startDate)}</TableCell>
-                            <TableCell>{formatDate(req.endDate)}</TableCell>
+                            <TableCell>{formatDate(req.actualReturnDate ?? req.endDate)}</TableCell>
                             <TableCell>{req.daysCount}</TableCell>
                             <TableCell>
                               <div className="flex flex-col gap-1">
@@ -691,7 +691,7 @@ export default function LeavePage() {
                         <TableHead>Employee</TableHead>
                         <TableHead>Leave Type</TableHead>
                         <TableHead>Start Date</TableHead>
-                        <TableHead>End Date</TableHead>
+                        <TableHead>Return Date</TableHead>
                         <TableHead>Days</TableHead>
                         <TableHead>Handover Note</TableHead>
                         <TableHead>Actions</TableHead>
@@ -732,7 +732,7 @@ export default function LeavePage() {
                               </span>
                             </TableCell>
                             <TableCell>{formatDate(req.startDate)}</TableCell>
-                            <TableCell>{formatDate(req.endDate)}</TableCell>
+                            <TableCell>{formatDate(req.actualReturnDate ?? req.endDate)}</TableCell>
                             <TableCell>{req.daysCount}</TableCell>
                             <TableCell>
                               <span className="text-sm text-gray-500 whitespace-normal break-words">
@@ -809,7 +809,7 @@ export default function LeavePage() {
                         <TableHead>Employee</TableHead>
                         <TableHead>Leave Type</TableHead>
                         <TableHead>Start Date</TableHead>
-                        <TableHead>End Date</TableHead>
+                        <TableHead>Return Date</TableHead>
                         <TableHead>Days</TableHead>
                         <TableHead>Reason</TableHead>
                         <TableHead>{isPendingFilter ? "Actions" : "Status"}</TableHead>
@@ -875,7 +875,7 @@ export default function LeavePage() {
                               </div>
                             </TableCell>
                             <TableCell>{formatDate(req.startDate)}</TableCell>
-                            <TableCell>{formatDate(req.endDate)}</TableCell>
+                            <TableCell>{formatDate(req.actualReturnDate ?? req.endDate)}</TableCell>
                             <TableCell>{req.daysCount}</TableCell>
                             <TableCell>
                               <span className="text-sm text-gray-500 whitespace-normal break-words">
@@ -1385,6 +1385,12 @@ export default function LeavePage() {
                 <div>
                   <span className="text-gray-500">End Date</span>
                   <p className="font-medium text-gray-900">{formatDate(detailRequest.endDate)}</p>
+                </div>
+                <div>
+                  <span className="text-gray-500">Return Date</span>
+                  <p className="font-medium text-gray-900">
+                    {detailRequest.actualReturnDate ? formatDate(detailRequest.actualReturnDate) : "—"}
+                  </p>
                 </div>
                 <div>
                   <span className="text-gray-500">Days</span>
