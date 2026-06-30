@@ -11,7 +11,7 @@ import {
   useCreateLmsLesson,
 } from "@/hooks";
 import {
-  PenSquare, Plus, ChevronRight, Check, X, Tag, Loader2,
+  PenSquare, Plus, ChevronRight, Check, X, Tag, Loader2, Trash2, Pencil,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -79,7 +79,7 @@ function NewCategoryPopover({
                 style={{
                   backgroundColor: c,
                   borderColor: color === c ? "#1e40af" : "transparent",
-                  boxShadow: color === c ? "0 0 0 2px white, 0 0 0 3px #1e40af" : "none",
+                  boxShadow: color === c ? "0 0 0 2px white, 0 0 0 3px #D97530" : "none",
                 }}
               />
             ))}
@@ -119,7 +119,7 @@ function CategorySelect({
       <div className="flex gap-1.5">
         <div className="relative flex-1">
           <select
-            className="w-full border rounded-lg px-3 py-2 text-sm pr-8 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+            className="w-full border rounded-lg px-3 py-2 text-sm pr-8 bg-white focus:ring-2 focus:ring-primary focus:border-primary outline-none"
             value={value}
             onChange={(e) => onChange(e.target.value)}
             disabled={isLoading}
@@ -141,7 +141,7 @@ function CategorySelect({
         <button
           type="button"
           onClick={() => setShowNew((v) => !v)}
-          className="flex-shrink-0 w-9 h-9 rounded-lg border border-dashed border-gray-300 flex items-center justify-center text-gray-400 hover:border-blue-400 hover:text-blue-500 transition-colors"
+          className="flex-shrink-0 w-9 h-9 rounded-lg border border-dashed border-gray-300 flex items-center justify-center text-gray-400 hover:border-primary hover:text-primary-400 transition-colors"
           title="Add new category"
         >
           <Plus className="w-4 h-4" />
@@ -229,7 +229,7 @@ export default function CourseBuilderPage() {
       <div className="max-w-3xl mx-auto space-y-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <PenSquare className="w-6 h-6 text-blue-600" />
+            <PenSquare className="w-6 h-6 text-primary" />
             Course Builder
           </h1>
           <p className="text-gray-500 text-sm mt-1">Build your course step by step.</p>
@@ -240,7 +240,7 @@ export default function CourseBuilderPage() {
           {STEPS.map((s, i) => (
             <div key={s} className="flex items-center gap-2">
               <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
-                i < step ? "bg-green-500 text-white" : i === step ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-400"
+                i < step ? "bg-green-500 text-white" : i === step ? "bg-primary text-white" : "bg-gray-100 text-gray-400"
               }`}>
                 {i < step ? <Check className="w-4 h-4" /> : i + 1}
               </div>
@@ -286,7 +286,7 @@ export default function CourseBuilderPage() {
                 <div>
                   <label className="text-sm font-medium text-gray-700">Difficulty</label>
                   <select
-                    className="mt-1 w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    className="mt-1 w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-primary outline-none"
                     value={form.difficulty}
                     onChange={(e) => setForm({ ...form, difficulty: e.target.value })}
                   >
@@ -316,7 +316,7 @@ export default function CourseBuilderPage() {
                     id="mandatory"
                     checked={form.isMandatory}
                     onChange={(e) => setForm({ ...form, isMandatory: e.target.checked })}
-                    className="w-4 h-4 rounded border-gray-300 text-blue-600"
+                    className="w-4 h-4 rounded border-gray-300 text-primary"
                   />
                   <label htmlFor="mandatory" className="text-sm text-gray-700 cursor-pointer">Mandatory course</label>
                 </div>
@@ -341,7 +341,7 @@ export default function CourseBuilderPage() {
                 {form.tags.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 mt-2">
                     {form.tags.map((t) => (
-                      <span key={t} className="flex items-center gap-1 px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-100 rounded-full text-xs font-medium">
+                      <span key={t} className="flex items-center gap-1 px-2.5 py-1 bg-primary-50 text-primary-600 border border-primary-100 rounded-full text-xs font-medium">
                         {t}
                         <button type="button" onClick={() => removeTag(t)} className="hover:text-red-500 ml-0.5">
                           <X className="w-3 h-3" />
@@ -392,11 +392,11 @@ export default function CourseBuilderPage() {
   );
 }
 
-// ─── Modules step (unchanged) ────────────────────────────────────────────────
+// ─── Modules step ────────────────────────────────────────────────────────────
 
 function ModulesStep({ courseId, onFinish }: { courseId: string; onFinish: () => void }) {
   const [modules, setModules] = useState<
-    { title: string; lessons: { title: string; contentType: string; contentUrl: string }[] }[]
+    { title: string; editingTitle: boolean; lessons: { title: string; contentType: string; contentUrl: string }[] }[]
   >([]);
   const [newModTitle, setNewModTitle] = useState("");
   const createModule = useCreateLmsModule(courseId);
@@ -405,13 +405,35 @@ function ModulesStep({ courseId, onFinish }: { courseId: string; onFinish: () =>
 
   const addModule = () => {
     if (!newModTitle.trim()) return;
-    setModules([...modules, { title: newModTitle, lessons: [] }]);
+    setModules([...modules, { title: newModTitle, editingTitle: false, lessons: [] }]);
     setNewModTitle("");
+  };
+
+  const removeModule = (mi: number) => {
+    setModules(modules.filter((_, i) => i !== mi));
+  };
+
+  const updateModuleTitle = (mi: number, title: string) => {
+    const updated = [...modules];
+    updated[mi].title = title;
+    setModules(updated);
+  };
+
+  const setModuleEditing = (mi: number, editing: boolean) => {
+    const updated = [...modules];
+    updated[mi].editingTitle = editing;
+    setModules(updated);
   };
 
   const addLesson = (mi: number) => {
     const updated = [...modules];
     updated[mi].lessons.push({ title: "New Lesson", contentType: "Video", contentUrl: "" });
+    setModules(updated);
+  };
+
+  const removeLesson = (mi: number, li: number) => {
+    const updated = [...modules];
+    updated[mi].lessons = updated[mi].lessons.filter((_, i) => i !== li);
     setModules(updated);
   };
 
@@ -444,8 +466,8 @@ function ModulesStep({ courseId, onFinish }: { courseId: string; onFinish: () =>
       {modules.length === 0 && (
         <Card>
           <CardContent className="p-8 text-center">
-            <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center mx-auto mb-3">
-              <Plus className="w-6 h-6 text-blue-400" />
+            <div className="w-12 h-12 rounded-full bg-primary-50 flex items-center justify-center mx-auto mb-3">
+              <Plus className="w-6 h-6 text-primary-300" />
             </div>
             <p className="text-sm text-gray-500">Add your first module below to start structuring the course.</p>
           </CardContent>
@@ -455,38 +477,80 @@ function ModulesStep({ courseId, onFinish }: { courseId: string; onFinish: () =>
       {modules.map((mod, mi) => (
         <Card key={mi}>
           <CardContent className="p-4 space-y-3">
-            <p className="font-medium text-gray-800 text-sm">
-              Module {mi + 1}: <span className="text-blue-700">{mod.title}</span>
-            </p>
+            {/* Module header */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-gray-400 shrink-0">Module {mi + 1}</span>
+              {mod.editingTitle ? (
+                <Input
+                  autoFocus
+                  value={mod.title}
+                  onChange={(e) => updateModuleTitle(mi, e.target.value)}
+                  onBlur={() => setModuleEditing(mi, false)}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") setModuleEditing(mi, false); }}
+                  className="h-7 text-sm font-medium flex-1"
+                />
+              ) : (
+                <span className="text-sm font-semibold text-primary-600 flex-1 truncate">{mod.title}</span>
+              )}
+              <button
+                type="button"
+                onClick={() => setModuleEditing(mi, true)}
+                className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors shrink-0"
+                title="Rename module"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => removeModule(mi)}
+                className="p-1 rounded hover:bg-red-50 text-gray-300 hover:text-red-500 transition-colors shrink-0"
+                title="Delete module"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Lessons */}
             {mod.lessons.map((lesson, li) => (
-              <div key={li} className="grid grid-cols-3 gap-2 pl-4">
-                <Input
-                  placeholder="Lesson title"
-                  value={lesson.title}
-                  onChange={(e) => updateLesson(mi, li, "title", e.target.value)}
-                  className="text-sm h-8"
-                />
-                <select
-                  className="border rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                  value={lesson.contentType}
-                  onChange={(e) => updateLesson(mi, li, "contentType", e.target.value)}
+              <div key={li} className="flex gap-2 pl-4 items-center">
+                <div className="grid grid-cols-3 gap-2 flex-1">
+                  <Input
+                    placeholder="Lesson title"
+                    value={lesson.title}
+                    onChange={(e) => updateLesson(mi, li, "title", e.target.value)}
+                    className="text-sm h-8"
+                  />
+                  <select
+                    className="border rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-primary outline-none"
+                    value={lesson.contentType}
+                    onChange={(e) => updateLesson(mi, li, "contentType", e.target.value)}
+                  >
+                    {["Video", "PDF", "Article", "Audio", "LiveSession", "Embed"].map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                  <Input
+                    placeholder="URL (optional)"
+                    value={lesson.contentUrl}
+                    onChange={(e) => updateLesson(mi, li, "contentUrl", e.target.value)}
+                    className="text-sm h-8"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeLesson(mi, li)}
+                  className="p-1.5 rounded hover:bg-red-50 text-gray-300 hover:text-red-500 transition-colors shrink-0"
+                  title="Delete lesson"
                 >
-                  {["Video", "PDF", "Article", "Audio", "LiveSession", "Embed"].map((t) => (
-                    <option key={t} value={t}>{t}</option>
-                  ))}
-                </select>
-                <Input
-                  placeholder="URL (optional)"
-                  value={lesson.contentUrl}
-                  onChange={(e) => updateLesson(mi, li, "contentUrl", e.target.value)}
-                  className="text-sm h-8"
-                />
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
               </div>
             ))}
+
             <button
               type="button"
               onClick={() => addLesson(mi)}
-              className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 pl-4 mt-1"
+              className="flex items-center gap-1 text-xs text-primary hover:text-primary-600 pl-4 mt-1"
             >
               <Plus className="w-3 h-3" /> Add Lesson
             </button>

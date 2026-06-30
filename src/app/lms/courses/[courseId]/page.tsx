@@ -1,18 +1,24 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { AppLayout } from "@/components/layout/app-layout";
 import {
   useLmsCourse, useCourseProgress, useMarkLessonProgress,
   useSelfEnroll, useEffectiveRole, useBulkEnroll,
+  useSbus, useDepartments, useEmployees,
+  useUpdateLmsModule, useDeleteLmsModule,
+  useUpdateLmsLesson, useDeleteLmsLesson,
 } from "@/hooks";
 import {
   PlayCircle, FileText, Headphones, Globe, CheckCircle2, Clock, Users,
   ChevronDown, ChevronRight, ChevronLeft, ChevronRight as Next,
   ArrowLeft, BookOpen, Play, Loader2, Award, Lock,
+  Search, X, Building2, Layers, User, Globe2,
+  Pencil, Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/loading";
 import { Modal } from "@/components/ui/modal";
 import Link from "next/link";
@@ -29,8 +35,8 @@ const CONTENT_ICONS: Record<string, any> = {
 
 const DIFFICULTY_COLORS: Record<string, string> = {
   Beginner:     "bg-green-100 text-green-700",
-  Intermediate: "bg-blue-100 text-blue-700",
-  Advanced:     "bg-purple-100 text-purple-700",
+  Intermediate: "bg-blue-100 text-blue",
+  Advanced:     "bg-primary-100 text-primary-700",
   Expert:       "bg-red-100 text-red-700",
 };
 
@@ -157,12 +163,61 @@ export default function CourseDetailPage() {
   const markProgress = useMarkLessonProgress();
   const selfEnroll = useSelfEnroll();
   const bulkEnroll = useBulkEnroll();
+  const updateModule = useUpdateLmsModule(courseId);
+  const deleteModule = useDeleteLmsModule(courseId);
+  const updateLesson = useUpdateLmsLesson(courseId);
+  const deleteLesson = useDeleteLmsLesson(courseId);
 
   const [selectedLesson, setSelectedLesson] = useState<any>(null);
   const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set());
   const [enrollModalOpen, setEnrollModalOpen] = useState(false);
-  const [enrollScope, setEnrollScope] = useState("individual");
+  const [enrollScope, setEnrollScope] = useState<'org' | 'sbu' | 'dept' | 'individual'>('individual');
+  const [selectedDeptId, setSelectedDeptId] = useState('');
+  const [selectedSbuId, setSelectedSbuId] = useState('');
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
+  const [employeeSearch, setEmployeeSearch] = useState('');
   const [activeTab, setActiveTab] = useState<"overview" | "resources">("overview");
+
+  // Inline edit state for curriculum sidebar (admin only)
+  const [editingModuleId, setEditingModuleId] = useState<string | null>(null);
+  const [editingModuleTitle, setEditingModuleTitle] = useState("");
+  const [editingLessonId, setEditingLessonId] = useState<string | null>(null);
+  const [editingLesson, setEditingLesson] = useState<{ title: string; contentType: string; contentUrl: string; durationMins: string }>({ title: "", contentType: "Video", contentUrl: "", durationMins: "" });
+
+  // Data for assign modal
+  const { data: sbus } = useSbus();
+  const { data: departments } = useDepartments();
+  const { data: employeesResult } = useEmployees({ search: employeeSearch || undefined, limit: 500 });
+  const employees = (employeesResult as any)?.data ?? [];
+
+  const openAssignModal = useCallback(() => {
+    setEnrollScope('individual');
+    setSelectedDeptId('');
+    setSelectedSbuId('');
+    setSelectedEmployeeIds([]);
+    setEmployeeSearch('');
+    setEnrollModalOpen(true);
+  }, []);
+
+  const handleAssign = () => {
+    const payload: any = { courseId, scope: enrollScope };
+    if (enrollScope === 'sbu') payload.sbuId = selectedSbuId;
+    if (enrollScope === 'dept') payload.departmentId = selectedDeptId;
+    if (enrollScope === 'individual') payload.employeeIds = selectedEmployeeIds;
+    bulkEnroll.mutate(payload, { onSuccess: () => setEnrollModalOpen(false) });
+  };
+
+  const toggleEmployee = (id: string) => {
+    setSelectedEmployeeIds(prev =>
+      prev.includes(id) ? prev.filter(e => e !== id) : [...prev, id]
+    );
+  };
+
+  const isAssignValid =
+    enrollScope === 'org' ||
+    (enrollScope === 'sbu' && !!selectedSbuId) ||
+    (enrollScope === 'dept' && !!selectedDeptId) ||
+    (enrollScope === 'individual' && selectedEmployeeIds.length > 0);
 
   if (isLoading) {
     return (
@@ -245,7 +300,7 @@ export default function CourseDetailPage() {
                 <Link href={`/lms/courses/${courseId}/edit`}>
                   <Button size="sm" variant="outline" className="text-xs h-8">Edit Course</Button>
                 </Link>
-                <Button size="sm" variant="outline" className="text-xs h-8" onClick={() => setEnrollModalOpen(true)}>
+                <Button size="sm" variant="outline" className="text-xs h-8" onClick={openAssignModal}>
                   Assign
                 </Button>
               </>
@@ -331,7 +386,7 @@ export default function CourseDetailPage() {
                   {/* Course header */}
                   <div className="flex items-center gap-2 flex-wrap">
                     {c.category && (
-                      <span className="text-xs font-medium bg-blue-100 text-blue-700 px-2.5 py-1 rounded-full">
+                      <span className="text-xs font-medium bg-primary-100 text-primary-600 px-2.5 py-1 rounded-full">
                         {c.category.name}
                       </span>
                     )}
@@ -357,7 +412,7 @@ export default function CourseDetailPage() {
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
-                    className={`pb-3 text-sm font-medium capitalize border-b-2 -mb-px transition-colors ${activeTab === tab ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+                    className={`pb-3 text-sm font-medium capitalize border-b-2 -mb-px transition-colors ${activeTab === tab ? "border-primary text-primary" : "border-transparent text-gray-500 hover:text-gray-700"}`}
                   >
                     {tab}
                   </button>
@@ -383,10 +438,10 @@ export default function CourseDetailPage() {
                     </div>
                   )}
                   {c.quiz && p && (
-                    <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 flex items-center justify-between">
+                    <div className="rounded-xl border border-primary-100 bg-primary-50 p-4 flex items-center justify-between">
                       <div>
-                        <p className="font-semibold text-blue-900">Course Assessment</p>
-                        <p className="text-xs text-blue-600 mt-0.5">Pass score: {c.quiz.passScore}% · {c.quiz.maxAttempts} attempts allowed</p>
+                        <p className="font-semibold text-primary-900">Course Assessment</p>
+                        <p className="text-xs text-primary mt-0.5">Pass score: {c.quiz.passScore}% · {c.quiz.maxAttempts} attempts allowed</p>
                       </div>
                       <Link href={`/lms/assessments?quizId=${c.quiz.id}`}>
                         <Button size="sm">Take Quiz</Button>
@@ -411,11 +466,11 @@ export default function CourseDetailPage() {
               <p className="text-sm font-semibold text-gray-800">Course Content</p>
               <div className="flex items-center justify-between mt-2">
                 <p className="text-xs text-gray-400">{completedCount}/{totalLessons} lessons completed</p>
-                <span className="text-xs font-semibold text-blue-600">{progressPct}%</span>
+                <span className="text-xs font-semibold text-primary">{progressPct}%</span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-1.5 mt-2">
                 <div
-                  className={`h-1.5 rounded-full transition-all duration-500 ${progressPct === 100 ? "bg-green-500" : "bg-blue-500"}`}
+                  className={`h-1.5 rounded-full transition-all duration-500 ${progressPct === 100 ? "bg-green-500" : "bg-primary"}`}
                   style={{ width: `${progressPct}%` }}
                 />
               </div>
@@ -431,52 +486,192 @@ export default function CourseDetailPage() {
                   const completedInModule = (mod.lessons ?? []).filter((l: any) => completedLessonIds.has(l.id)).length;
                   return (
                     <div key={mod.id} className="border-b last:border-b-0">
-                      <button
-                        className="w-full text-left px-4 py-3.5 flex items-start gap-2 hover:bg-gray-50 transition-colors"
-                        onClick={() => toggleModule(mod.id)}
-                      >
-                        <div className="flex-1">
-                          <p className="text-sm font-medium text-gray-800 leading-snug">
-                            Module {modIdx + 1}: {mod.title}
-                          </p>
-                          <p className="text-xs text-gray-400 mt-0.5">
-                            {completedInModule}/{mod.lessons?.length ?? 0} · {mod.lessons?.reduce((s: number, l: any) => s + (l.durationMins ?? 0), 0) ?? 0} min
-                          </p>
-                        </div>
-                        {isOpen ? <ChevronDown className="w-4 h-4 text-gray-400 mt-0.5 shrink-0" /> : <ChevronRight className="w-4 h-4 text-gray-400 mt-0.5 shrink-0" />}
-                      </button>
+                      {/* Module header */}
+                      <div className="flex items-start gap-1 px-3 py-3 hover:bg-gray-50 transition-colors group/mod">
+                        <button
+                          className="flex-1 text-left flex items-start gap-2"
+                          onClick={() => toggleModule(mod.id)}
+                        >
+                          {editingModuleId === mod.id ? (
+                            <input
+                              autoFocus
+                              className="flex-1 text-sm font-medium border border-primary rounded px-2 py-0.5 outline-none focus:ring-1 focus:ring-primary"
+                              value={editingModuleTitle}
+                              onChange={(e) => setEditingModuleTitle(e.target.value)}
+                              onClick={(e) => e.stopPropagation()}
+                              onKeyDown={(e) => {
+                                e.stopPropagation();
+                                if (e.key === "Enter") {
+                                  updateModule.mutate({ id: mod.id, data: { title: editingModuleTitle } });
+                                  setEditingModuleId(null);
+                                }
+                                if (e.key === "Escape") setEditingModuleId(null);
+                              }}
+                              onBlur={() => {
+                                updateModule.mutate({ id: mod.id, data: { title: editingModuleTitle } });
+                                setEditingModuleId(null);
+                              }}
+                            />
+                          ) : (
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-gray-800 leading-snug">
+                                Module {modIdx + 1}: {mod.title}
+                              </p>
+                              <p className="text-xs text-gray-400 mt-0.5">
+                                {completedInModule}/{mod.lessons?.length ?? 0} · {mod.lessons?.reduce((s: number, l: any) => s + (l.durationMins ?? 0), 0) ?? 0} min
+                              </p>
+                            </div>
+                          )}
+                          {editingModuleId !== mod.id && (
+                            isOpen ? <ChevronDown className="w-4 h-4 text-gray-400 mt-0.5 shrink-0" /> : <ChevronRight className="w-4 h-4 text-gray-400 mt-0.5 shrink-0" />
+                          )}
+                        </button>
+                        {isAdmin && editingModuleId !== mod.id && (
+                          <div className="flex items-center gap-0.5 opacity-0 group-hover/mod:opacity-100 transition-opacity shrink-0">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setEditingModuleTitle(mod.title); setEditingModuleId(mod.id); }}
+                              className="p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-700"
+                              title="Rename module"
+                            >
+                              <Pencil className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); deleteModule.mutate(mod.id); }}
+                              className="p-1 rounded hover:bg-red-50 text-gray-300 hover:text-red-500"
+                              title="Delete module"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
 
-                      {isOpen && (mod.lessons ?? []).map((lesson: any, lessonIdx: number) => {
+                      {/* Lessons */}
+                      {isOpen && (mod.lessons ?? []).map((lesson: any) => {
                         const Icon = CONTENT_ICONS[lesson.contentType] ?? FileText;
                         const isDone = completedLessonIds.has(lesson.id);
                         const isActive = selectedLesson?.id === lesson.id;
                         const isLocked = !p && !isAdmin && !lesson.isFreePreview;
+                        const isEditingThis = editingLessonId === lesson.id;
 
                         return (
-                          <button
+                          <div
                             key={lesson.id}
-                            onClick={() => !isLocked && handleLessonClick(lesson)}
-                            className={`w-full text-left flex items-start gap-3 px-4 py-3 border-t border-gray-50 transition-colors ${isActive ? "bg-blue-50" : "hover:bg-gray-50"} ${isLocked ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
+                            className={`relative border-t border-gray-50 group/lesson ${isActive ? "bg-primary-50" : "hover:bg-gray-50"}`}
                           >
-                            <div className="mt-0.5 shrink-0">
-                              {isDone ? (
-                                <CheckCircle2 className="w-4 h-4 text-green-500" />
-                              ) : isLocked ? (
-                                <Lock className="w-4 h-4 text-gray-300" />
-                              ) : (
-                                <Icon className={`w-4 h-4 ${isActive ? "text-blue-500" : "text-gray-400"}`} />
-                              )}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className={`text-xs leading-snug ${isActive ? "text-blue-700 font-medium" : "text-gray-700"}`}>
-                                {lesson.title}
-                              </p>
-                              <p className="text-[11px] text-gray-400 mt-0.5 capitalize">
-                                {lesson.contentType}{lesson.durationMins ? ` · ${lesson.durationMins} min` : ""}
-                              </p>
-                            </div>
-                            {isActive && <div className="w-1 h-full absolute left-0 top-0 bg-blue-500 rounded-r" />}
-                          </button>
+                            {isEditingThis ? (
+                              /* Inline lesson edit form */
+                              <div className="px-4 py-3 space-y-2" onClick={(e) => e.stopPropagation()}>
+                                <input
+                                  autoFocus
+                                  placeholder="Lesson title"
+                                  className="w-full text-xs border border-gray-200 rounded px-2 py-1.5 outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                                  value={editingLesson.title}
+                                  onChange={(e) => setEditingLesson(prev => ({ ...prev, title: e.target.value }))}
+                                />
+                                <div className="grid grid-cols-2 gap-1.5">
+                                  <select
+                                    className="text-xs border border-gray-200 rounded px-2 py-1.5 outline-none focus:border-primary"
+                                    value={editingLesson.contentType}
+                                    onChange={(e) => setEditingLesson(prev => ({ ...prev, contentType: e.target.value }))}
+                                  >
+                                    {["Video", "PDF", "Article", "Audio", "LiveSession", "Embed"].map(t => (
+                                      <option key={t} value={t}>{t}</option>
+                                    ))}
+                                  </select>
+                                  <input
+                                    placeholder="Duration (min)"
+                                    type="number"
+                                    className="text-xs border border-gray-200 rounded px-2 py-1.5 outline-none focus:border-primary"
+                                    value={editingLesson.durationMins}
+                                    onChange={(e) => setEditingLesson(prev => ({ ...prev, durationMins: e.target.value }))}
+                                  />
+                                </div>
+                                <input
+                                  placeholder="Content URL (optional)"
+                                  className="w-full text-xs border border-gray-200 rounded px-2 py-1.5 outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                                  value={editingLesson.contentUrl}
+                                  onChange={(e) => setEditingLesson(prev => ({ ...prev, contentUrl: e.target.value }))}
+                                />
+                                <div className="flex gap-1.5 justify-end pt-1">
+                                  <button
+                                    onClick={() => setEditingLessonId(null)}
+                                    className="text-xs px-2.5 py-1 rounded border border-gray-200 text-gray-500 hover:bg-gray-50"
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      updateLesson.mutate({
+                                        id: lesson.id,
+                                        data: {
+                                          title: editingLesson.title,
+                                          contentType: editingLesson.contentType,
+                                          contentUrl: editingLesson.contentUrl || undefined,
+                                          durationMins: editingLesson.durationMins ? parseInt(editingLesson.durationMins) : undefined,
+                                        },
+                                      });
+                                      setEditingLessonId(null);
+                                    }}
+                                    className="text-xs px-2.5 py-1 rounded bg-primary text-white hover:bg-primary-600"
+                                  >
+                                    Save
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => !isLocked && handleLessonClick(lesson)}
+                                className={`w-full text-left flex items-start gap-3 px-4 py-3 transition-colors ${isLocked ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
+                              >
+                                <div className="mt-0.5 shrink-0">
+                                  {isDone ? (
+                                    <CheckCircle2 className="w-4 h-4 text-green-500" />
+                                  ) : isLocked ? (
+                                    <Lock className="w-4 h-4 text-gray-300" />
+                                  ) : (
+                                    <Icon className={`w-4 h-4 ${isActive ? "text-primary-400" : "text-gray-400"}`} />
+                                  )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className={`text-xs leading-snug ${isActive ? "text-primary-600 font-medium" : "text-gray-700"}`}>
+                                    {lesson.title}
+                                  </p>
+                                  <p className="text-[11px] text-gray-400 mt-0.5 capitalize">
+                                    {lesson.contentType}{lesson.durationMins ? ` · ${lesson.durationMins} min` : ""}
+                                  </p>
+                                </div>
+                                {isAdmin && (
+                                  <div className="flex items-center gap-0.5 opacity-0 group-hover/lesson:opacity-100 transition-opacity shrink-0 -mr-1" onClick={(e) => e.stopPropagation()}>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setEditingLesson({
+                                          title: lesson.title,
+                                          contentType: lesson.contentType,
+                                          contentUrl: lesson.contentUrl ?? "",
+                                          durationMins: lesson.durationMins ? String(lesson.durationMins) : "",
+                                        });
+                                        setEditingLessonId(lesson.id);
+                                      }}
+                                      className="p-1 rounded hover:bg-white text-gray-300 hover:text-gray-600"
+                                      title="Edit lesson"
+                                    >
+                                      <Pencil className="w-3 h-3" />
+                                    </button>
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); deleteLesson.mutate(lesson.id); }}
+                                      className="p-1 rounded hover:bg-red-50 text-gray-300 hover:text-red-500"
+                                      title="Delete lesson"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                )}
+                              </button>
+                            )}
+                            {isActive && !isEditingThis && <div className="w-1 h-full absolute left-0 top-0 bg-primary rounded-r" />}
+                          </div>
                         );
                       })}
                     </div>
@@ -521,25 +716,168 @@ export default function CourseDetailPage() {
 
       {/* Assign Modal */}
       <Modal isOpen={enrollModalOpen} onClose={() => setEnrollModalOpen(false)} title="Assign Course">
-        <div className="space-y-4">
+        <div className="space-y-5">
+          {/* Scope tiles */}
           <div>
-            <label className="text-sm font-medium text-gray-700">Assign to</label>
-            <select
-              className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
-              value={enrollScope}
-              onChange={(e) => setEnrollScope(e.target.value)}
-            >
-              <option value="org">Entire Organisation</option>
-              <option value="individual">Individual</option>
-            </select>
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Assign to</p>
+            <div className="grid grid-cols-2 gap-2">
+              {([
+                { value: 'individual', label: 'Individual',   icon: User,      desc: 'Select specific people' },
+                { value: 'dept',       label: 'Department',   icon: Building2, desc: 'All in a department' },
+                { value: 'sbu',        label: 'SBU',          icon: Layers,    desc: 'All in a business unit' },
+                { value: 'org',        label: 'Organisation', icon: Globe2,    desc: 'Everyone in the company' },
+              ] as const).map(({ value, label, icon: Icon, desc }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => {
+                    setEnrollScope(value);
+                    setSelectedDeptId('');
+                    setSelectedSbuId('');
+                    setSelectedEmployeeIds([]);
+                  }}
+                  className={`flex items-start gap-2.5 p-3 rounded-xl border-2 text-left transition-all ${
+                    enrollScope === value
+                      ? 'border-primary bg-primary-50'
+                      : 'border-gray-200 bg-white hover:border-gray-300'
+                  }`}
+                >
+                  <div className={`mt-0.5 p-1.5 rounded-lg ${enrollScope === value ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500'}`}>
+                    <Icon className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <p className={`text-sm font-semibold leading-none ${enrollScope === value ? 'text-primary-700' : 'text-gray-800'}`}>{label}</p>
+                    <p className="text-[11px] text-gray-400 mt-0.5">{desc}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
           </div>
+
+          {/* SBU picker */}
+          {enrollScope === 'sbu' && (
+            <div>
+              <label className="text-sm font-medium text-gray-700 block mb-1.5">Select SBU</label>
+              <select
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-primary focus:border-primary outline-none"
+                value={selectedSbuId}
+                onChange={(e) => setSelectedSbuId(e.target.value)}
+              >
+                <option value="">— Choose a business unit —</option>
+                {((sbus as any[]) ?? []).map((s: any) => (
+                  <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Department picker */}
+          {enrollScope === 'dept' && (
+            <div>
+              <label className="text-sm font-medium text-gray-700 block mb-1.5">Select Department</label>
+              <select
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-primary focus:border-primary outline-none"
+                value={selectedDeptId}
+                onChange={(e) => setSelectedDeptId(e.target.value)}
+              >
+                <option value="">— Choose a department —</option>
+                {((departments as any[]) ?? []).map((d: any) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}{d.sbu ? ` · ${d.sbu.name}` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Individual picker */}
+          {enrollScope === 'individual' && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium text-gray-700">Select Employees</label>
+                {selectedEmployeeIds.length > 0 && (
+                  <span className="text-xs font-semibold bg-primary-100 text-primary-700 px-2 py-0.5 rounded-full">
+                    {selectedEmployeeIds.length} selected
+                  </span>
+                )}
+              </div>
+
+              {/* Selected pills */}
+              {selectedEmployeeIds.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 p-2 bg-gray-50 rounded-lg border border-gray-100">
+                  {employees
+                    .filter((e: any) => selectedEmployeeIds.includes(e.id))
+                    .map((e: any) => (
+                      <span key={e.id} className="flex items-center gap-1 px-2 py-1 bg-white border border-primary-200 text-primary-700 rounded-full text-xs font-medium">
+                        {e.fullName}
+                        <button type="button" onClick={() => toggleEmployee(e.id)} className="hover:text-red-500 transition-colors">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                </div>
+              )}
+
+              {/* Search input */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                <Input
+                  className="pl-9 h-9 text-sm"
+                  placeholder="Search by name or email…"
+                  value={employeeSearch}
+                  onChange={(e) => setEmployeeSearch(e.target.value)}
+                />
+              </div>
+
+              {/* Employee list */}
+              <div className="max-h-52 overflow-y-auto rounded-lg border border-gray-100 divide-y divide-gray-50">
+                {employees.length === 0 ? (
+                  <p className="text-sm text-gray-400 text-center py-6">
+                    {employeeSearch ? 'No employees found.' : 'Loading employees…'}
+                  </p>
+                ) : (
+                  employees.map((emp: any) => {
+                    const selected = selectedEmployeeIds.includes(emp.id);
+                    return (
+                      <button
+                        key={emp.id}
+                        type="button"
+                        onClick={() => toggleEmployee(emp.id)}
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 transition-colors text-left ${selected ? 'bg-primary-50' : ''}`}
+                      >
+                        <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${selected ? 'bg-primary text-white' : 'bg-gray-100 text-gray-600'}`}>
+                          {selected ? <CheckCircle2 className="w-3.5 h-3.5" /> : emp.fullName?.charAt(0) ?? '?'}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-800 truncate">{emp.fullName}</p>
+                          <p className="text-[11px] text-gray-400 truncate">{emp.department?.name ?? emp.jobTitle ?? emp.email}</p>
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Organisation confirm message */}
+          {enrollScope === 'org' && (
+            <div className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+              <Globe2 className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+              <p className="text-sm text-amber-800">
+                This will enroll <strong>all active employees</strong> in the organisation into this course.
+              </p>
+            </div>
+          )}
+
           <Button
             className="w-full"
-            onClick={() => { bulkEnroll.mutate({ courseId, scope: enrollScope as any }); setEnrollModalOpen(false); }}
-            disabled={bulkEnroll.isPending}
+            onClick={handleAssign}
+            disabled={bulkEnroll.isPending || !isAssignValid}
           >
             {bulkEnroll.isPending && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
             Assign Course
+            {enrollScope === 'individual' && selectedEmployeeIds.length > 0 && ` (${selectedEmployeeIds.length})`}
           </Button>
         </div>
       </Modal>

@@ -117,8 +117,7 @@ const lmsChildren: NavChild[] = [
   { label: "Assessments",         href: "/lms/assessments",    icon: ClipboardList,   roles: ["CVO", "Admin"] },
   { label: "Certificates",        href: "/lms/certificates",   icon: Award,           roles: ["CVO", "Admin", "SBUHead", "Director", "Manager", "Finance", "Employee"] },
   { label: "Badges & Leaderboard", href: "/lms/gamification",  icon: Trophy,          roles: ["CVO", "Admin", "SBUHead", "Director", "Manager", "Finance", "Employee"] },
-  { label: "Team Progress",       href: "/lms/team",           icon: UsersRound,      roles: ["CVO", "Admin", "SBUHead", "Director", "Manager"] },
-  { label: "Reports",             href: "/lms/reports",        icon: BarChart2,       roles: ["CVO", "Admin", "SBUHead"] },
+  { label: "Reports",             href: "/lms/reports",        icon: BarChart2,       roles: ["CVO", "Admin", "SBUHead", "Director", "Manager"] },
 ];
 
 const navItems: NavItem[] = [
