@@ -10,8 +10,8 @@ import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import Link from "next/link";
 
 const PATH_GRADIENTS = [
-  "from-blue-500 to-blue-700",
-  "from-violet-500 to-violet-700",
+  "from-primary-400 to-primary-600",
+  "from-blue-300 to-blue",
   "from-emerald-500 to-emerald-700",
   "from-amber-500 to-amber-700",
   "from-rose-500 to-rose-700",
@@ -113,7 +113,7 @@ export default function LearningPathsPage() {
                   {/* Body */}
                   <div className="flex flex-col flex-1 p-4 gap-2">
                     <Link href={`/lms/paths/${path.id}`}>
-                      <h3 className="font-semibold text-gray-900 text-sm leading-snug hover:text-blue-600 transition-colors line-clamp-2">
+                      <h3 className="font-semibold text-gray-900 text-sm leading-snug hover:text-primary transition-colors line-clamp-2">
                         {path.title}
                       </h3>
                     </Link>
@@ -127,7 +127,7 @@ export default function LearningPathsPage() {
                       <div className="flex items-center gap-1 flex-wrap mt-1">
                         {path.courses.slice(0, 3).map((pc: any, i: number) => (
                           <span key={pc.id ?? i} className="flex items-center gap-1 text-[11px]">
-                            <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-medium">
+                            <span className="bg-primary-50 text-primary-600 px-2 py-0.5 rounded font-medium">
                               {pc.course?.title ?? pc.title}
                             </span>
                             {i < Math.min(2, path.courses.length - 1) && (
@@ -163,7 +163,7 @@ export default function LearningPathsPage() {
                             <Button size="sm" variant="outline" className="w-full h-8 text-xs">View</Button>
                           </Link>
                           <Link href={`/lms/paths/${path.id}/edit`}>
-                            <Button size="sm" variant="ghost" className="h-8 px-2 text-gray-500 hover:text-blue-600">
+                            <Button size="sm" variant="ghost" className="h-8 px-2 text-gray-500 hover:text-primary">
                               <Pencil className="w-3.5 h-3.5" />
                             </Button>
                           </Link>

@@ -12,8 +12,8 @@ import Link from "next/link";
 
 const DIFFICULTY_COLORS: Record<string, string> = {
   Beginner:     "bg-green-100 text-green-700",
-  Intermediate: "bg-blue-100 text-blue-700",
-  Advanced:     "bg-purple-100 text-purple-700",
+  Intermediate: "bg-blue-100 text-blue",
+  Advanced:     "bg-primary-100 text-primary-700",
   Expert:       "bg-red-100 text-red-700",
 };
 
@@ -22,16 +22,16 @@ const CATEGORY_GRADIENTS: Record<string, string> = {
   "#F97316": "from-orange-400 to-orange-600",
   "#8B5CF6": "from-violet-400 to-violet-600",
   "#EC4899": "from-pink-400 to-pink-600",
-  "#3B82F6": "from-blue-400 to-blue-600",
+  "#3B82F6": "from-blue-300 to-blue",
   "#10B981": "from-emerald-400 to-emerald-600",
   "#F59E0B": "from-amber-400 to-amber-600",
-  "#6366F1": "from-indigo-400 to-indigo-600",
+  "#6366F1": "from-blue-200 to-blue-400",
   "#14B8A6": "from-teal-400 to-teal-600",
   "#84CC16": "from-lime-400 to-lime-600",
 };
 
 function thumbnailGradient(color?: string) {
-  return color ? (CATEGORY_GRADIENTS[color] ?? "from-blue-400 to-blue-700") : "from-slate-500 to-slate-700";
+  return color ? (CATEGORY_GRADIENTS[color] ?? "from-primary-400 to-primary-600") : "from-slate-500 to-slate-700";
 }
 
 function CourseCard({
@@ -94,7 +94,7 @@ function CourseCard({
       {/* Body */}
       <div className="flex flex-col flex-1 p-4 gap-2">
         <Link href={`/lms/courses/${course.id}`}>
-          <h3 className="font-semibold text-gray-900 text-sm leading-snug line-clamp-2 hover:text-blue-600 transition-colors">
+          <h3 className="font-semibold text-gray-900 text-sm leading-snug line-clamp-2 hover:text-primary transition-colors">
             {course.title}
           </h3>
         </Link>
@@ -253,7 +253,7 @@ export default function CourseLibraryPage() {
             <button
               key={d}
               onClick={() => setDifficulty(d)}
-              className={`px-3 py-1 rounded-lg text-xs font-medium border transition-colors ${difficulty === d ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-500 border-gray-200 hover:border-blue-300 hover:text-blue-600"}`}
+              className={`px-3 py-1 rounded-lg text-xs font-medium border transition-colors ${difficulty === d ? "bg-primary text-white border-primary" : "bg-white text-gray-500 border-gray-200 hover:border-primary-200 hover:text-primary"}`}
             >
               {d || "All"}
             </button>

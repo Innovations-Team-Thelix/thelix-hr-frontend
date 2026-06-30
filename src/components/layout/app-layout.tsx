@@ -27,6 +27,7 @@ const EMPLOYEE_ALLOWED_PREFIXES = [
   "/payslips",
   "/notifications",
   "/settings",
+  "/lms",
 ];
 
 interface AppLayoutProps {

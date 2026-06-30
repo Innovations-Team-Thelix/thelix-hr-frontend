@@ -21,7 +21,7 @@ export default function PathDetailPage() {
     return (
       <AppLayout>
         <div className="flex items-center justify-center h-64">
-          <Loader2 className="w-6 h-6 text-blue-600 animate-spin" />
+          <Loader2 className="w-6 h-6 text-primary animate-spin" />
         </div>
       </AppLayout>
     );
@@ -60,7 +60,7 @@ export default function PathDetailPage() {
         {/* Header */}
         <div className="space-y-1">
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <MapPin className="w-6 h-6 text-blue-600" />
+            <MapPin className="w-6 h-6 text-primary" />
             {path.title}
           </h1>
           {path.description && <p className="text-gray-500 text-sm">{path.description}</p>}
@@ -71,11 +71,11 @@ export default function PathDetailPage() {
           <CardContent className="p-5 space-y-3">
             <div className="flex items-center justify-between">
               <p className="text-sm font-medium text-gray-700">Overall Progress</p>
-              <span className="text-sm font-bold text-blue-600">{overallPct}%</span>
+              <span className="text-sm font-bold text-primary">{overallPct}%</span>
             </div>
             <div className="w-full bg-gray-100 rounded-full h-3">
               <div
-                className={`h-3 rounded-full transition-all ${overallPct === 100 ? "bg-green-500" : "bg-blue-500"}`}
+                className={`h-3 rounded-full transition-all ${overallPct === 100 ? "bg-green-500" : "bg-primary"}`}
                 style={{ width: `${overallPct}%` }}
               />
             </div>
@@ -104,7 +104,7 @@ export default function PathDetailPage() {
                     {done ? (
                       <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
                     ) : (
-                      <Circle className={`w-5 h-5 flex-shrink-0 ${isUnlocked ? "text-blue-400" : "text-gray-200"}`} />
+                      <Circle className={`w-5 h-5 flex-shrink-0 ${isUnlocked ? "text-primary-300" : "text-gray-200"}`} />
                     )}
                     {i < (path.courses?.length ?? 0) - 1 && (
                       <div className="w-px h-6 bg-gray-200 mt-1" />

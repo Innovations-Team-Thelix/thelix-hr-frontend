@@ -32,6 +32,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { AppLayout } from "@/components/layout/app-layout";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -287,6 +288,7 @@ function SbuManagementPanel() {
 
 // ─── Dashboard ─────────────────────────────────────────
 export default function DashboardPage() {
+  const router = useRouter();
   const [sbuFilter, setSbuFilter] = useState("");
   const [eventTab, setEventTab] = useState<"birthdays" | "anniversaries" | "leave">("birthdays");
   const [chartTab, setChartTab] = useState<"gender" | "employment" | "arrangement">("gender");
@@ -385,7 +387,7 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
 
           {/* Card 1: Workforce summary — counts only active employees */}
-          <Link href="/employees?status=Active" className="group">
+          <div className="group cursor-pointer" onClick={() => router.push("/employees?status=Active")}>
             <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm hover:shadow-md transition-shadow h-full">
               <div className="flex items-start justify-between">
                 <div>
@@ -415,11 +417,28 @@ export default function DashboardPage() {
                       0,
                     ),
                     icon: UserCheck,
+                    href: "/employees?status=Inactive",
                   },
-                  { label: "New Hires", value: workforce?.newHiresThisMonth ?? 0, icon: UserPlus },
-                  { label: "On Leave", value: leaveStats?.currentlyOnLeave ?? 0, icon: CalendarOff },
-                ].map(({ label, value, icon: Icon }) => (
-                  <div key={label} className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5 text-center">
+                  { label: "New Hires", value: workforce?.newHiresThisMonth ?? 0, icon: UserPlus, href: "/employees?joined=this_month" },
+                  {
+                    label: "On Leave",
+                    value: leaveStats?.currentlyOnLeave ?? 0,
+                    icon: CalendarOff,
+                    href: null as string | null,
+                    onClick: (e: React.MouseEvent) => {
+                      e.stopPropagation();
+                      setEventTab("leave");
+                      document.getElementById("events-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                    },
+                  },
+                ].map(({ label, value, icon: Icon, href, onClick }) => (
+                  href ? (
+                  <Link
+                    key={label}
+                    href={href}
+                    onClick={(e) => e.stopPropagation()}
+                    className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5 text-center hover:bg-gray-100 hover:border-gray-200 transition-colors"
+                  >
                     <Icon className="mx-auto mb-1 h-4 w-4 text-gray-400" />
                     {workforceLoading ? (
                       <Skeleton className="mx-auto h-5 w-8" />
@@ -427,11 +446,26 @@ export default function DashboardPage() {
                       <p className="text-lg font-bold" style={{ color: B.navy }}>{value}</p>
                     )}
                     <p className="text-xs text-gray-400">{label}</p>
-                  </div>
+                  </Link>
+                  ) : (
+                  <button
+                    key={label}
+                    onClick={onClick}
+                    className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5 text-center hover:bg-gray-100 hover:border-gray-200 transition-colors"
+                  >
+                    <Icon className="mx-auto mb-1 h-4 w-4 text-gray-400" />
+                    {workforceLoading ? (
+                      <Skeleton className="mx-auto h-5 w-8" />
+                    ) : (
+                      <p className="text-lg font-bold" style={{ color: B.navy }}>{value}</p>
+                    )}
+                    <p className="text-xs text-gray-400">{label}</p>
+                  </button>
+                  )
                 ))}
               </div>
             </div>
-          </Link>
+          </div>
 
           {/* Card 2: Next Payday — HERO dark card */}
           <Link href="/payroll" className="group">
@@ -525,7 +559,7 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
 
           {/* Events / Celebrations — 2 cols */}
-          <div className="lg:col-span-2 rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+          <div id="events-section" className="lg:col-span-2 rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
             <div className="flex items-center justify-between px-6 pt-5 pb-0">
               <h3 className="font-semibold text-gray-900">Events</h3>
               <Link href="/celebrations" className="text-xs font-medium transition-colors" style={{ color: B.orange }}>

@@ -70,7 +70,7 @@ export default function EditPathPage() {
     return (
       <AppLayout>
         <div className="flex items-center justify-center h-64">
-          <Loader2 className="w-6 h-6 text-blue-600 animate-spin" />
+          <Loader2 className="w-6 h-6 text-primary animate-spin" />
         </div>
       </AppLayout>
     );
@@ -86,7 +86,7 @@ export default function EditPathPage() {
             </button>
           </Link>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <MapPin className="w-6 h-6 text-blue-600" />
+            <MapPin className="w-6 h-6 text-primary" />
             Edit Learning Path
           </h1>
           <p className="text-gray-500 text-sm mt-1">Update path details and course sequence.</p>
@@ -109,7 +109,7 @@ export default function EditPathPage() {
                 Course Sequence * <span className="text-gray-400 font-normal">({selectedCourses.length} courses)</span>
               </label>
               <button type="button" onClick={() => setCoursePickerOpen((v) => !v)}
-                className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium">
+                className="flex items-center gap-1 text-xs text-primary hover:text-primary-700 font-medium">
                 <Plus className="w-3.5 h-3.5" /> Add Course
               </button>
             </div>
@@ -118,7 +118,7 @@ export default function EditPathPage() {
               <div className="rounded-xl border border-gray-200 overflow-hidden shadow-sm">
                 <div className="p-2 border-b bg-gray-50">
                   <input autoFocus
-                    className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary"
                     placeholder="Search courses…" value={courseSearch}
                     onChange={(e) => setCourseSearch(e.target.value)} />
                 </div>
@@ -128,12 +128,12 @@ export default function EditPathPage() {
                   ) : (
                     filteredCourses.map((c: any) => (
                       <button key={c.id} type="button" onClick={() => addCourse(c)}
-                        className="w-full text-left px-4 py-3 hover:bg-blue-50 transition-colors flex items-center justify-between group">
+                        className="w-full text-left px-4 py-3 hover:bg-primary-50 transition-colors flex items-center justify-between group">
                         <div>
                           <p className="text-sm font-medium text-gray-800">{c.title}</p>
                           <p className="text-xs text-gray-400 capitalize mt-0.5">{c.difficulty} · {c.estimatedMins ?? 0} min</p>
                         </div>
-                        <Plus className="w-4 h-4 text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <Plus className="w-4 h-4 text-primary-400 opacity-0 group-hover:opacity-100 transition-opacity" />
                       </button>
                     ))
                   )}
@@ -146,7 +146,7 @@ export default function EditPathPage() {
                 {selectedCourses.map((course, i) => (
                   <div key={course.id} className="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-xl hover:border-gray-300 transition-colors">
                     <GripVertical className="w-4 h-4 text-gray-300 shrink-0" />
-                    <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center shrink-0">{i + 1}</div>
+                    <div className="w-7 h-7 rounded-full bg-primary-100 text-primary-600 text-xs font-bold flex items-center justify-center shrink-0">{i + 1}</div>
                     <span className="flex-1 text-sm font-medium text-gray-800 truncate">{course.title}</span>
                     <div className="flex items-center gap-1">
                       <button type="button" onClick={() => moveCourse(i, -1)} disabled={i === 0} className="p-1 rounded hover:bg-gray-100 disabled:opacity-30">

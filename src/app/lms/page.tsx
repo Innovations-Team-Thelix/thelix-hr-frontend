@@ -36,7 +36,7 @@ import Link from "next/link";
 
 const DIFF_COLORS: Record<string, string> = {
   Beginner:     "bg-emerald-100 text-emerald-700",
-  Intermediate: "bg-blue-100 text-blue-700",
+  Intermediate: "bg-blue-100 text-blue",
   Advanced:     "bg-orange-100 text-orange-700",
   Expert:       "bg-red-100 text-red-700",
 };
@@ -52,7 +52,7 @@ function Ring({ pct, size = 48, stroke = 4 }: { pct: number; size?: number; stro
       <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#e5e7eb" strokeWidth={stroke} />
       <circle
         cx={size / 2} cy={size / 2} r={r}
-        fill="none" stroke="#2563eb" strokeWidth={stroke}
+        fill="none" stroke="#D97530" strokeWidth={stroke}
         strokeDasharray={`${dash} ${circ}`}
         strokeLinecap="round"
       />
@@ -66,13 +66,13 @@ function CourseProgressCard({ enr }: { enr: any }) {
   const isDone = enr.status === "Completed";
   return (
     <Link href={`/lms/courses/${enr.courseId}`}>
-      <div className="group flex gap-4 p-4 rounded-xl border border-gray-100 bg-white hover:border-blue-200 hover:shadow-md transition-all cursor-pointer">
+      <div className="group flex gap-4 p-4 rounded-xl border border-gray-100 bg-white hover:border-primary-200 hover:shadow-md transition-all cursor-pointer">
         {/* Thumbnail placeholder */}
-        <div className="w-20 h-16 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex-shrink-0 flex items-center justify-center">
+        <div className="w-20 h-16 rounded-lg bg-gradient-to-br from-primary-400 to-primary-600 flex-shrink-0 flex items-center justify-center">
           <BookOpen className="w-7 h-7 text-white opacity-80" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-gray-900 leading-snug line-clamp-2 group-hover:text-blue-600 transition-colors">
+          <p className="text-sm font-semibold text-gray-900 leading-snug line-clamp-2 group-hover:text-primary transition-colors">
             {enr.course.title}
           </p>
           <div className="flex items-center gap-2 mt-1">
@@ -89,7 +89,7 @@ function CourseProgressCard({ enr }: { enr: any }) {
           <div className="mt-2 flex items-center gap-2">
             <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
               <div
-                className={`h-full rounded-full transition-all ${isDone ? "bg-emerald-500" : "bg-blue-500"}`}
+                className={`h-full rounded-full transition-all ${isDone ? "bg-emerald-500" : "bg-primary"}`}
                 style={{ width: `${enr.progressPct}%` }}
               />
             </div>
@@ -100,7 +100,7 @@ function CourseProgressCard({ enr }: { enr: any }) {
           {isDone ? (
             <CheckCircle2 className="w-5 h-5 text-emerald-500" />
           ) : (
-            <PlayCircle className="w-5 h-5 text-blue-400 group-hover:text-blue-600 transition-colors" />
+            <PlayCircle className="w-5 h-5 text-primary-300 group-hover:text-primary transition-colors" />
           )}
         </div>
       </div>
@@ -113,8 +113,8 @@ function CourseProgressCard({ enr }: { enr: any }) {
 function EmptyLearner() {
   return (
     <div className="flex flex-col items-center justify-center py-16 px-6 text-center bg-white rounded-2xl border border-dashed border-gray-200">
-      <div className="w-20 h-20 rounded-full bg-blue-50 flex items-center justify-center mb-5">
-        <GraduationCap className="w-10 h-10 text-blue-400" />
+      <div className="w-20 h-20 rounded-full bg-primary-50 flex items-center justify-center mb-5">
+        <GraduationCap className="w-10 h-10 text-primary-300" />
       </div>
       <h3 className="text-lg font-bold text-gray-800 mb-2">No courses yet</h3>
       <p className="text-sm text-gray-400 max-w-xs mb-6 leading-relaxed">
@@ -122,7 +122,7 @@ function EmptyLearner() {
       </p>
       <div className="flex gap-3">
         <Link href="/lms/courses">
-          <Button className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-5">
+          <Button className="bg-primary hover:bg-primary-600 text-white rounded-lg px-5">
             Browse Courses
           </Button>
         </Link>
@@ -165,7 +165,7 @@ function EmployeeDashboard() {
       {/* Stats strip */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { icon: BookMarked,    label: "Enrolled",    value: stats.total,       color: "from-blue-500 to-blue-600",    bg: "bg-blue-50",    text: "text-blue-600" },
+          { icon: BookMarked,    label: "Enrolled",    value: stats.total,       color: "from-primary-400 to-primary",    bg: "bg-primary-50",    text: "text-primary" },
           { icon: PlayCircle,    label: "In Progress", value: stats.inProgress,  color: "from-amber-400 to-amber-500",  bg: "bg-amber-50",   text: "text-amber-600" },
           { icon: CheckCircle2,  label: "Completed",   value: stats.completed,   color: "from-emerald-500 to-green-600",bg: "bg-emerald-50", text: "text-emerald-600" },
           { icon: AlertCircle,   label: "Overdue",     value: stats.overdue,     color: "from-red-500 to-rose-600",     bg: "bg-red-50",     text: "text-red-600" },
@@ -190,7 +190,7 @@ function EmployeeDashboard() {
             <div className="flex items-center justify-between">
               <h2 className="font-bold text-gray-900 text-base">Continue Learning</h2>
               <Link href="/lms/my-courses">
-                <span className="text-xs text-blue-600 hover:underline flex items-center gap-0.5">
+                <span className="text-xs text-primary hover:underline flex items-center gap-0.5">
                   See all <ChevronRight className="w-3 h-3" />
                 </span>
               </Link>
@@ -205,7 +205,7 @@ function EmployeeDashboard() {
           {/* Right column */}
           <div className="space-y-4">
             {/* Points & streak */}
-            <div className="bg-gradient-to-br from-indigo-600 to-blue-600 rounded-2xl p-5 text-white">
+            <div className="bg-gradient-to-br from-primary-600 to-primary-500 rounded-2xl p-5 text-white">
               <div className="flex items-center gap-2 mb-3">
                 <Flame className="w-5 h-5 text-amber-300" />
                 <span className="text-sm font-semibold opacity-90">My Progress</span>
@@ -236,7 +236,7 @@ function EmployeeDashboard() {
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-bold text-gray-900">My Badges</h3>
                 <Link href="/lms/gamification">
-                  <span className="text-xs text-blue-600 hover:underline">Leaderboard</span>
+                  <span className="text-xs text-primary hover:underline">Leaderboard</span>
                 </Link>
               </div>
               {badges.length === 0 ? (
@@ -248,7 +248,7 @@ function EmployeeDashboard() {
                     Complete courses to earn your first badge.
                   </p>
                   <Link href="/lms/gamification">
-                    <button className="text-xs text-blue-600 hover:underline mt-2">View all badges</button>
+                    <button className="text-xs text-primary hover:underline mt-2">View all badges</button>
                   </Link>
                 </div>
               ) : (
@@ -276,7 +276,7 @@ function EmployeeDashboard() {
               ].map(({ href, label, icon: Icon }) => (
                 <Link key={href} href={href}>
                   <div className="flex items-center gap-2.5 p-2.5 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer group">
-                    <Icon className="w-4 h-4 text-blue-500" />
+                    <Icon className="w-4 h-4 text-primary-400" />
                     <span className="text-sm text-gray-600 group-hover:text-gray-900 flex-1">{label}</span>
                     <ArrowRight className="w-3 h-3 text-gray-300 group-hover:text-gray-500 transition-colors" />
                   </div>
@@ -321,8 +321,8 @@ function AdminDashboard() {
       {/* Stats strip */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { icon: BookOpen,   label: "Published Courses",   value: totalCourses,       color: "from-blue-500 to-blue-600",      text: "text-blue-600" },
-          { icon: Users,      label: "Total Enrollments",   value: totalEnrollments,   color: "from-purple-500 to-violet-600",  text: "text-purple-600" },
+          { icon: BookOpen,   label: "Published Courses",   value: totalCourses,       color: "from-primary-400 to-primary",      text: "text-primary" },
+          { icon: Users,      label: "Total Enrollments",   value: totalEnrollments,   color: "from-blue-300 to-blue",  text: "text-blue" },
           { icon: TrendingUp, label: "Completions",         value: totalCompleted,     color: "from-emerald-500 to-green-600",  text: "text-emerald-600" },
           { icon: Award,      label: "Certificates Issued", value: totalCertificates,  color: "from-amber-400 to-amber-500",    text: "text-amber-600" },
         ].map(({ icon: Icon, label, value, color, text }) => (
@@ -339,15 +339,15 @@ function AdminDashboard() {
       {/* Empty state for admin when no courses exist */}
       {isEmpty ? (
         <div className="flex flex-col items-center justify-center py-16 px-6 text-center bg-white rounded-2xl border border-dashed border-gray-200">
-          <div className="w-20 h-20 rounded-full bg-blue-50 flex items-center justify-center mb-5">
-            <BookOpen className="w-10 h-10 text-blue-400" />
+          <div className="w-20 h-20 rounded-full bg-primary-50 flex items-center justify-center mb-5">
+            <BookOpen className="w-10 h-10 text-primary-300" />
           </div>
           <h3 className="text-lg font-bold text-gray-800 mb-2">No courses published yet</h3>
           <p className="text-sm text-gray-400 max-w-xs mb-6 leading-relaxed">
             Create your first course to get the Learning Hub running. You can add modules, lessons, and quizzes.
           </p>
           <Link href="/lms/courses/create">
-            <Button className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-5 flex items-center gap-2">
+            <Button className="bg-primary hover:bg-primary-600 text-white rounded-lg px-5 flex items-center gap-2">
               <Plus className="w-4 h-4" />
               Create First Course
             </Button>
@@ -402,7 +402,7 @@ function AdminDashboard() {
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-bold text-gray-900">Recent Enrollments</h3>
                 <Link href="/lms/reports">
-                  <span className="text-xs text-blue-600 hover:underline flex items-center gap-0.5">
+                  <span className="text-xs text-primary hover:underline flex items-center gap-0.5">
                     Full Report <ChevronRight className="w-3 h-3" />
                   </span>
                 </Link>
@@ -413,7 +413,7 @@ function AdminDashboard() {
                 <div className="divide-y divide-gray-50">
                   {recentEnrollments.slice(0, 5).map((enr: any) => (
                     <div key={enr.id} className="flex items-center gap-3 py-3">
-                      <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-xs font-bold text-blue-700 flex-shrink-0">
+                      <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center text-xs font-bold text-primary-600 flex-shrink-0">
                         {enr.employee?.fullName?.charAt(0) ?? "?"}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -422,7 +422,7 @@ function AdminDashboard() {
                       </div>
                       <span className={`text-[10px] px-2 py-1 rounded-full font-medium flex-shrink-0 ${
                         enr.status === "Completed"  ? "bg-emerald-50 text-emerald-700" :
-                        enr.status === "InProgress" ? "bg-blue-50 text-blue-700" :
+                        enr.status === "InProgress" ? "bg-primary-50 text-primary-600" :
                         "bg-gray-100 text-gray-500"
                       }`}>
                         {enr.status?.replace(/([A-Z])/g, " $1").trim()}
@@ -439,7 +439,7 @@ function AdminDashboard() {
             <h2 className="font-bold text-gray-900 text-base">Quick Actions</h2>
             <div className="space-y-3">
               {[
-                { href: "/lms/courses/create", label: "Create New Course",   icon: Plus,      color: "bg-blue-600 hover:bg-blue-700 text-white" },
+                { href: "/lms/courses/create", label: "Create New Course",   icon: Plus,      color: "bg-primary hover:bg-primary-600 text-white" },
                 { href: "/lms/courses",        label: "Manage Courses",      icon: BookOpen,  color: "bg-white hover:bg-gray-50 text-gray-700 border border-gray-200" },
                 { href: "/lms/team",           label: "Team Progress",       icon: Users,     color: "bg-white hover:bg-gray-50 text-gray-700 border border-gray-200" },
                 { href: "/lms/reports",        label: "View Reports",        icon: BarChart3, color: "bg-white hover:bg-gray-50 text-gray-700 border border-gray-200" },
@@ -456,7 +456,7 @@ function AdminDashboard() {
             </div>
 
             {/* At-a-glance badges */}
-            <div className="bg-gradient-to-br from-purple-600 to-indigo-700 rounded-2xl p-5 text-white">
+            <div className="bg-gradient-to-br from-primary-600 to-primary-500 rounded-2xl p-5 text-white">
               <div className="flex items-center gap-2 mb-4">
                 <Award className="w-5 h-5 text-yellow-300" />
                 <span className="text-sm font-semibold">Certificates Issued</span>
@@ -483,7 +483,7 @@ function WelcomeBanner({ name, isAdmin }: { name: string; isAdmin: boolean }) {
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
   return (
-    <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 px-8 py-7 text-white">
+    <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary-600 via-primary-500 to-primary-400 px-8 py-7 text-white">
       {/* Background blobs */}
       <div className="absolute -top-8 -right-8 w-40 h-40 rounded-full bg-white/5" />
       <div className="absolute -bottom-6 right-24 w-28 h-28 rounded-full bg-white/5" />
@@ -491,11 +491,11 @@ function WelcomeBanner({ name, isAdmin }: { name: string; isAdmin: boolean }) {
 
       <div className="relative flex items-start justify-between">
         <div>
-          <p className="text-blue-200 text-sm font-medium">{greeting},</p>
+          <p className="text-primary-200 text-sm font-medium">{greeting},</p>
           <h1 className="text-2xl font-bold mt-0.5">
             {name ? name.split(" ")[0] : "Welcome"} 👋
           </h1>
-          <p className="text-blue-100 text-sm mt-2 max-w-sm leading-relaxed">
+          <p className="text-primary-100 text-sm mt-2 max-w-sm leading-relaxed">
             {isAdmin
               ? "Here's what's happening across your Learning Hub today."
               : "Pick up where you left off and keep building your skills."}
@@ -510,7 +510,7 @@ function WelcomeBanner({ name, isAdmin }: { name: string; isAdmin: boolean }) {
       {!isAdmin && (
         <div className="relative mt-5 flex gap-3">
           <Link href="/lms/courses">
-            <button className="bg-white text-blue-700 hover:bg-blue-50 text-sm font-semibold px-4 py-2 rounded-lg transition-colors">
+            <button className="bg-white text-primary-600 hover:bg-primary-50 text-sm font-semibold px-4 py-2 rounded-lg transition-colors">
               Browse Courses
             </button>
           </Link>
