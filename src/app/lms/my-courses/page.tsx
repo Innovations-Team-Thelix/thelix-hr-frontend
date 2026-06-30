@@ -10,7 +10,7 @@ import { formatDate } from "@/lib/utils";
 
 const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string; icon: any }> = {
   NotStarted: { label: "Not Started",  bg: "bg-gray-100",   text: "text-gray-600",  icon: BookMarked },
-  InProgress:  { label: "In Progress",  bg: "bg-blue-100",   text: "text-blue-700",  icon: PlayCircle },
+  InProgress:  { label: "In Progress",  bg: "bg-primary-100",   text: "text-primary-600",  icon: PlayCircle },
   Completed:   { label: "Completed",    bg: "bg-green-100",  text: "text-green-700", icon: CheckCircle2 },
   Dropped:     { label: "Dropped",      bg: "bg-red-100",    text: "text-red-600",   icon: AlertCircle },
   Expired:     { label: "Overdue",      bg: "bg-orange-100", text: "text-orange-700",icon: AlertCircle },
@@ -18,8 +18,8 @@ const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string; i
 
 const DIFFICULTY_COLORS: Record<string, string> = {
   Beginner:     "bg-green-100 text-green-700",
-  Intermediate: "bg-blue-100 text-blue-700",
-  Advanced:     "bg-purple-100 text-purple-700",
+  Intermediate: "bg-blue-100 text-blue",
+  Advanced:     "bg-primary-100 text-primary-700",
   Expert:       "bg-red-100 text-red-700",
 };
 
@@ -31,7 +31,7 @@ export default function MyCoursesPage() {
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <BookMarked className="w-6 h-6 text-blue-600" />
+            <BookMarked className="w-6 h-6 text-primary" />
             My Courses
           </h1>
           <p className="text-gray-500 text-sm mt-1">Track your assigned and enrolled courses.</p>
@@ -46,7 +46,7 @@ export default function MyCoursesPage() {
             <CardContent className="p-12 text-center">
               <BookMarked className="w-12 h-12 text-gray-300 mx-auto mb-3" />
               <p className="text-gray-500">No courses assigned yet.</p>
-              <Link href="/lms/courses" className="text-blue-600 text-sm mt-2 inline-block hover:underline">Browse the course library →</Link>
+              <Link href="/lms/courses" className="text-primary text-sm mt-2 inline-block hover:underline">Browse the course library →</Link>
             </CardContent>
           </Card>
         ) : (
@@ -76,7 +76,7 @@ export default function MyCoursesPage() {
                         </div>
                         <div className="w-full bg-gray-100 rounded-full h-2">
                           <div
-                            className="h-2 rounded-full transition-all bg-blue-500"
+                            className="h-2 rounded-full transition-all bg-primary"
                             style={{ width: `${enr.progressPct}%` }}
                           />
                         </div>

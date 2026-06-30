@@ -586,7 +586,7 @@ export default function EmployeeProfilePage() {
 
   const profileTabs = [
     { id: "personal", label: "Personal" },
-    { id: "employment-details", label: "Employment Details" },
+    ...(isAdmin ? [{ id: "employment-details", label: "Employment Details" }] : []),
     ...(canViewTimeline ? [{ id: "timeline", label: "Timeline" }] : []),
     ...(canViewDiscipline
       ? [

@@ -522,7 +522,7 @@ export interface EmployeeFilters {
   limit?: number;
   sbuId?: string;
   departmentId?: string;
-  status?: EmploymentStatus;
+  status?: EmploymentStatus | 'Inactive';
   scope?: 'all';
   search?: string;
   joined?: 'this_month' | 'last_month' | 'this_year';

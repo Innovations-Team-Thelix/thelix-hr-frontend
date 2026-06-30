@@ -10,7 +10,7 @@ import Link from "next/link";
 
 const STATUS_COLORS: Record<string, string> = {
   NotStarted: "bg-gray-100 text-gray-600",
-  InProgress:  "bg-blue-100 text-blue-700",
+  InProgress:  "bg-primary-100 text-primary-600",
   Completed:   "bg-green-100 text-green-700",
   Dropped:     "bg-red-100 text-red-600",
   Expired:     "bg-orange-100 text-orange-700",
@@ -29,7 +29,7 @@ export default function TeamProgressPage() {
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <UsersRound className="w-6 h-6 text-blue-600" />
+            <UsersRound className="w-6 h-6 text-primary" />
             Team Learning Progress
           </h1>
           <p className="text-gray-500 text-sm mt-1">Monitor your team's course completion and identify employees at risk.</p>
@@ -43,7 +43,7 @@ export default function TeamProgressPage() {
             <button
               key={value}
               onClick={() => setView(value as any)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm border transition-colors ${view === value ? "bg-blue-600 text-white border-blue-600" : "text-gray-600 border-gray-200 hover:border-blue-300"}`}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm border transition-colors ${view === value ? "bg-primary text-white border-primary" : "text-gray-600 border-gray-200 hover:border-primary-200"}`}
             >
               <Icon className="w-4 h-4" /> {label}
             </button>
@@ -80,14 +80,14 @@ export default function TeamProgressPage() {
                         <p className="text-xs text-gray-400">{enr.employee.jobTitle}</p>
                       </td>
                       <td className="px-4 py-3">
-                        <Link href={`/lms/courses/${enr.courseId}`} className="text-blue-600 hover:underline text-sm">
+                        <Link href={`/lms/courses/${enr.courseId}`} className="text-primary hover:underline text-sm">
                           {enr.course.title}
                         </Link>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           <div className="w-24 bg-gray-100 rounded-full h-2">
-                            <div className={`h-2 rounded-full ${enr.progressPct === 100 ? "bg-green-500" : enr.progressPct > 0 ? "bg-blue-500" : "bg-gray-300"}`} style={{ width: `${enr.progressPct}%` }} />
+                            <div className={`h-2 rounded-full ${enr.progressPct === 100 ? "bg-green-500" : enr.progressPct > 0 ? "bg-primary" : "bg-gray-300"}`} style={{ width: `${enr.progressPct}%` }} />
                           </div>
                           <span className="text-xs text-gray-500">{enr.progressPct}%</span>
                         </div>

@@ -375,7 +375,7 @@ function EmployeesPageContent() {
     { label: "Resigned", value: "Resigned" },
   ];
 
-  const colCount = isAdmin ? 10 : 8;
+  const colCount = isAdmin ? 10 : 6;
 
   return (
     <AppLayout pageTitle="Employees">
@@ -682,9 +682,9 @@ function EmployeesPageContent() {
                   <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">SBU</TableHead>
                   <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Department</TableHead>
                   <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Type</TableHead>
-                  <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Date of Hire</TableHead>
-                  <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Status</TableHead>
-                  <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Tags</TableHead>
+                  {isAdmin && <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Date of Hire</TableHead>}
+                  {isAdmin && <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Status</TableHead>}
+                  {isAdmin && <TableHead className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Tags</TableHead>}
                   {isAdmin && <TableHead className="w-10" />}
                 </TableRow>
               </TableHeader>
@@ -749,13 +749,17 @@ function EmployeesPageContent() {
                             {emp.employmentType || "—"}
                           </span>
                         </TableCell>
-                        <TableCell className="text-sm text-gray-500">{formatDate(emp.dateOfHire)}</TableCell>
-                        <TableCell>
-                          <StatusBadge status={emp.employmentStatus} />
-                        </TableCell>
-                        <TableCell>
-                          <EmployeeTags tags={emp.tags} />
-                        </TableCell>
+                        {isAdmin && <TableCell className="text-sm text-gray-500">{formatDate(emp.dateOfHire)}</TableCell>}
+                        {isAdmin && (
+                          <TableCell>
+                            <StatusBadge status={emp.employmentStatus} />
+                          </TableCell>
+                        )}
+                        {isAdmin && (
+                          <TableCell>
+                            <EmployeeTags tags={emp.tags} />
+                          </TableCell>
+                        )}
                         {isAdmin && (
                           <TableCell onClick={(e) => e.stopPropagation()}>
                             <div className="relative" ref={activeDropdown === emp.id ? dropdownRef : undefined}>

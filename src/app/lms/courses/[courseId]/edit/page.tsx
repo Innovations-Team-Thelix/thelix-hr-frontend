@@ -59,7 +59,7 @@ export default function EditCoursePage() {
     return (
       <AppLayout>
         <div className="flex items-center justify-center h-64">
-          <Loader2 className="w-6 h-6 text-blue-600 animate-spin" />
+          <Loader2 className="w-6 h-6 text-primary animate-spin" />
         </div>
       </AppLayout>
     );
@@ -76,7 +76,7 @@ export default function EditCoursePage() {
           </Link>
           <div>
             <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-              <PenSquare className="w-6 h-6 text-blue-600" />
+              <PenSquare className="w-6 h-6 text-primary" />
               Edit Course
             </h1>
             <p className="text-gray-500 text-sm mt-0.5">Update course details. Modules and lessons are managed on the course page.</p>
@@ -151,7 +151,7 @@ export default function EditCoursePage() {
                   id="isMandatory"
                   checked={form.isMandatory}
                   onChange={(e) => setForm((f) => ({ ...f, isMandatory: e.target.checked }))}
-                  className="h-4 w-4 rounded border-gray-300 text-blue-600"
+                  className="h-4 w-4 rounded border-gray-300 text-primary"
                 />
                 <label htmlFor="isMandatory" className="text-sm font-medium text-gray-700 cursor-pointer">Mark as mandatory course</label>
               </div>
