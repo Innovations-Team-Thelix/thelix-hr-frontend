@@ -158,6 +158,15 @@ export function useCreateLmsLesson(courseId: string) {
   });
 }
 
+export function useUpdateLmsLesson(courseId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: object }) => api.put(`/lms/lessons/${id}`, data).then((r) => r.data),
+    onSuccess: () => { toast.success("Lesson updated."); qc.invalidateQueries({ queryKey: lmsKeys().course(courseId) }); },
+    onError: (e: any) => toast.error(e.response?.data?.message ?? "Failed to update lesson."),
+  });
+}
+
 export function useDeleteLmsLesson(courseId: string) {
   const qc = useQueryClient();
   return useMutation({
@@ -221,7 +230,87 @@ export function useCourseProgress(courseId: string) {
   });
 }
 
-// ─── Quiz ────────────────────────────────────────────
+// ─── Quiz CRUD (admin) ───────────────────────────────
+
+export function useQuizByCourse(courseId: string) {
+  return useQuery({
+    queryKey: ["lms", "quiz", "course", courseId],
+    queryFn: async () => {
+      try {
+        return await api.get(`/lms/courses/${courseId}/quiz`).then((r) => r.data);
+      } catch (e: any) {
+        if (e?.response?.status === 404) return null;
+        throw e;
+      }
+    },
+    enabled: !!courseId,
+    retry: false,
+  });
+}
+
+export function useCreateQuiz(courseId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: object) => api.post(`/lms/courses/${courseId}/quiz`, data).then((r) => r.data),
+    onSuccess: () => {
+      toast.success("Assessment created.");
+      qc.invalidateQueries({ queryKey: ["lms", "quiz", "course", courseId] });
+      qc.invalidateQueries({ queryKey: ["lms", "courses"] });
+    },
+    onError: (e: any) => toast.error(e.response?.data?.message ?? "Failed to create assessment."),
+  });
+}
+
+export function useUpdateQuiz(courseId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: object }) => api.put(`/lms/quizzes/${id}`, data).then((r) => r.data),
+    onSuccess: () => {
+      toast.success("Settings saved.");
+      qc.invalidateQueries({ queryKey: ["lms", "quiz", "course", courseId] });
+    },
+    onError: (e: any) => toast.error(e.response?.data?.message ?? "Failed to save settings."),
+  });
+}
+
+export function useAddQuestion(courseId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ quizId, data }: { quizId: string; data: object }) =>
+      api.post(`/lms/quizzes/${quizId}/questions`, data).then((r) => r.data),
+    onSuccess: () => {
+      toast.success("Question added.");
+      qc.invalidateQueries({ queryKey: ["lms", "quiz", "course", courseId] });
+    },
+    onError: (e: any) => toast.error(e.response?.data?.message ?? "Failed to add question."),
+  });
+}
+
+export function useUpdateQuestion(courseId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: object }) => api.put(`/lms/quiz-questions/${id}`, data).then((r) => r.data),
+    onSuccess: () => {
+      toast.success("Question updated.");
+      qc.invalidateQueries({ queryKey: ["lms", "quiz", "course", courseId] });
+    },
+    onError: (e: any) => toast.error(e.response?.data?.message ?? "Failed to update question."),
+  });
+}
+
+export function useDeleteQuestion(courseId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete(`/lms/quiz-questions/${id}`),
+    onSuccess: () => {
+      toast.success("Question removed.");
+      qc.invalidateQueries({ queryKey: ["lms", "quiz", "course", courseId] });
+    },
+    onError: (e: any) => toast.error(e.response?.data?.message ?? "Failed to remove question."),
+  });
+}
+
+// ─── Quiz (take) ─────────────────────────────────────
 
 export function useStartQuizAttempt() {
   return useMutation({
@@ -342,6 +431,20 @@ export function useLmsPathProgress(pathId: string) {
 }
 
 // ─── Gamification ────────────────────────────────────
+
+export function useSbuLeaderboard(period: "weekly" | "monthly" | "all" = "all") {
+  return useQuery({
+    queryKey: ["lms", "leaderboard", "sbu", period],
+    queryFn: () => api.get("/lms/leaderboard/sbu", { params: { period } }).then((r) => r.data),
+  });
+}
+
+export function useDepartmentLeaderboard(period: "weekly" | "monthly" | "all" = "all") {
+  return useQuery({
+    queryKey: ["lms", "leaderboard", "department", period],
+    queryFn: () => api.get("/lms/leaderboard/department", { params: { period } }).then((r) => r.data),
+  });
+}
 
 export function useLmsLeaderboard(period: "weekly" | "monthly" | "all" = "all") {
   return useQuery({
