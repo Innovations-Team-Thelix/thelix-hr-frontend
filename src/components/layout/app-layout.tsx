@@ -27,14 +27,16 @@ const EMPLOYEE_ALLOWED_PREFIXES = [
   "/payslips",
   "/notifications",
   "/settings",
+  "/lms",
 ];
 
 interface AppLayoutProps {
   children: React.ReactNode;
   pageTitle?: string;
+  fullWidth?: boolean;
 }
 
-export function AppLayout({ children, pageTitle }: AppLayoutProps) {
+export function AppLayout({ children, pageTitle, fullWidth }: AppLayoutProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { isAuthenticated, isSsoSession, isLoading: isAuthLoading, checkAuth, setProfile, viewAs } = useAuth();
@@ -191,10 +193,14 @@ export function AppLayout({ children, pageTitle }: AppLayoutProps) {
           onClose={() => setShowWalkthrough(false)}
         />
 
-        <main className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-            {children}
-          </div>
+        <main className="flex-1 overflow-hidden">
+          {fullWidth ? (
+            <div className="h-full">{children}</div>
+          ) : (
+            <div className="h-full overflow-y-auto">
+              <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">{children}</div>
+            </div>
+          )}
         </main>
       </div>
     </div>

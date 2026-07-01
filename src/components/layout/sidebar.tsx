@@ -48,6 +48,16 @@ import {
   UserMinus,
   UserX,
   PauseCircle,
+  GraduationCap,
+  BookMarked,
+  Library,
+  PenSquare,
+  MapPin,
+  ClipboardList,
+  Award,
+  Trophy,
+  UsersRound,
+  BarChart2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -96,6 +106,18 @@ const kpiChildren: NavChild[] = [
   { label: "HR Review",           href: "/kpi/hr-review",  icon: Briefcase,      roles: ["CVO", "Admin", "SBUHead", "Finance"] },
   { label: "Reports & Analytics", href: "/kpi/reports",    icon: TrendingUp,     roles: ["CVO", "Admin", "SBUHead", "Finance", "Employee"] },
   { label: "KPI Dictionary",      href: "/kpi/dictionary", icon: FileEdit,       roles: ["CVO", "Admin", "SBUHead", "Finance", "Employee"] },
+];
+
+const lmsChildren: NavChild[] = [
+  { label: "Dashboard",           href: "/lms",                icon: LayoutDashboard, roles: ["CVO", "Admin", "SBUHead", "Director", "Manager", "Finance", "Employee"] },
+  { label: "My Courses",          href: "/lms/my-courses",     icon: BookMarked,      roles: ["Employee", "Finance", "Director", "Manager", "SBUHead"] },
+  { label: "Course Library",      href: "/lms/courses",        icon: Library,         roles: ["CVO", "Admin", "SBUHead", "Director", "Manager", "Finance", "Employee"] },
+  { label: "Course Builder",      href: "/lms/courses/create", icon: PenSquare,       roles: ["CVO", "Admin"] },
+  { label: "Learning Paths",      href: "/lms/paths",          icon: MapPin,          roles: ["CVO", "Admin", "SBUHead", "Director", "Manager", "Finance", "Employee"] },
+  { label: "Assessments",         href: "/lms/assessments",    icon: ClipboardList,   roles: ["CVO", "Admin"] },
+  { label: "Certificates",        href: "/lms/certificates",   icon: Award,           roles: ["CVO", "Admin", "SBUHead", "Director", "Manager", "Finance", "Employee"] },
+  { label: "Badges & Leaderboard", href: "/lms/gamification",  icon: Trophy,          roles: ["CVO", "Admin", "SBUHead", "Director", "Manager", "Finance", "Employee"] },
+  { label: "Reports",             href: "/lms/reports",        icon: BarChart2,       roles: ["CVO", "Admin", "SBUHead", "Director", "Manager"] },
 ];
 
 const navItems: NavItem[] = [
@@ -179,6 +201,13 @@ const navItems: NavItem[] = [
     icon: Target,
     roles: ["CVO", "Admin", "SBUHead", "Finance", "Employee"],
     children: kpiChildren,
+  },
+  {
+    label: "Learning",
+    href: "/lms",
+    icon: GraduationCap,
+    roles: ["CVO", "Admin", "SBUHead", "Director", "Manager", "Finance", "Employee"],
+    children: lmsChildren,
   },
   {
     label: "Attendance Reports",
@@ -300,10 +329,12 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
   const isOnKpi = pathname.startsWith("/kpi");
   const isOnPerformance = pathname.startsWith("/performance");
   const isOnEmployees = pathname.startsWith("/employees");
+  const isOnLms = pathname.startsWith("/lms");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
     "/kpi": isOnKpi,
     "/performance": isOnPerformance,
     "/employees": isOnEmployees,
+    "/lms": isOnLms,
   });
 
   const filteredNavItems = navItems.filter(
