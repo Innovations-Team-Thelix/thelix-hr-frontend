@@ -10,6 +10,13 @@ import {
   CalendarOff,
   MapPin,
   Wifi,
+  BookOpen,
+  GraduationCap,
+  Trophy,
+  Star,
+  Zap,
+  ChevronRight,
+  Play,
 } from "lucide-react";
 import Link from "next/link";
 import dayjs from "dayjs";
@@ -24,6 +31,8 @@ import {
   useLeaveStats,
   useCelebrations,
   useWorkforceStats,
+  useMyLmsDashboard,
+  useMyLmsPoints,
 } from "@/hooks";
 import { useRoster } from "@/hooks/useRoster";
 import { formatDate, cn } from "@/lib/utils";
@@ -41,6 +50,8 @@ export default function EmployeeDashboardPage() {
   const { data: leaveStats, isLoading: leaveStatsLoading } = useLeaveStats();
   const { data: celebrations, isLoading: celebrationsLoading } = useCelebrations();
   const { data: workforceStats } = useWorkforceStats();
+  const { data: lmsDash, isLoading: lmsLoading } = useMyLmsDashboard();
+  const { data: lmsPoints } = useMyLmsPoints();
 
   const weekStart = dayjs().startOf("week").format("YYYY-MM-DD");
   const weekEnd = dayjs().endOf("week").format("YYYY-MM-DD");
@@ -293,7 +304,149 @@ export default function EmployeeDashboardPage() {
           </CardContent>
         </Card>
 
-        {/* ── Row 3: Who's On Leave Today | Upcoming Celebrations ── */}
+        {/* ── Row 3: My Learning ── */}
+        <div>
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">My Learning</h3>
+            <Link href="/lms" className="flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+              Go to LMS <ChevronRight className="h-3 w-3" />
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            {/* Stats + points card */}
+            <div className="rounded-2xl border border-gray-100 bg-white shadow-sm p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10">
+                  <GraduationCap className="h-4 w-4 text-primary" />
+                </div>
+                <p className="text-sm font-semibold text-gray-900">Progress Summary</p>
+              </div>
+
+              {lmsLoading ? (
+                <div className="space-y-2">
+                  {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {[
+                    { label: "Completed",   value: (lmsDash as any)?.stats?.completed  ?? 0, color: "bg-emerald-500", text: "text-emerald-700", bg: "bg-emerald-50" },
+                    { label: "In Progress", value: (lmsDash as any)?.stats?.inProgress ?? 0, color: "bg-primary",     text: "text-primary",    bg: "bg-primary/10" },
+                    { label: "Overdue",     value: (lmsDash as any)?.stats?.overdue    ?? 0, color: "bg-red-400",     text: "text-red-600",    bg: "bg-red-50"     },
+                  ].map(({ label, value, bg, text }) => (
+                    <div key={label} className={`flex items-center justify-between rounded-xl px-3 py-2 ${bg}`}>
+                      <span className={`text-xs font-medium ${text}`}>{label}</span>
+                      <span className={`text-sm font-bold ${text}`}>{value}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Points */}
+              {!!lmsPoints && (
+                <div className="mt-4 pt-4 border-t border-gray-100">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Points Earned</p>
+                  <div className="flex items-center justify-between gap-2">
+                    {[
+                      { label: "Total", value: (lmsPoints as any)?.total  ?? 0, icon: Star, color: "text-amber-500"  },
+                      { label: "Week",  value: (lmsPoints as any)?.weekly ?? 0, icon: Zap,  color: "text-primary"   },
+                      { label: "Month", value: (lmsPoints as any)?.monthly ?? 0, icon: Trophy, color: "text-blue-500" },
+                    ].map(({ label, value, icon: Icon, color }) => (
+                      <div key={label} className="flex flex-col items-center gap-0.5">
+                        <Icon className={`h-4 w-4 ${color}`} />
+                        <p className="text-base font-bold text-gray-900">{value}</p>
+                        <p className="text-[10px] text-gray-400">{label}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Continue Learning */}
+            <div className="lg:col-span-2 rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+              <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-gray-50">
+                <div className="flex items-center gap-2">
+                  <BookOpen className="h-4 w-4 text-primary" />
+                  <p className="text-sm font-semibold text-gray-900">Continue Learning</p>
+                </div>
+                <Link href="/lms/my-courses" className="text-xs font-medium text-primary hover:underline">
+                  All Courses →
+                </Link>
+              </div>
+
+              <div className="px-5 py-3 divide-y divide-gray-50">
+                {lmsLoading ? (
+                  <div className="space-y-3 py-2">
+                    {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-14" />)}
+                  </div>
+                ) : !((lmsDash as any)?.enrollments as any[])?.filter((e: any) => e.status === "InProgress").length ? (
+                  <div className="py-10 text-center">
+                    <BookOpen className="mx-auto h-8 w-8 text-gray-200" />
+                    <p className="mt-2 text-sm text-gray-500">No courses in progress</p>
+                    <Link
+                      href="/lms/courses"
+                      className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-white hover:bg-primary/90 transition-colors"
+                    >
+                      <BookOpen className="h-3.5 w-3.5" /> Browse Courses
+                    </Link>
+                  </div>
+                ) : (
+                  ((lmsDash as any)?.enrollments as any[])
+                    .filter((e: any) => e.status === "InProgress")
+                    .slice(0, 4)
+                    .map((enr: any) => {
+                      const pct = Math.round((enr.progressPct ?? enr.progress ?? 0));
+                      return (
+                        <Link
+                          key={enr.id}
+                          href={`/lms/courses/${enr.course?.id}`}
+                          className="group flex items-center gap-3 py-3 hover:bg-gray-50 -mx-5 px-5 transition-colors"
+                        >
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 group-hover:bg-primary/20 transition-colors">
+                            <Play className="h-3.5 w-3.5 text-primary" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-800 truncate">{enr.course?.title}</p>
+                            <div className="mt-1 flex items-center gap-2">
+                              <div className="h-1.5 flex-1 rounded-full bg-gray-100 overflow-hidden">
+                                <div
+                                  className="h-1.5 rounded-full bg-primary transition-all duration-500"
+                                  style={{ width: `${pct}%` }}
+                                />
+                              </div>
+                              <span className="text-[11px] font-semibold text-gray-400 shrink-0">{pct}%</span>
+                            </div>
+                          </div>
+                          <ChevronRight className="h-4 w-4 text-gray-300 group-hover:text-gray-500 shrink-0 transition-colors" />
+                        </Link>
+                      );
+                    })
+                )}
+              </div>
+
+              {/* Quick action footer */}
+              <div className="grid grid-cols-3 border-t border-gray-50">
+                {[
+                  { label: "Browse Courses",  href: "/lms/courses",      icon: BookOpen  },
+                  { label: "Certificates",    href: "/lms/certificates", icon: Award     },
+                  { label: "Leaderboard",     href: "/lms/gamification", icon: Trophy    },
+                ].map(({ label, href, icon: Icon }) => (
+                  <Link
+                    key={label}
+                    href={href}
+                    className="flex flex-col items-center gap-1 py-3 text-center hover:bg-gray-50 transition-colors border-r border-gray-50 last:border-0"
+                  >
+                    <Icon className="h-4 w-4 text-gray-400" />
+                    <span className="text-[11px] font-medium text-gray-500">{label}</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Row 4: Who's On Leave Today | Upcoming Celebrations ── */}
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
 
           {/* Who's On Leave Today */}
