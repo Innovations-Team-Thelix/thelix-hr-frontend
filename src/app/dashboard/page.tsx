@@ -19,6 +19,14 @@ import {
   TrendingUp,
   CalendarDays,
   ChevronRight,
+  BookOpen,
+  GraduationCap,
+  Trophy,
+  AlertTriangle,
+  FileText,
+  Layers,
+  ArrowRight,
+  Star,
 } from "lucide-react";
 import {
   BarChart,
@@ -54,6 +62,9 @@ import {
   useCelebrations,
   useSbus,
   useMyProfile,
+  useAdminLmsDashboard,
+  useLmsLeaderboard,
+  useLmsTeamAtRisk,
 } from "@/hooks";
 import { useAuth } from "@/hooks/useAuth";
 import { formatDate } from "@/lib/utils";
@@ -299,6 +310,9 @@ export default function DashboardPage() {
   const { data: workforce, isLoading: workforceLoading } = useWorkforceStats(sbuFilter || undefined);
   const { data: leaveStats, isLoading: leaveLoading } = useLeaveStats(sbuFilter || undefined);
   const { data: celebrations, isLoading: celebrationsLoading } = useCelebrations();
+  const { data: lmsDash, isLoading: lmsDashLoading } = useAdminLmsDashboard();
+  const { data: lmsTopLearners } = useLmsLeaderboard("all");
+  const { data: lmsAtRisk } = useLmsTeamAtRisk();
 
   const sbuOptions = [
     { label: "All SBUs", value: "" },
@@ -761,6 +775,140 @@ export default function DashboardPage() {
               No SBU data available
             </p>
           )}
+        </div>
+
+        {/* ── LMS Overview ── */}
+        <div>
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="text-sm font-semibold uppercase tracking-wider" style={{ color: B.navy }}>
+              Learning Overview
+            </h3>
+            <Link href="/lms" className="flex items-center gap-1 text-xs font-medium transition-colors" style={{ color: B.orange }}>
+              Go to LMS <ArrowRight className="h-3 w-3" />
+            </Link>
+          </div>
+
+          {/* KPI strip */}
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4 mb-4">
+            {[
+              { label: "Published Courses", value: (lmsDash as any)?.totalCourses, icon: BookOpen, bg: "bg-primary/10", iconColor: "text-primary" },
+              { label: "Total Enrolled",    value: (lmsDash as any)?.totalEnrollments, icon: GraduationCap, bg: "bg-blue-50", iconColor: "text-blue-500" },
+              { label: "Completion Rate",   value: lmsDashLoading ? null : `${(lmsDash as any)?.completionRate ?? 0}%`, icon: Trophy, bg: "bg-amber-50", iconColor: "text-amber-500" },
+              { label: "Certificates",      value: (lmsDash as any)?.totalCertificates, icon: Star, bg: "bg-emerald-50", iconColor: "text-emerald-500" },
+            ].map(({ label, value, icon: Icon, bg, iconColor }) => (
+              <div key={label} className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+                <div className={`mb-3 flex h-9 w-9 items-center justify-center rounded-xl ${bg}`}>
+                  <Icon className={`h-4 w-4 ${iconColor}`} />
+                </div>
+                <p className="text-xs text-gray-400 mb-0.5">{label}</p>
+                {lmsDashLoading ? (
+                  <Skeleton className="h-7 w-16" />
+                ) : (
+                  <p className="text-2xl font-bold" style={{ color: B.navy }}>{value ?? 0}</p>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Quick Actions */}
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 mb-4">
+            {[
+              { label: "Create Course",       sub: "Build a new course",         href: "/lms/courses/create", icon: Plus,         color: B.orange },
+              { label: "Manage Assessments",  sub: "Quiz & question bank",       href: "/lms/assessments",   icon: FileText,     color: B.blue   },
+              { label: "Learning Reports",    sub: "Completion & progress",      href: "/lms/reports",       icon: Layers,       color: "#6366f1" },
+              { label: "Leaderboard",         sub: "Top learners & SBU rank",    href: "/lms/gamification",  icon: Trophy,       color: "#f59e0b" },
+            ].map(({ label, sub, href, icon: Icon, color }) => (
+              <Link
+                key={label}
+                href={href}
+                className="group flex items-center gap-3 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm hover:shadow-md hover:border-gray-200 transition-all"
+              >
+                <div
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-transform group-hover:scale-110"
+                  style={{ backgroundColor: `${color}18` }}
+                >
+                  <Icon className="h-5 w-5" style={{ color }} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-gray-900 truncate">{label}</p>
+                  <p className="text-[11px] text-gray-400 truncate">{sub}</p>
+                </div>
+                <ChevronRight className="h-4 w-4 text-gray-300 group-hover:text-gray-500 ml-auto shrink-0 transition-colors" />
+              </Link>
+            ))}
+          </div>
+
+          {/* Top Learners + At Risk */}
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            {/* Top Learners */}
+            <div className="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-50">
+                <div className="flex items-center gap-2">
+                  <Trophy className="h-4 w-4 text-amber-500" />
+                  <h4 className="text-sm font-semibold text-gray-900">Top Learners</h4>
+                </div>
+                <Link href="/lms/gamification" className="text-xs font-medium" style={{ color: B.orange }}>View All →</Link>
+              </div>
+              <div className="px-5 py-3 divide-y divide-gray-50">
+                {!(lmsTopLearners as any[])?.length ? (
+                  <p className="py-6 text-center text-sm text-gray-400">No learner data yet</p>
+                ) : (
+                  (lmsTopLearners as any[]).slice(0, 5).map((row: any, i: number) => (
+                    <div key={i} className="flex items-center gap-3 py-2.5">
+                      <span className="w-5 text-center text-xs font-bold text-gray-400">#{row.rank}</span>
+                      <div className="h-7 w-7 rounded-full bg-gray-100 flex items-center justify-center text-[11px] font-bold text-gray-500 shrink-0">
+                        {row.employee?.fullName?.slice(0, 2).toUpperCase() ?? "??"}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-800 truncate">{row.employee?.fullName}</p>
+                        <p className="text-[11px] text-gray-400 truncate">{row.employee?.department?.name ?? row.employee?.jobTitle}</p>
+                      </div>
+                      <span
+                        className="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold"
+                        style={{ backgroundColor: B.orangeBg, color: B.orange }}
+                      >
+                        {row.points} pts
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* At Risk */}
+            <div className="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-50">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-red-400" />
+                  <h4 className="text-sm font-semibold text-gray-900">At-Risk Learners</h4>
+                </div>
+                <Link href="/lms/reports" className="text-xs font-medium" style={{ color: B.orange }}>View Report →</Link>
+              </div>
+              <div className="px-5 py-3 divide-y divide-gray-50">
+                {!(lmsAtRisk as any[])?.length ? (
+                  <div className="py-6 text-center">
+                    <GraduationCap className="mx-auto h-8 w-8 text-gray-200" />
+                    <p className="mt-2 text-sm text-gray-400">No at-risk learners</p>
+                  </div>
+                ) : (
+                  (lmsAtRisk as any[]).slice(0, 5).map((row: any, i: number) => (
+                    <div key={i} className="flex items-center gap-3 py-2.5">
+                      <div className="h-7 w-7 rounded-full bg-red-50 flex items-center justify-center text-[11px] font-bold text-red-400 shrink-0">
+                        {row.employee?.fullName?.slice(0, 2).toUpperCase() ?? "??"}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-800 truncate">{row.employee?.fullName}</p>
+                        <p className="text-[11px] text-gray-400 truncate">{row.course?.title}</p>
+                      </div>
+                      <span className="shrink-0 rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-500">
+                        {row.status === "Overdue" ? "Overdue" : "Not Started"}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* ── SBU Management (Admin only) ── */}
