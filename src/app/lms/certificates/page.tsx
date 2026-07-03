@@ -1,8 +1,8 @@
 "use client";
 
 import { AppLayout } from "@/components/layout/app-layout";
-import { useMyCertificates } from "@/hooks";
-import { Award, Download, QrCode } from "lucide-react";
+import { useMyCertificates, useDownloadCertificate } from "@/hooks";
+import { Award, Download, QrCode, Loader2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/loading";
@@ -10,6 +10,11 @@ import { formatDate } from "@/lib/utils";
 
 export default function CertificatesPage() {
   const { data: certificates, isLoading } = useMyCertificates();
+  const download = useDownloadCertificate();
+
+  const openVerify = (token: string) => {
+    window.open(`${window.location.origin}/verify-certificate/${token}`, "_blank", "noopener");
+  };
 
   return (
     <AppLayout>
@@ -49,12 +54,30 @@ export default function CertificatesPage() {
                       <p className="text-xs text-gray-500">Valid until: {formatDate(cert.expiresAt)}</p>
                     )}
                     <div className="flex gap-2 pt-2">
-                      <Button size="sm" variant="outline" className="text-xs flex items-center gap-1">
-                        <Download className="w-3 h-3" /> Download PDF
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs flex items-center gap-1"
+                        disabled={download.isPending && download.variables === cert.id}
+                        onClick={() => download.mutate(cert.id)}
+                      >
+                        {download.isPending && download.variables === cert.id ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Download className="w-3 h-3" />
+                        )}
+                        Download PDF
                       </Button>
-                      <Button size="sm" variant="ghost" className="text-xs flex items-center gap-1">
-                        <QrCode className="w-3 h-3" /> Verify
-                      </Button>
+                      {cert.verifyToken && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-xs flex items-center gap-1"
+                          onClick={() => openVerify(cert.verifyToken)}
+                        >
+                          <QrCode className="w-3 h-3" /> Verify
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </CardContent>

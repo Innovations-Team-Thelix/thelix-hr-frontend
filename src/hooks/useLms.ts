@@ -366,6 +366,19 @@ export function useMyCertificates() {
   return useQuery({ queryKey: lmsKeys().myCertificates, queryFn: () => api.get("/lms/certificates/me").then((r) => r.data) });
 }
 
+export function useDownloadCertificate() {
+  return useMutation({
+    mutationFn: (id: string) =>
+      api.get<{ url: string }>(`/lms/certificates/${id}/download`).then((r) => r.data),
+    onSuccess: (data: any) => {
+      const url = data?.url;
+      if (url) window.open(url, "_blank", "noopener");
+      else toast.error("Certificate is not ready yet.");
+    },
+    onError: (e: any) => toast.error(e.response?.data?.message ?? "Failed to download certificate."),
+  });
+}
+
 // ─── Learning Paths ──────────────────────────────────
 
 export function useLmsPaths() {
