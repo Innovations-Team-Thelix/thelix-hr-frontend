@@ -35,7 +35,9 @@ import {
   useMyLmsPoints,
 } from "@/hooks";
 import { useRoster } from "@/hooks/useRoster";
+import { useEmployees } from "@/hooks/useEmployees";
 import { formatDate, cn } from "@/lib/utils";
+import { isLeaveTypeEligible } from "@/lib/leave-eligibility";
 
 function getGreeting() {
   const h = new Date().getHours();
@@ -69,8 +71,23 @@ export default function EmployeeDashboardPage() {
   // Filter roster to only this employee's entries
   const myRoster = rosterEntries?.filter((r) => r.employeeId === profile?.id) ?? [];
 
+  // Hide balances for leave types the employee isn't eligible for (same
+  // gender/marital gates as the Apply-for-Leave flow), so ineligible types
+  // like Maternity/Paternity don't show up in the balances card.
+  const visibleBalances = (leaveBalances || []).filter((b) =>
+    isLeaveTypeEligible(b.leaveType, profile),
+  );
+
   const today = dayjs().format("dddd, MMMM D, YYYY");
-  const teamCount = profile?.subordinates?.length ?? 0;
+
+  // "My Team" counts everyone in the current user's SBU, matching the filtered
+  // employee list the card links to (/employees?sbuId=...). We only need the
+  // total, so fetch a single row and read pagination.total.
+  const { data: sbuTeam, isLoading: teamLoading } = useEmployees(
+    { sbuId: profile?.sbuId, limit: 1 },
+    { enabled: !!profile?.sbuId },
+  );
+  const teamCount = sbuTeam?.pagination?.total ?? 0;
   const nextPayDay = workforceStats?.nextPayDay;
   const daysUntilPay = nextPayDay ? dayjs(nextPayDay).diff(dayjs(), "day") : null;
 
@@ -133,13 +150,13 @@ export default function EmployeeDashboardPage() {
                     <Skeleton key={i} className="h-10 w-full" />
                   ))}
                 </div>
-              ) : !leaveBalances?.length ? (
+              ) : !visibleBalances.length ? (
                 <div className="py-8 text-center">
                   <p className="text-sm text-gray-500">No leave balances available</p>
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {leaveBalances.map((balance) => {
+                  {visibleBalances.map((balance) => {
                     const used = balance.usedDays;
                     const total = balance.totalDays;
                     const remaining = balance.remainingDays ?? Math.max(0, total - used);
@@ -177,8 +194,12 @@ export default function EmployeeDashboardPage() {
 
           {/* Team Size + Next Pay Day stacked */}
           <div className="flex flex-col gap-5">
-            {/* Team Size */}
-            <Link href="/employees" className="group flex-1 block">
+            {/* Team Size — links to the employee list filtered to the current
+                user's own SBU (falls back to the full list if SBU is unknown). */}
+            <Link
+              href={profile?.sbuId ? `/employees?sbuId=${profile.sbuId}` : "/employees"}
+              className="group flex-1 block"
+            >
               <div className="h-full rounded-2xl bg-emerald-50 p-5 transition-all duration-200 group-hover:shadow-md">
                 <div className="mb-3 flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-100">
                   <Users className="h-4 w-4 text-emerald-600" />
@@ -186,13 +207,13 @@ export default function EmployeeDashboardPage() {
                 <p className="text-xs font-semibold uppercase tracking-widest text-emerald-600">
                   My Team
                 </p>
-                {profileLoading ? (
+                {profileLoading || teamLoading ? (
                   <Skeleton className="mt-1 h-8 w-16" />
                 ) : (
                   <p className="mt-1 text-3xl font-bold text-emerald-900">{teamCount}</p>
                 )}
                 <p className="mt-0.5 text-xs text-emerald-600/70">
-                  {teamCount === 1 ? "Direct report" : "Direct reports"}
+                  {teamCount === 1 ? "Team member" : "Team members"}
                 </p>
               </div>
             </Link>

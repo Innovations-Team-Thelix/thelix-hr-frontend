@@ -15,7 +15,6 @@ import {
   AlertTriangle,
   Building2,
   CalendarRange,
-  User,
   Users,
 } from "lucide-react";
 import { AppLayout } from "@/components/layout/app-layout";
@@ -29,6 +28,7 @@ import {
   useDepartments,
   useEmployees,
   useEffectiveRole,
+  useMyProfile,
 } from "@/hooks";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -118,9 +118,24 @@ export default function RosterPage() {
   const { user, viewAs } = useAuth();
   const isAdminAsEmployee = (user?.role === "Admin" || user?.role === "SBUHead") && viewAs === "Employee";
 
-  const [rosterView, setRosterView] = useState<"my" | "everyone">("everyone");
+  const { data: myProfile } = useMyProfile();
+  const mySbuId = myProfile?.sbuId;
+
+  // Default to "My Team" (the current user's SBU) rather than the whole company;
+  // "Everyone" remains available via the toggle.
+  const [rosterView, setRosterView] = useState<"my" | "everyone">("my");
   const [selectedSbuId, setSelectedSbuId] = useState("");
   const [selectedDeptId, setSelectedDeptId] = useState("");
+
+  // When viewing "My Team", scope every fetch to the user's own SBU. In
+  // "Everyone" mode (or when the toggle isn't shown) fall back to the filter
+  // dropdowns / company-wide.
+  const teamScoped = isAdminAsEmployee && rosterView === "my";
+  const effectiveSbuId = teamScoped ? (mySbuId || "") : selectedSbuId;
+  const effectiveDeptId = teamScoped ? "" : selectedDeptId;
+  // Avoid a flash of the company-wide roster before the profile (and thus the
+  // user's SBU) has loaded in team mode.
+  const teamReady = !teamScoped || !!mySbuId;
   const [dateRange, setDateRange] = useState<DateRange | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [pendingRange, setPendingRange] = useState<DateRange | undefined>();
@@ -151,24 +166,24 @@ export default function RosterPage() {
   const rangeTo = dateRange?.to ?? null;
 
   const { data: rosterEntries, isLoading: isRosterLoading } = useRoster({
-    departmentId: selectedDeptId || undefined,
-    sbuId: selectedSbuId || undefined,
+    departmentId: effectiveDeptId || undefined,
+    sbuId: effectiveSbuId || undefined,
     startDate: rangeFrom ? toDateStr(rangeFrom) : "",
     endDate: rangeTo ? toDateStr(rangeTo) : "",
-  }, { enabled: !!rangeFrom && !!rangeTo });
+  }, { enabled: !!rangeFrom && !!rangeTo && teamReady });
 
   const { data: attendanceResponse, isLoading: isAttendanceLoading } = useAttendance({
-    departmentId: selectedDeptId || undefined,
-    sbuId: selectedSbuId || undefined,
+    departmentId: effectiveDeptId || undefined,
+    sbuId: effectiveSbuId || undefined,
     startDate: rangeFrom ? toDateStr(rangeFrom) : "",
     endDate: rangeTo ? toDateStr(rangeTo) : "",
-  }, { enabled: !!rangeFrom && !!rangeTo });
+  }, { enabled: !!rangeFrom && !!rangeTo && teamReady });
 
   const attendanceEntries = attendanceResponse?.data || [];
 
   const { data: employeesData } = useEmployees({
-    departmentId: selectedDeptId || undefined,
-    sbuId: selectedSbuId || undefined,
+    departmentId: effectiveDeptId || undefined,
+    sbuId: effectiveSbuId || undefined,
     limit: 1000,
   });
 
@@ -231,15 +246,9 @@ export default function RosterPage() {
     return map;
   }, [rosterEntries, localOverrides, attendanceEntries, employeesData]);
 
-  const displayedEmployeeMap = useMemo(() => {
-    if (!isAdminAsEmployee || rosterView === "everyone") return employeeMap;
-    const filtered = new Map<string, typeof employeeMap extends Map<string, infer V> ? V : never>();
-    const myId = user?.employeeId;
-    if (myId && employeeMap.has(myId)) {
-      filtered.set(myId, employeeMap.get(myId)!);
-    }
-    return filtered;
-  }, [employeeMap, isAdminAsEmployee, rosterView, user?.employeeId]);
+  // Rows are already scoped by the fetch (team SBU vs. company-wide), so we
+  // render whatever came back — "My Team" shows the whole SBU, not just me.
+  const displayedEmployeeMap = employeeMap;
 
   const onsiteCounts = useMemo(() => {
     return days.map((day) => {
@@ -370,8 +379,8 @@ export default function RosterPage() {
                     : "text-gray-500 hover:text-gray-700"
                 )}
               >
-                <User className="h-4 w-4" />
-                My Roster
+                <Users className="h-4 w-4" />
+                My Team
               </button>
               <button
                 type="button"
@@ -383,7 +392,7 @@ export default function RosterPage() {
                     : "text-gray-500 hover:text-gray-700"
                 )}
               >
-                <Users className="h-4 w-4" />
+                <Building2 className="h-4 w-4" />
                 Everyone
               </button>
             </div>

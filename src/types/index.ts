@@ -201,6 +201,7 @@ export interface LeaveType {
   isActive?: boolean;
   isPaid?: boolean;
   genderEligibility?: 'All' | 'Male' | 'Female';
+  maritalEligibility?: 'All' | 'Married';
   carryOverMax?: number;
   carryOverExpiryMonths?: number | null;
   maxConsecutiveDays?: number | null;

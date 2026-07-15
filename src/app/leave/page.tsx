@@ -23,6 +23,7 @@ import {
   History,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { isLeaveTypeEligible } from "@/lib/leave-eligibility";
 import { AppLayout } from "@/components/layout/app-layout";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -245,10 +246,32 @@ export default function LeavePage() {
     resolver: zodResolver(createLeaveSchema),
   });
 
-  const leaveTypeOptions = (leaveTypes || []).map((lt) => ({
-    label: lt.name,
-    value: lt.id,
-  }));
+  // Restrict the leave-type list to what the *subject* employee is eligible for,
+  // mirroring the gender/marital gates enforced on the server at submit time
+  // (e.g. Maternity → married female, Paternity → married male). Admins filing
+  // on behalf of someone gate by that person's profile; everyone else gates by
+  // their own. Fail-closed: while the subject profile is still loading, gated
+  // types stay hidden rather than flashing in and out.
+  const onBehalfOfId = form.watch("onBehalfOfEmployeeId");
+  const subjectEmployee =
+    canApprove && onBehalfOfId
+      ? colleaguesData?.data?.find((emp) => emp.id === onBehalfOfId)
+      : profile;
+
+  const leaveTypeOptions = (leaveTypes || [])
+    .filter((lt) => isLeaveTypeEligible(lt, subjectEmployee))
+    .map((lt) => ({
+      label: lt.name,
+      value: lt.id,
+    }));
+
+  // Hide balances for leave types the current user isn't eligible for, so
+  // ineligible types (e.g. Maternity/Paternity for a single employee) don't
+  // appear in the Leave Balances panel. These are always the user's own
+  // balances, so gate on their own profile.
+  const visibleBalances = (myBalances || []).filter((b) =>
+    isLeaveTypeEligible(b.leaveType, profile),
+  );
 
   const relieveOfficerOptions = (colleaguesData?.data || [])
     .filter(emp => emp.id !== profile?.id) // Exclude self
@@ -1068,13 +1091,13 @@ export default function LeavePage() {
                       <Skeleton key={i} className="h-10 w-full" />
                     ))}
                   </div>
-                ) : !myBalances?.length ? (
+                ) : !visibleBalances.length ? (
                   <p className="text-sm text-gray-500">
                     No balances available
                   </p>
                 ) : (
                   <div className="space-y-4">
-                    {myBalances.map((balance) => {
+                    {visibleBalances.map((balance) => {
                       const remaining =
                         balance.totalDays - balance.usedDays;
                       const pct =
