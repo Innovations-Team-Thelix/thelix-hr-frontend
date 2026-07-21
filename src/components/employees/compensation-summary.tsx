@@ -119,7 +119,7 @@ export function CompensationSummary({
         <CardContent>
           {salaryBreakdown ? (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <div className="relative overflow-hidden rounded-2xl bg-[#412003] p-5 text-white">
+              <div className="relative overflow-hidden rounded-2xl bg-secondary p-5 text-white">
                 <div className="pointer-events-none absolute -right-4 -top-4 h-24 w-24 rounded-full bg-primary/20 blur-2xl" />
                 <p className="text-xs font-semibold uppercase tracking-widest text-primary/80">Base Salary</p>
                 <p className="mt-3 text-2xl font-bold">{formatCurrency(salaryBreakdown.baseSalary, cur)}</p>
@@ -136,7 +136,7 @@ export function CompensationSummary({
                   <DollarSign className="h-4 w-4 text-primary" />
                 </div>
                 <p className="text-xs font-semibold uppercase tracking-widest text-primary">Net Pay</p>
-                <p className="mt-1 text-2xl font-bold text-[#412003]">{formatCurrency(salaryBreakdown.netPayTotal ?? salaryBreakdown.netPay, cur)}</p>
+                <p className="mt-1 text-2xl font-bold text-gray-900">{formatCurrency(salaryBreakdown.netPayTotal ?? salaryBreakdown.netPay, cur)}</p>
               </div>
             </div>
           ) : (

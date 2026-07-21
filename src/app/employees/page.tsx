@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/table";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import {
-  useEmployees, useSbus, useDepartments, useAuth,
+  useEmployees, useSbus, useDepartments, useAuth, useMyProfile,
   useDeleteEmployee, useBulkDeleteEmployees, useEffectiveRole,
 } from "@/hooks";
 import { cn, formatDate } from "@/lib/utils";
@@ -53,6 +53,10 @@ function EmployeesPageContent() {
   const effectiveRole = useEffectiveRole();
   const isAdmin = effectiveRole === "Admin";
   const isSbuHead = effectiveRole === "SBUHead";
+  // Only HR (Admin) and the CVO may see exited staff; everyone else is limited
+  // to Active employees (enforced server-side — this just hides the now-useless
+  // Status filter for them).
+  const canSeeExited = effectiveRole === "Admin" || effectiveRole === "CVO";
   const sbuHeadScopeId = isSbuHead ? (user?.sbuScopeId ?? undefined) : undefined;
 
   // Initialize filters from URL search params
@@ -247,6 +251,15 @@ function EmployeesPageContent() {
   const rangeTo = Math.min(page * limit, total);
 
   const hasActiveFilters = !!(filters.search || filters.sbuId || filters.departmentId || filters.status);
+
+  // "My Department" quick category — lets a user narrow the org-wide list to
+  // everyone in their own department in one click. Only offered when we know
+  // the current user's department.
+  const { data: myProfile } = useMyProfile();
+  const myDepartmentId = myProfile?.departmentId;
+  const myDepartmentName = myProfile?.department?.name;
+  const isMyDepartmentView = !!myDepartmentId && filters.departmentId === myDepartmentId;
+  const isAllView = !filters.departmentId;
 
   // Search: fire on Enter or after debounce via blur
   const applySearch = useCallback(() => {
@@ -600,6 +613,51 @@ function EmployeesPageContent() {
             </div>
           </div>
 
+          {/* Scope category: All Thelix vs. My Department. A one-click view
+              separate from the detailed Filter panel below. */}
+          {myDepartmentId && (
+            <div className="flex flex-wrap items-center gap-3 border-b border-gray-100 px-6 py-3">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+                View
+              </span>
+              <div
+                role="group"
+                aria-label="Employee scope"
+                className="inline-flex items-center gap-1 rounded-xl border border-gray-200 bg-gray-50 p-1"
+              >
+                <button
+                  type="button"
+                  aria-pressed={isAllView}
+                  onClick={() => handleFilterSelect("departmentId", "")}
+                  className={cn(
+                    "rounded-lg px-3 py-1.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
+                    isAllView
+                      ? "bg-white text-primary shadow-sm"
+                      : "text-gray-500 hover:text-gray-700"
+                  )}
+                >
+                  All Thelix
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={isMyDepartmentView}
+                  onClick={() => handleFilterSelect("departmentId", myDepartmentId)}
+                  className={cn(
+                    "rounded-lg px-3 py-1.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
+                    isMyDepartmentView
+                      ? "bg-white text-primary shadow-sm"
+                      : "text-gray-500 hover:text-gray-700"
+                  )}
+                >
+                  My Department
+                  {myDepartmentName && (
+                    <span className="ml-1 font-normal text-gray-400">· {myDepartmentName}</span>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Expanded filter row */}
           {showFilters && (
             <div className="flex flex-wrap items-end gap-3 border-b border-gray-100 bg-gray-50/60 px-6 py-3">
@@ -623,15 +681,17 @@ function EmployeesPageContent() {
                   onChange={(e) => handleFilterSelect("departmentId", e.target.value)}
                 />
               </div>
-              <div className="min-w-[140px]">
-                <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-gray-400">Status</label>
-                <Select
-                  options={statusOptions}
-                  placeholder="All Statuses"
-                  value={filters.status || ""}
-                  onChange={(e) => handleFilterSelect("status", e.target.value)}
-                />
-              </div>
+              {canSeeExited && (
+                <div className="min-w-[140px]">
+                  <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-gray-400">Status</label>
+                  <Select
+                    options={statusOptions}
+                    placeholder="All Statuses"
+                    value={filters.status || ""}
+                    onChange={(e) => handleFilterSelect("status", e.target.value)}
+                  />
+                </div>
+              )}
               {hasActiveFilters && (
                 <button
                   onClick={clearFilters}
