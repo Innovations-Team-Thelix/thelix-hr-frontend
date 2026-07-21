@@ -94,12 +94,15 @@ const DAY_TYPE_STYLES: Record<RosterDayType, { bg: string; text: string; label: 
 // Attendance status colours (take priority over schedule when record exists)
 type AttendanceTileType = "pending" | "late" | "clocked_in" | "clocked_out" | "absent";
 
-const ATTENDANCE_TILE_STYLES: Record<AttendanceTileType, { bg: string; text: string; label: string }> = {
-  pending:     { bg: "bg-gray-200",    text: "text-gray-700",    label: "Pending"     },
-  late:        { bg: "bg-orange-100",  text: "text-orange-700",  label: "Late"        },
-  clocked_in:  { bg: "bg-emerald-600", text: "text-white",       label: "Clocked In"  },
-  clocked_out: { bg: "bg-teal-100",    text: "text-teal-700",    label: "Clocked Out" },
-  absent:      { bg: "bg-red-100",     text: "text-red-700",     label: "Absent"      },
+// `bg` = the strong colour shown on the legend swatch and the status pill.
+// `cell` = a soft tint of the same family used for the whole cell background, so
+// each cell's colour matches the Attendance legend without overwhelming the grid.
+const ATTENDANCE_TILE_STYLES: Record<AttendanceTileType, { bg: string; cell: string; text: string; label: string }> = {
+  pending:     { bg: "bg-gray-200",    cell: "bg-gray-100",    text: "text-gray-700",    label: "Pending"     },
+  late:        { bg: "bg-orange-100",  cell: "bg-orange-50",   text: "text-orange-700",  label: "Late"        },
+  clocked_in:  { bg: "bg-emerald-600", cell: "bg-emerald-50",  text: "text-emerald-700", label: "Clocked In"  },
+  clocked_out: { bg: "bg-teal-100",    cell: "bg-teal-50",     text: "text-teal-700",    label: "Clocked Out" },
+  absent:      { bg: "bg-red-100",     cell: "bg-red-50",      text: "text-red-700",     label: "Absent"      },
 };
 
 function getAttendanceTile(attendance: any): AttendanceTileType | null {
@@ -530,30 +533,31 @@ export default function RosterPage() {
                           const attendanceTile = getAttendanceTile(attendance);
                           const workLocation = attendance?.workLocation || dayType;
                           
-                          // Determine background style:
-                          // 1. If Absent, use Absent style (Red)
-                          // 2. If present/late/etc, use WorkLocation style (Green/Blue) from DAY_TYPE_STYLES
-                          // 3. If no attendance, use dayType style
+                          // Cell background follows the legend it belongs to:
+                          // 1. Day WITH an attendance record → colour by attendance
+                          //    status (soft tint of the Attendance-legend colour;
+                          //    the pill shows the full colour).
+                          // 2. Scheduled day, no attendance yet → colour by the
+                          //    schedule day type (Schedule-legend colour).
+                          // 3. Neither → plain white.
+                          const scheduleStyle = DAY_TYPE_STYLES[workLocation as RosterDayType];
                           let bgStyle = "bg-white";
                           let textStyle = "text-gray-400";
                           let label = "-";
 
-                          if (attendanceTile === "absent") {
-                            bgStyle = ATTENDANCE_TILE_STYLES.absent.bg;
-                            // For absent, we want the text to be red as well, but the pill will handle the status style
-                          } else if (workLocation && DAY_TYPE_STYLES[workLocation as RosterDayType]) {
-                            // Use location color for cell background
-                            const locationStyle = DAY_TYPE_STYLES[workLocation as RosterDayType];
-                            bgStyle = locationStyle.bg;
-                            // Text style for the cell content that is NOT the pill (like location text)
-                            textStyle = locationStyle.text;
+                          if (attendanceTile) {
+                            bgStyle = ATTENDANCE_TILE_STYLES[attendanceTile].cell;
+                            textStyle = ATTENDANCE_TILE_STYLES[attendanceTile].text;
+                          } else if (scheduleStyle) {
+                            bgStyle = scheduleStyle.bg;
+                            textStyle = scheduleStyle.text;
                           }
                           
                           // Determine label for the status pill
                           if (attendanceTile) {
                               label = ATTENDANCE_TILE_STYLES[attendanceTile].label;
-                          } else if (workLocation && DAY_TYPE_STYLES[workLocation as RosterDayType]) {
-                              label = DAY_TYPE_STYLES[workLocation as RosterDayType].label;
+                          } else if (scheduleStyle) {
+                              label = scheduleStyle.label;
                           }
 
                           const tooltipLines = [

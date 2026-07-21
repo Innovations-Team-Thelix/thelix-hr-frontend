@@ -101,7 +101,7 @@ export default function EmployeeDashboardPage() {
       <div className="space-y-6">
 
         {/* ── Welcome banner ── */}
-        <div className="relative overflow-hidden rounded-2xl bg-[#412003] px-7 py-6">
+        <div className="relative overflow-hidden rounded-2xl bg-secondary px-7 py-6">
           <div className="pointer-events-none absolute -right-10 -top-10 h-44 w-44 rounded-full bg-primary/20 blur-3xl" />
           <div className="pointer-events-none absolute bottom-0 right-1/3 h-28 w-28 rounded-full bg-primary/10 blur-2xl" />
           <div className="relative flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
@@ -219,7 +219,7 @@ export default function EmployeeDashboardPage() {
             </Link>
 
             {/* Next Pay Day */}
-            <div className="flex-1 rounded-2xl bg-[#412003] p-5 text-white">
+            <div className="flex-1 rounded-2xl bg-secondary p-5 text-white">
               <div className="mb-3 flex h-8 w-8 items-center justify-center rounded-xl bg-white/10">
                 <Banknote className="h-4 w-4 text-primary" />
               </div>
@@ -266,7 +266,7 @@ export default function EmployeeDashboardPage() {
                   const dayType = entry?.dayType;
 
                   const containerCls = isToday
-                    ? "bg-[#412003] shadow-md ring-1 ring-[#412003]/30"
+                    ? "bg-secondary shadow-md ring-1 ring-black/30"
                     : dayType === "Onsite"
                     ? "bg-emerald-50"
                     : dayType === "Remote"

@@ -476,52 +476,6 @@ export default function ProfilePage() {
               </CardContent>
             </Card>
 
-            {/* Offer Letter */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <FileText className="h-5 w-5 text-primary" />
-                  Offer Letter
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {profile.offerLetterFileName ? (
-                  <div className="space-y-3">
-                    <p className="text-sm text-gray-600">
-                      {profile.offerLetterFileName}
-                    </p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
-                        const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1";
-                        fetch(`${API_URL}/employees/${profile.id}/offer-letter`, {
-                          headers: { Authorization: `Bearer ${token}` },
-                        })
-                          .then((res) => res.blob())
-                          .then((blob) => {
-                            const url = URL.createObjectURL(blob);
-                            const a = document.createElement("a");
-                            a.href = url;
-                            a.download = profile.offerLetterFileName || "offer-letter.pdf";
-                            a.click();
-                            URL.revokeObjectURL(url);
-                          });
-                      }}
-                    >
-                      <Download className="h-4 w-4" />
-                      Download Offer Letter
-                    </Button>
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-500">
-                    No offer letter uploaded
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-
             {/* This Week's Schedule */}
             <Card>
               <CardHeader>
@@ -646,6 +600,45 @@ export default function ProfilePage() {
                 Upload Document
               </Button>
             </div>
+
+            {/* Offer Letter — surfaced here (rather than as its own tile) since
+                it is a document. Stored on the employee record, downloaded via
+                the dedicated offer-letter endpoint. */}
+            {profile.offerLetterFileName && (
+              <div className="flex items-center justify-between rounded-lg border border-gray-100 bg-white px-4 py-3">
+                <div className="flex items-center gap-3">
+                  <FileText className="h-5 w-5 text-primary" />
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">Offer Letter</p>
+                    <p className="text-xs text-gray-500">{profile.offerLetterFileName}</p>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
+                    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1";
+                    fetch(`${API_URL}/employees/${profile.id}/offer-letter`, {
+                      headers: { Authorization: `Bearer ${token}` },
+                    })
+                      .then((res) => res.blob())
+                      .then((blob) => {
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = url;
+                        a.download = profile.offerLetterFileName || "offer-letter.pdf";
+                        a.click();
+                        URL.revokeObjectURL(url);
+                      });
+                  }}
+                >
+                  <Download className="h-4 w-4" />
+                  Download
+                </Button>
+              </div>
+            )}
+
             <DocumentList />
             <UploadDocumentModal
               isOpen={isUploadModalOpen}

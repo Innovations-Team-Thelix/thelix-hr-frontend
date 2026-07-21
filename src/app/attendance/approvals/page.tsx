@@ -28,7 +28,7 @@ import {
   downloadAttendanceTemplate,
   downloadAttendanceExport,
 } from "@/hooks/useAttendance";
-import { useAuthStore, useEffectiveRole } from "@/hooks";
+import { useAuthStore, useEffectiveRole, useMyProfile } from "@/hooks";
 import { ApprovalStatus, AttendanceRecord, AttendanceImportResult } from "@/types/attendance";
 import { Check, X, Clock, ShieldCheck, Upload, Download, FileSpreadsheet } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
@@ -49,6 +49,7 @@ export default function AttendanceApprovalsPage() {
   const { user } = useAuthStore();
   const effectiveRole = useEffectiveRole();
   const isAdmin = effectiveRole === "Admin";
+  const { data: myProfile } = useMyProfile();
 
   const [startDate, setStartDate] = useState(dayjs().startOf("month").format("YYYY-MM-DD"));
   const [endDate, setEndDate] = useState(dayjs().endOf("month").format("YYYY-MM-DD"));
@@ -85,7 +86,10 @@ export default function AttendanceApprovalsPage() {
   const previewImport = usePreviewAttendanceImport();
   const commitImport = useBulkUploadAttendance();
 
-  const canManage = isAdmin || effectiveRole === "SBUHead";
+  // Designated approvers (e.g. an EA for a VP, or a line manager) can act even
+  // without an Admin/SBUHead role.
+  const hasApprovees = (myProfile?._count?.attendanceApprovees ?? 0) > 0;
+  const canManage = isAdmin || effectiveRole === "SBUHead" || hasApprovees;
 
   // Row selection for bulk approve/reject
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());

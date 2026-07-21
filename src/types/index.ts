@@ -106,6 +106,7 @@ export interface Employee {
   departmentId: string;
   jobTitle: string;
   supervisorId: string | null;
+  attendanceApproverId: string | null;
   workArrangement: WorkArrangement;
   probationPeriod: number | null; // In months
   probationEndDate: string | null;
@@ -141,6 +142,9 @@ export interface Employee {
     department?: { name: string }
   })[];
   userAccount?: UserAccount;
+  // Present on the /employees/me profile: how many employees this person is the
+  // designated attendance approver for.
+  _count?: { attendanceApprovees?: number };
 }
 
 export interface EmployeeSbuMembership {
