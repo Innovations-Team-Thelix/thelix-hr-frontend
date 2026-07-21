@@ -59,7 +59,7 @@ export function ForcePasswordChangeModal({
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="bg-gradient-to-br from-[#412003] to-primary px-6 py-8 text-white text-center">
+        <div className="bg-gradient-to-br from-secondary to-primary px-6 py-8 text-white text-center">
           <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-white/20">
             <Lock className="h-7 w-7 text-white" />
           </div>

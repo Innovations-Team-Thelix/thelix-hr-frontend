@@ -23,7 +23,7 @@ interface WalkthroughModalProps {
 const steps = [
   {
     icon: Sparkles,
-    gradient: "from-[#412003] to-[#C8622A]",
+    gradient: "from-secondary to-[#C8622A]",
     iconBg: "bg-white/20",
     iconColor: "text-white",
     tag: "Welcome",
@@ -36,7 +36,7 @@ const steps = [
   },
   {
     icon: User,
-    gradient: "from-[#1a0a00] to-[#412003]",
+    gradient: "from-black to-primary-950",
     iconBg: "bg-[#C8622A]/20",
     iconColor: "text-[#C8622A]",
     tag: "Step 1",
@@ -49,7 +49,7 @@ const steps = [
   },
   {
     icon: Calendar,
-    gradient: "from-[#412003] to-[#7a3010]",
+    gradient: "from-secondary to-primary-800",
     iconBg: "bg-white/20",
     iconColor: "text-white",
     tag: "Step 2",
@@ -62,7 +62,7 @@ const steps = [
   },
   {
     icon: DollarSign,
-    gradient: "from-[#1a0a00] to-[#412003]",
+    gradient: "from-black to-primary-950",
     iconBg: "bg-[#C8622A]/20",
     iconColor: "text-[#C8622A]",
     tag: "Step 3",
@@ -75,7 +75,7 @@ const steps = [
   },
   {
     icon: BarChart2,
-    gradient: "from-[#412003] to-[#C8622A]",
+    gradient: "from-secondary to-[#C8622A]",
     iconBg: "bg-white/20",
     iconColor: "text-white",
     tag: "Step 4",
@@ -88,7 +88,7 @@ const steps = [
   },
   {
     icon: Bell,
-    gradient: "from-[#1a0a00] to-[#412003]",
+    gradient: "from-black to-primary-950",
     iconBg: "bg-[#C8622A]/20",
     iconColor: "text-[#C8622A]",
     tag: "Step 5",
@@ -101,7 +101,7 @@ const steps = [
   },
   {
     icon: Shield,
-    gradient: "from-[#412003] to-[#C8622A]",
+    gradient: "from-secondary to-[#C8622A]",
     iconBg: "bg-white/20",
     iconColor: "text-white",
     tag: "All done!",

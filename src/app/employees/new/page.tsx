@@ -48,6 +48,7 @@ const createEmployeeSchema = z.object({
   departmentId: z.string().min(1, "Department is required"),
   jobTitle: z.string().min(1, "Job title is required"),
   supervisorId: z.string().optional(),
+  attendanceApproverId: z.string().optional(),
   workArrangement: z.string().default("Hybrid"),
   probationPeriod: z.string().optional(),
   probationEndDate: z.string().optional(),
@@ -307,6 +308,7 @@ export default function CreateEmployeePage() {
 
         // Employment
         supervisorId: data.supervisorId || null,
+        attendanceApproverId: data.attendanceApproverId || undefined,
         probationPeriod: data.probationPeriod ? parseInt(data.probationPeriod) : null,
         probationEndDate: data.probationEndDate || null,
 
@@ -650,6 +652,15 @@ export default function CreateEmployeePage() {
                     error={errors.jobTitle?.message}
                     {...register("jobTitle")}
                   />
+                  {/* Attendance Approver — who approves this person's clock-ins.
+                      Leave blank to use the default (their SBU head). */}
+                  <Select
+                    label="Attendance Approver"
+                    options={supervisorOptions}
+                    placeholder="Default (SBU head)"
+                    {...register("attendanceApproverId")}
+                  />
+
                   {/* Searchable Supervisor Combobox */}
                   <div className="flex flex-col gap-1" ref={supervisorRef}>
                     <label className="text-sm font-medium text-gray-700">Supervisor</label>

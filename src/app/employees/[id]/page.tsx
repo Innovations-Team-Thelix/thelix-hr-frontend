@@ -100,6 +100,7 @@ const lifecycleEventSchema = z.object({
   eventType: z.string().min(1, "Event type is required"),
   eventDate: z.string().min(1, "Event date is required"),
   description: z.string().min(1, "Description is required"),
+  approvedById: z.string().optional(),
 });
 
 const editEmployeeSchema = z.object({
@@ -127,6 +128,7 @@ const editEmployeeSchema = z.object({
   departmentId: z.string().optional(),
   jobTitle: z.string().min(1, "Job title is required"),
   supervisorId: z.string().optional(),
+  attendanceApproverId: z.string().optional(),
   workArrangement: z.string().optional(),
   probationEndDate: z.string().optional(),
   employmentStatus: z.enum(["Active", "Suspended", "Terminated", "Resigned"]),
@@ -383,6 +385,7 @@ export default function EmployeeProfilePage() {
         departmentId: employee.department?.id || employee.departmentId || undefined,
         jobTitle: employee.jobTitle,
         supervisorId: employee.supervisorId || undefined,
+        attendanceApproverId: employee.attendanceApproverId || undefined,
         workArrangement: employee.workArrangement || undefined,
         probationEndDate: employee.probationEndDate ? new Date(employee.probationEndDate).toISOString().split('T')[0] : undefined,
         employmentStatus: employee.employmentStatus,
@@ -633,6 +636,9 @@ export default function EmployeeProfilePage() {
       formData.append("eventType", data.eventType);
       formData.append("eventDate", data.eventDate);
       formData.append("description", data.description);
+      if (data.approvedById) {
+        formData.append("approvedById", data.approvedById);
+      }
       if (selectedFile) {
         formData.append("attachment", selectedFile);
       }
@@ -1911,6 +1917,13 @@ export default function EmployeeProfilePage() {
                   {...editForm.register("supervisorId")}
                 />
                 <Select
+                  label="Attendance Approver"
+                  options={supervisorOptions}
+                  placeholder="Default (SBU head)"
+                  error={editForm.formState.errors.attendanceApproverId?.message}
+                  {...editForm.register("attendanceApproverId")}
+                />
+                <Select
                   label="Work Arrangement"
                   options={workArrangementOptions}
                   error={editForm.formState.errors.workArrangement?.message}
@@ -2221,6 +2234,13 @@ export default function EmployeeProfilePage() {
               rows={3}
               error={eventForm.formState.errors.description?.message}
               {...eventForm.register("description")}
+            />
+            <Select
+              label="Approved by (optional)"
+              options={supervisorOptions}
+              placeholder="Select approver"
+              error={eventForm.formState.errors.approvedById?.message}
+              {...eventForm.register("approvedById")}
             />
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700">

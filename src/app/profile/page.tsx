@@ -17,6 +17,22 @@ import {
   Download,
   FileText,
   Upload,
+  PersonStanding,
+  Globe,
+  Heart,
+  IdCard,
+  Receipt,
+  PiggyBank,
+  Stethoscope,
+  Users,
+  Hash,
+  BadgeCheck,
+  Laptop,
+  Briefcase,
+  UserCheck,
+  Building2,
+  Building,
+  Network,
 } from "lucide-react";
 import { ClockInWidget } from "@/components/attendance/clock-in-widget";
 import { AppLayout } from "@/components/layout/app-layout";
@@ -300,9 +316,9 @@ export default function ProfilePage() {
                     label="Birth Day Date"
                     value={formatBirthDate(profile.dateOfBirth, isAdmin)}
                   />
-                  <InfoRow label="Gender" value={profile.gender} />
-                  <InfoRow label="Nationality" value={profile.nationality} />
-                  <InfoRow label="Marital Status" value={profile.maritalStatus} />
+                  <InfoRow icon={PersonStanding} label="Gender" value={profile.gender} />
+                  <InfoRow icon={Globe} label="Nationality" value={profile.nationality} />
+                  <InfoRow icon={Heart} label="Marital Status" value={profile.maritalStatus} />
                   <InfoRow icon={Mail} label="Work Email" value={profile.workEmail} />
                   <InfoRow
                     icon={Mail}
@@ -316,10 +332,10 @@ export default function ProfilePage() {
                     label="Emergency Contact"
                     value={profile.emergencyContact}
                   />
-                  <InfoRow label="Government ID" value={profile.governmentId} />
-                  <InfoRow label="TIN" value={profile.tin} />
-                  <InfoRow label="Pension Number" value={profile.pensionNumber} />
-                  <InfoRow label="HMO ID" value={profile.hmoId} />
+                  <InfoRow icon={IdCard} label="Government ID" value={profile.governmentId} />
+                  <InfoRow icon={Receipt} label="TIN" value={profile.tin} />
+                  <InfoRow icon={PiggyBank} label="Pension Number" value={profile.pensionNumber} />
+                  <InfoRow icon={Stethoscope} label="HMO ID" value={profile.hmoId} />
                 </div>
               </CardContent>
             </Card>
@@ -330,8 +346,9 @@ export default function ProfilePage() {
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 gap-0 sm:grid-cols-2">
-                  <InfoRow label="Name" value={profile.nextOfKinName} />
+                  <InfoRow icon={User} label="Name" value={profile.nextOfKinName} />
                   <InfoRow
+                    icon={Users}
                     label="Relationship"
                     value={profile.nextOfKinRelationship}
                   />
@@ -350,27 +367,32 @@ export default function ProfilePage() {
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 gap-0 sm:grid-cols-2">
-                  <InfoRow label="Employee ID" value={profile.employeeId} />
+                  <InfoRow icon={Hash} label="Employee ID" value={profile.employeeId} />
                   <InfoRow
+                    icon={Calendar}
                     label="Date of Hire"
                     value={formatDate(profile.dateOfHire)}
                   />
                   <InfoRow
+                    icon={BadgeCheck}
                     label="Employment Type"
                     value={<StatusBadge status={profile.employmentType} />}
                   />
                   <InfoRow
+                    icon={Laptop}
                     label="Work Arrangement"
                     value={<StatusBadge status={profile.workArrangement} />}
                   />
-                  <InfoRow label="Job Title" value={profile.jobTitle} />
+                  <InfoRow icon={Briefcase} label="Job Title" value={profile.jobTitle} />
                   <InfoRow
+                    icon={UserCheck}
                     label="Supervisor"
                     value={profile.supervisor?.fullName}
                   />
-                  <InfoRow label="Primary SBU" value={profile.sbu?.name} />
+                  <InfoRow icon={Building2} label="Primary SBU" value={profile.sbu?.name} />
                   {profile.sbuMemberships && profile.sbuMemberships.filter(m => !m.isPrimary).length > 0 && (
                     <InfoRow
+                      icon={Building}
                       label="Secondary SBUs"
                       value={
                         <div className="flex flex-wrap gap-1">
@@ -385,7 +407,7 @@ export default function ProfilePage() {
                       }
                     />
                   )}
-                  <InfoRow label="Department" value={profile.department?.name} />
+                  <InfoRow icon={Network} label="Department" value={profile.department?.name} />
                 </div>
               </CardContent>
             </Card>
@@ -450,52 +472,6 @@ export default function ProfilePage() {
                       );
                     })}
                   </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Offer Letter */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <FileText className="h-5 w-5 text-primary" />
-                  Offer Letter
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {profile.offerLetterFileName ? (
-                  <div className="space-y-3">
-                    <p className="text-sm text-gray-600">
-                      {profile.offerLetterFileName}
-                    </p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
-                        const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1";
-                        fetch(`${API_URL}/employees/${profile.id}/offer-letter`, {
-                          headers: { Authorization: `Bearer ${token}` },
-                        })
-                          .then((res) => res.blob())
-                          .then((blob) => {
-                            const url = URL.createObjectURL(blob);
-                            const a = document.createElement("a");
-                            a.href = url;
-                            a.download = profile.offerLetterFileName || "offer-letter.pdf";
-                            a.click();
-                            URL.revokeObjectURL(url);
-                          });
-                      }}
-                    >
-                      <Download className="h-4 w-4" />
-                      Download Offer Letter
-                    </Button>
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-500">
-                    No offer letter uploaded
-                  </p>
                 )}
               </CardContent>
             </Card>
@@ -624,6 +600,45 @@ export default function ProfilePage() {
                 Upload Document
               </Button>
             </div>
+
+            {/* Offer Letter — surfaced here (rather than as its own tile) since
+                it is a document. Stored on the employee record, downloaded via
+                the dedicated offer-letter endpoint. */}
+            {profile.offerLetterFileName && (
+              <div className="flex items-center justify-between rounded-lg border border-gray-100 bg-white px-4 py-3">
+                <div className="flex items-center gap-3">
+                  <FileText className="h-5 w-5 text-primary" />
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">Offer Letter</p>
+                    <p className="text-xs text-gray-500">{profile.offerLetterFileName}</p>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
+                    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1";
+                    fetch(`${API_URL}/employees/${profile.id}/offer-letter`, {
+                      headers: { Authorization: `Bearer ${token}` },
+                    })
+                      .then((res) => res.blob())
+                      .then((blob) => {
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = url;
+                        a.download = profile.offerLetterFileName || "offer-letter.pdf";
+                        a.click();
+                        URL.revokeObjectURL(url);
+                      });
+                  }}
+                >
+                  <Download className="h-4 w-4" />
+                  Download
+                </Button>
+              </div>
+            )}
+
             <DocumentList />
             <UploadDocumentModal
               isOpen={isUploadModalOpen}

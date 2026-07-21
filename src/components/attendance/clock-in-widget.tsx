@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import { ClockInModal } from './clock-in-modal';
 import { useAttendance, useClockOut } from '@/hooks/useAttendance';
 import { useAuthStore } from '@/hooks';
+import { ApprovalStatus } from '@/types/attendance';
+import { cn } from '@/lib/utils';
 import dayjs from 'dayjs';
 import duration from 'dayjs/plugin/duration';
 
@@ -48,11 +50,17 @@ export function ClockInWidget() {
 
   const isClockedIn = !!todayRecord?.clockInTime && !todayRecord?.clockOutTime;
   const isClockedOut = !!todayRecord?.clockOutTime;
+  // The clock-in must be approved before the timer starts running. Until an
+  // approver approves, the session is "awaiting approval" and the timer stays
+  // paused at 00:00:00.
+  const isApproved = todayRecord?.approvalStatus === ApprovalStatus.Approved;
+  const isAwaitingApproval = isClockedIn && !isApproved;
+  const isRunning = isClockedIn && isApproved;
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
 
-    if (isClockedIn && todayRecord?.clockInTime) {
+    if (isRunning && todayRecord?.clockInTime) {
       const updateTimer = () => {
         const now = dayjs();
         const start = dayjs(todayRecord.clockInTime);
@@ -79,7 +87,7 @@ export function ClockInWidget() {
     }
 
     return () => { if (interval) clearInterval(interval); };
-  }, [isClockedIn, isClockedOut, todayRecord?.clockInTime, todayRecord?.clockOutTime]);
+  }, [isRunning, isClockedOut, todayRecord?.clockInTime, todayRecord?.clockOutTime]);
 
   const handleClockOut = () => {
     clockOut();
@@ -115,12 +123,17 @@ export function ClockInWidget() {
           ) : (
             <>
               <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-                {isClockedIn ? 'Time Elapsed' : 'Ready to clock in'}
+                {isAwaitingApproval ? 'Awaiting approval' : isRunning ? 'Time Elapsed' : 'Ready to clock in'}
               </p>
-              <div className="text-3xl font-mono font-bold text-primary">{elapsedTime}</div>
+              <div className={cn(
+                "text-3xl font-mono font-bold",
+                isAwaitingApproval ? "text-gray-400" : "text-primary"
+              )}>{elapsedTime}</div>
               {isClockedIn && todayRecord?.clockInTime && (
-                <p className="text-xs text-gray-400">
-                  Clocked in at {dayjs(todayRecord.clockInTime).format('HH:mm')}
+                <p className={cn("text-xs", isAwaitingApproval ? "text-amber-600" : "text-gray-400")}>
+                  {isAwaitingApproval
+                    ? `Clocked in at ${dayjs(todayRecord.clockInTime).format('HH:mm')} · pending approval`
+                    : `Clocked in at ${dayjs(todayRecord.clockInTime).format('HH:mm')}`}
                 </p>
               )}
             </>

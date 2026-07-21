@@ -337,8 +337,14 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
     "/lms": isOnLms,
   });
 
+  // Designated attendance approvers (e.g. an EA for a VP, or a line manager)
+  // see the Attendance Approvals area regardless of their access role.
+  const hasAttendanceApprovees = (profile?._count?.attendanceApprovees ?? 0) > 0;
+
   const filteredNavItems = navItems.filter(
-    (item) => effectiveRole && item.roles.includes(effectiveRole)
+    (item) =>
+      (effectiveRole && item.roles.includes(effectiveRole)) ||
+      (item.href === "/attendance/approvals" && hasAttendanceApprovees)
   );
 
   const isActive = (href: string): boolean => {

@@ -15,7 +15,6 @@ import {
   AlertTriangle,
   Building2,
   CalendarRange,
-  User,
   Users,
 } from "lucide-react";
 import { AppLayout } from "@/components/layout/app-layout";
@@ -29,6 +28,7 @@ import {
   useDepartments,
   useEmployees,
   useEffectiveRole,
+  useMyProfile,
 } from "@/hooks";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -94,12 +94,15 @@ const DAY_TYPE_STYLES: Record<RosterDayType, { bg: string; text: string; label: 
 // Attendance status colours (take priority over schedule when record exists)
 type AttendanceTileType = "pending" | "late" | "clocked_in" | "clocked_out" | "absent";
 
-const ATTENDANCE_TILE_STYLES: Record<AttendanceTileType, { bg: string; text: string; label: string }> = {
-  pending:     { bg: "bg-gray-200",    text: "text-gray-700",    label: "Pending"     },
-  late:        { bg: "bg-orange-100",  text: "text-orange-700",  label: "Late"        },
-  clocked_in:  { bg: "bg-emerald-600", text: "text-white",       label: "Clocked In"  },
-  clocked_out: { bg: "bg-teal-100",    text: "text-teal-700",    label: "Clocked Out" },
-  absent:      { bg: "bg-red-100",     text: "text-red-700",     label: "Absent"      },
+// `bg` = the strong colour shown on the legend swatch and the status pill.
+// `cell` = a soft tint of the same family used for the whole cell background, so
+// each cell's colour matches the Attendance legend without overwhelming the grid.
+const ATTENDANCE_TILE_STYLES: Record<AttendanceTileType, { bg: string; cell: string; text: string; label: string }> = {
+  pending:     { bg: "bg-gray-200",    cell: "bg-gray-100",    text: "text-gray-700",    label: "Pending"     },
+  late:        { bg: "bg-orange-100",  cell: "bg-orange-50",   text: "text-orange-700",  label: "Late"        },
+  clocked_in:  { bg: "bg-emerald-600", cell: "bg-emerald-50",  text: "text-emerald-700", label: "Clocked In"  },
+  clocked_out: { bg: "bg-teal-100",    cell: "bg-teal-50",     text: "text-teal-700",    label: "Clocked Out" },
+  absent:      { bg: "bg-red-100",     cell: "bg-red-50",      text: "text-red-700",     label: "Absent"      },
 };
 
 function getAttendanceTile(attendance: any): AttendanceTileType | null {
@@ -118,9 +121,24 @@ export default function RosterPage() {
   const { user, viewAs } = useAuth();
   const isAdminAsEmployee = (user?.role === "Admin" || user?.role === "SBUHead") && viewAs === "Employee";
 
-  const [rosterView, setRosterView] = useState<"my" | "everyone">("everyone");
+  const { data: myProfile } = useMyProfile();
+  const mySbuId = myProfile?.sbuId;
+
+  // Default to "My Team" (the current user's SBU) rather than the whole company;
+  // "Everyone" remains available via the toggle.
+  const [rosterView, setRosterView] = useState<"my" | "everyone">("my");
   const [selectedSbuId, setSelectedSbuId] = useState("");
   const [selectedDeptId, setSelectedDeptId] = useState("");
+
+  // When viewing "My Team", scope every fetch to the user's own SBU. In
+  // "Everyone" mode (or when the toggle isn't shown) fall back to the filter
+  // dropdowns / company-wide.
+  const teamScoped = isAdminAsEmployee && rosterView === "my";
+  const effectiveSbuId = teamScoped ? (mySbuId || "") : selectedSbuId;
+  const effectiveDeptId = teamScoped ? "" : selectedDeptId;
+  // Avoid a flash of the company-wide roster before the profile (and thus the
+  // user's SBU) has loaded in team mode.
+  const teamReady = !teamScoped || !!mySbuId;
   const [dateRange, setDateRange] = useState<DateRange | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [pendingRange, setPendingRange] = useState<DateRange | undefined>();
@@ -151,24 +169,24 @@ export default function RosterPage() {
   const rangeTo = dateRange?.to ?? null;
 
   const { data: rosterEntries, isLoading: isRosterLoading } = useRoster({
-    departmentId: selectedDeptId || undefined,
-    sbuId: selectedSbuId || undefined,
+    departmentId: effectiveDeptId || undefined,
+    sbuId: effectiveSbuId || undefined,
     startDate: rangeFrom ? toDateStr(rangeFrom) : "",
     endDate: rangeTo ? toDateStr(rangeTo) : "",
-  }, { enabled: !!rangeFrom && !!rangeTo });
+  }, { enabled: !!rangeFrom && !!rangeTo && teamReady });
 
   const { data: attendanceResponse, isLoading: isAttendanceLoading } = useAttendance({
-    departmentId: selectedDeptId || undefined,
-    sbuId: selectedSbuId || undefined,
+    departmentId: effectiveDeptId || undefined,
+    sbuId: effectiveSbuId || undefined,
     startDate: rangeFrom ? toDateStr(rangeFrom) : "",
     endDate: rangeTo ? toDateStr(rangeTo) : "",
-  }, { enabled: !!rangeFrom && !!rangeTo });
+  }, { enabled: !!rangeFrom && !!rangeTo && teamReady });
 
   const attendanceEntries = attendanceResponse?.data || [];
 
   const { data: employeesData } = useEmployees({
-    departmentId: selectedDeptId || undefined,
-    sbuId: selectedSbuId || undefined,
+    departmentId: effectiveDeptId || undefined,
+    sbuId: effectiveSbuId || undefined,
     limit: 1000,
   });
 
@@ -231,15 +249,9 @@ export default function RosterPage() {
     return map;
   }, [rosterEntries, localOverrides, attendanceEntries, employeesData]);
 
-  const displayedEmployeeMap = useMemo(() => {
-    if (!isAdminAsEmployee || rosterView === "everyone") return employeeMap;
-    const filtered = new Map<string, typeof employeeMap extends Map<string, infer V> ? V : never>();
-    const myId = user?.employeeId;
-    if (myId && employeeMap.has(myId)) {
-      filtered.set(myId, employeeMap.get(myId)!);
-    }
-    return filtered;
-  }, [employeeMap, isAdminAsEmployee, rosterView, user?.employeeId]);
+  // Rows are already scoped by the fetch (team SBU vs. company-wide), so we
+  // render whatever came back — "My Team" shows the whole SBU, not just me.
+  const displayedEmployeeMap = employeeMap;
 
   const onsiteCounts = useMemo(() => {
     return days.map((day) => {
@@ -370,8 +382,8 @@ export default function RosterPage() {
                     : "text-gray-500 hover:text-gray-700"
                 )}
               >
-                <User className="h-4 w-4" />
-                My Roster
+                <Users className="h-4 w-4" />
+                My Team
               </button>
               <button
                 type="button"
@@ -383,7 +395,7 @@ export default function RosterPage() {
                     : "text-gray-500 hover:text-gray-700"
                 )}
               >
-                <Users className="h-4 w-4" />
+                <Building2 className="h-4 w-4" />
                 Everyone
               </button>
             </div>
@@ -521,30 +533,31 @@ export default function RosterPage() {
                           const attendanceTile = getAttendanceTile(attendance);
                           const workLocation = attendance?.workLocation || dayType;
                           
-                          // Determine background style:
-                          // 1. If Absent, use Absent style (Red)
-                          // 2. If present/late/etc, use WorkLocation style (Green/Blue) from DAY_TYPE_STYLES
-                          // 3. If no attendance, use dayType style
+                          // Cell background follows the legend it belongs to:
+                          // 1. Day WITH an attendance record → colour by attendance
+                          //    status (soft tint of the Attendance-legend colour;
+                          //    the pill shows the full colour).
+                          // 2. Scheduled day, no attendance yet → colour by the
+                          //    schedule day type (Schedule-legend colour).
+                          // 3. Neither → plain white.
+                          const scheduleStyle = DAY_TYPE_STYLES[workLocation as RosterDayType];
                           let bgStyle = "bg-white";
                           let textStyle = "text-gray-400";
                           let label = "-";
 
-                          if (attendanceTile === "absent") {
-                            bgStyle = ATTENDANCE_TILE_STYLES.absent.bg;
-                            // For absent, we want the text to be red as well, but the pill will handle the status style
-                          } else if (workLocation && DAY_TYPE_STYLES[workLocation as RosterDayType]) {
-                            // Use location color for cell background
-                            const locationStyle = DAY_TYPE_STYLES[workLocation as RosterDayType];
-                            bgStyle = locationStyle.bg;
-                            // Text style for the cell content that is NOT the pill (like location text)
-                            textStyle = locationStyle.text;
+                          if (attendanceTile) {
+                            bgStyle = ATTENDANCE_TILE_STYLES[attendanceTile].cell;
+                            textStyle = ATTENDANCE_TILE_STYLES[attendanceTile].text;
+                          } else if (scheduleStyle) {
+                            bgStyle = scheduleStyle.bg;
+                            textStyle = scheduleStyle.text;
                           }
                           
                           // Determine label for the status pill
                           if (attendanceTile) {
                               label = ATTENDANCE_TILE_STYLES[attendanceTile].label;
-                          } else if (workLocation && DAY_TYPE_STYLES[workLocation as RosterDayType]) {
-                              label = DAY_TYPE_STYLES[workLocation as RosterDayType].label;
+                          } else if (scheduleStyle) {
+                              label = scheduleStyle.label;
                           }
 
                           const tooltipLines = [
