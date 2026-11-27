@@ -58,9 +58,11 @@ import {
   Trophy,
   UsersRound,
   BarChart2,
+  UserPlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
+import { NEW_HIRE_ROLES, useNewHireCounts } from "@/hooks/useNewHires";
 import { getInitials as getNameInitials } from "@/lib/utils";
 import { UserRole } from "@/types";
 
@@ -139,6 +141,13 @@ const navItems: NavItem[] = [
     icon: Users,
     roles: ["CVO", "Admin", "SBUHead", "Employee"],
     children: employeeChildren,
+  },
+  {
+    // Hired candidates from Thelix Talent; the roles that may add employees.
+    label: "New Hires",
+    href: "/new-hires",
+    icon: UserPlus,
+    roles: ["CVO", "Admin"],
   },
   {
     label: "SBU",
@@ -341,6 +350,11 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
   // see the Attendance Approvals area regardless of their access role.
   const hasAttendanceApprovees = (profile?._count?.attendanceApprovees ?? 0) > 0;
 
+  const canSeeNewHires = !!effectiveRole && NEW_HIRE_ROLES.includes(effectiveRole);
+  const { data: newHireCounts } = useNewHireCounts(canSeeNewHires);
+  const badgeFor = (href: string): number =>
+    href === "/new-hires" ? newHireCounts?.pending ?? 0 : 0;
+
   const filteredNavItems = navItems.filter(
     (item) =>
       (effectiveRole && item.roles.includes(effectiveRole)) ||
@@ -528,7 +542,18 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
                         active ? "text-primary-900" : "text-gray-400 group-hover:text-gray-600"
                       )}
                     />
-                    {!collapsed && <span className="truncate">{item.label}</span>}
+                    {!collapsed && <span className="flex-1 truncate">{item.label}</span>}
+                    {badgeFor(item.href) > 0 && (
+                      <span
+                        className={cn(
+                          "shrink-0 rounded-full bg-danger px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white",
+                          collapsed && "absolute ml-5 -mt-4"
+                        )}
+                        aria-label={`${badgeFor(item.href)} pending`}
+                      >
+                        {badgeFor(item.href) > 99 ? "99+" : badgeFor(item.href)}
+                      </span>
+                    )}
                   </Link>
                 )}
               </li>
